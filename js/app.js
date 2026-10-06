@@ -1420,6 +1420,11 @@
     return env.hhmm(mins) + ' ' + s.tz;
   }
 
+  /* Zoom range: the national view sits near 8, and the ceiling reaches
+     roughly tile level 18, which is individual-tree detail on imagery. */
+  var ZOOM_MIN = 2, ZOOM_MAX = 140000;
+  function clampZoom(z) { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)); }
+
   /* ---------- Coordinate search ---------- */
 
   /* Accepts what people actually paste: decimal pairs with or without signs,
@@ -1631,7 +1636,7 @@
       var p = pt(e);
       var before = radar.toWorld(p[0], p[1], [0, 0]);
       var f = Math.exp(-e.deltaY * 0.0016);
-      radar.view.zoom = Math.max(0.35, Math.min(80, radar.view.zoom * f));
+      radar.view.zoom = clampZoom(radar.view.zoom * f);
       var after = radar.toWorld(p[0], p[1], [0, 0]);
       radar.view.cx += before[0] - after[0];
       radar.view.cy += before[1] - after[1];
@@ -1651,7 +1656,7 @@
       var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       if (pinch) {
         var before = radar.toWorld(mid[0], mid[1], [0, 0]);
-        radar.view.zoom = Math.max(0.35, Math.min(80, radar.view.zoom * (dist / pinch.dist)));
+        radar.view.zoom = clampZoom(radar.view.zoom * (dist / pinch.dist));
         var after = radar.toWorld(mid[0], mid[1], [0, 0]);
         radar.view.cx += before[0] - after[0];
         radar.view.cy += before[1] - after[1];
@@ -1742,7 +1747,31 @@
     pursuitChip = $('#pursuit');
 
     /* Layer rail */
+    /* Layer dock open/closed, remembered per browser. */
+    var dock = $('#layerdock'), layerTab = $('#layertab');
+    try {
+      if (localStorage.getItem('og.dock') === 'closed') dock.classList.remove('open');
+    } catch (e) {}
+    layerTab.setAttribute('aria-expanded', String(dock.classList.contains('open')));
+    layerTab.addEventListener('click', function () {
+      var open = dock.classList.toggle('open');
+      layerTab.setAttribute('aria-expanded', String(open));
+      try { localStorage.setItem('og.dock', open ? 'open' : 'closed'); } catch (e) {}
+    });
+
+    $('#zoom-in').addEventListener('click', function () {
+      radar.view.zoom = clampZoom(radar.view.zoom * 1.7);
+      App.dirty = true;
+      scheduleBands();
+    });
+    $('#zoom-out').addEventListener('click', function () {
+      radar.view.zoom = clampZoom(radar.view.zoom / 1.7);
+      App.dirty = true;
+      scheduleBands();
+    });
+
     layerRail = $('#layers');
+    layerRail.appendChild(el('div', 'layer-grp', 'Intelligence'));
     var sawWx = false;
     LAYERS.forEach(function (l) {
       /* Intelligence layers and raw weather are different kinds of thing, so
@@ -1900,13 +1929,60 @@
       var k = App.state.basemap;
       return k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite' : 'No base';
     }
-    function syncBasemap() {
+    var syncBasemap = function () {
+      if (App.autoOpacity) App.autoOpacity();
       bmBtn.textContent = bmLabel();
       bmBtn.classList.toggle('pro-locked', App.state.basemap === 'satellite' && !App.entitlement().pro);
-    }
-    bmBtn.addEventListener('click', function () {
-      var i = BM_CYCLE.indexOf(App.state.basemap);
-      var next = BM_CYCLE[(i + 1) % BM_CYCLE.length];
+    };
+    /* Overlay strength. The right blend depends on what is underneath, so it
+       is a control rather than a constant. */
+    layerRail.appendChild(el('div', 'layer-sep'));
+    layerRail.appendChild(el('div', 'layer-grp', 'Overlay'));
+    var opWrap = el('div', 'opacity-ctl');
+    var opIn = el('input');
+    opIn.type = 'range';
+    opIn.id = 'fieldop';
+    opIn.min = '10'; opIn.max = '100'; opIn.step = '5';
+    opIn.value = String(Math.round((load('og.fieldop', 0) || 0) * 100) || 62);
+    App.state.fieldOpacity = parseInt(opIn.value, 10) / 100;
+    var opVal = el('span', 'op-val', opIn.value + '%');
+    opIn.addEventListener('input', function () {
+      App.state.fieldOpacity = parseInt(opIn.value, 10) / 100;
+      App._opTouched = true;
+      opVal.textContent = opIn.value + '%';
+      save('og.fieldop', App.state.fieldOpacity);
+      App.dirty = true;
+    });
+
+    /* Until someone sets it themselves, the overlay follows the basemap:
+       imagery needs to show through far more than a relief shade does. */
+    App.autoOpacity = function () {
+      if (App._opTouched) return;
+      var d = App.state.basemap === 'satellite' ? 38 : App.state.basemap === 'none' ? 85 : 62;
+      opIn.value = String(d);
+      var snapped = parseInt(opIn.value, 10);   // the step may round it
+      opVal.textContent = snapped + "%";
+      App.state.fieldOpacity = snapped / 100;
+    };
+    opWrap.appendChild(opIn);
+    opWrap.appendChild(opVal);
+    layerRail.appendChild(opWrap);
+
+    /* Base map choices live in the layer dock too, where someone looking for
+       map options will actually look. */
+    layerRail.appendChild(el('div', 'layer-sep'));
+    layerRail.appendChild(el('div', 'layer-grp', 'Base map'));
+    var bmBtns = {};
+    BM_CYCLE.forEach(function (k) {
+      var b = el('button', 'layerbtn', k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite' : 'None');
+      if (k === 'satellite') b.appendChild(el('span', 'pro-tag', 'Pro'));
+      b.dataset.basemap = k;
+      b.addEventListener('click', function () { setBasemap(k); });
+      bmBtns[k] = b;
+      layerRail.appendChild(b);
+    });
+
+    function setBasemap(next) {
       if (next === 'satellite' && !App.entitlement().pro) {
         openPanel('Satellite imagery', function () {
           var root = frag();
@@ -1932,9 +2008,21 @@
       }
       App.state.basemap = next;
       save('og.basemap', next);
+      if (App.autoOpacity) App.autoOpacity();
       App.dirty = true;
       syncBasemap();
+    }
+
+    bmBtn.addEventListener('click', function () {
+      var i = BM_CYCLE.indexOf(App.state.basemap);
+      setBasemap(BM_CYCLE[(i + 1) % BM_CYCLE.length]);
     });
+
+    var baseSync = syncBasemap;
+    syncBasemap = function () {
+      baseSync();
+      for (var k in bmBtns) bmBtns[k].classList.toggle('on', k === App.state.basemap);
+    };
     syncBasemap();
 
     /* Theme toggle */

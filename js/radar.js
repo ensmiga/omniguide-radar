@@ -495,7 +495,13 @@
     var wxl = WX_LAYERS[layer];
     var lo = wxl ? wxl.min : 0, span = wxl ? (wxl.max - wxl.min) : 100;
     var legalMode = layer === 'legal';
-    var alpha = wxl ? (layer === 'precip' || layer === 'snowpack' ? 0 : 200) : 205;
+    /* The overlay has to sit on top of a basemap now. Full strength buries
+       imagery, which defeats the point of having imagery. */
+    var bm = this.app.state.basemap || 'relief';
+    var opacity = this.app.state.fieldOpacity;
+    if (opacity == null) opacity = bm === 'satellite' ? 0.42 : bm === 'relief' ? 0.62 : 0.82;
+    var alpha = Math.round(255 * opacity);
+    var softAlpha = wxl && (layer === 'precip' || layer === 'snowpack');
 
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
@@ -505,14 +511,18 @@
         var col, a;
         if (v === -1) { col = [128, 138, 134]; a = 46; }         // locked preview
         else if (legalMode) {
-          var sc2 = LEGAL_RGB[v] || [130, 140, 146];
-          col = sc2; a = 150;
+          col = LEGAL_RGB[v] || [130, 140, 146];
+          a = Math.round(alpha * 0.8);
         } else if (wxl) {
           col = wxl.ramp((v - lo) / span);
-          a = alpha || Math.round(20 + 210 * Math.min(1, Math.max(0, (v - lo) / span) * 2.2));
+          /* Precipitation and snow read better fading in from nothing than
+             as a wall of colour over dry ground. */
+          a = softAlpha
+            ? Math.round(alpha * Math.min(1, Math.max(0, (v - lo) / span) * 2.4))
+            : alpha;
         } else {
           col = rampRGB(v / 100);
-          a = 205;
+          a = alpha;
         }
         data[o] = col[0]; data[o + 1] = col[1]; data[o + 2] = col[2]; data[o + 3] = a;
       }
@@ -934,10 +944,13 @@
     var milesPer100px = R * Math.sqrt(dLat * dLat + Math.pow(dLon * Math.cos(mLat), 2));
     if (!(milesPer100px > 0)) return;
 
-    var steps = [1, 2, 5, 10, 25, 50, 100, 200, 500, 1000];
+    /* Reaches down to a hundred feet, because the map now zooms that far. */
+    var steps = [0.0189, 0.0379, 0.0947, 0.189, 0.379, 0.947,
+                 1, 2, 5, 10, 25, 50, 100, 200, 500, 1000];
     var target = milesPer100px * 1.2, pick = steps[0];
     for (var i = 0; i < steps.length; i++) if (steps[i] <= target) pick = steps[i];
     var px = pick / milesPer100px * 100;
+    var label = pick < 1 ? Math.round(pick * 5280) + ' ft' : pick + ' mi';
 
     var x1 = this.w - 16, x0 = x1 - px, y = this.h - this.bottomPad();
     ctx.save();
@@ -956,9 +969,9 @@
     ctx.textBaseline = 'bottom';
     ctx.lineWidth = 3;
     ctx.strokeStyle = th.halo;
-    ctx.strokeText(pick + ' mi', x1, y - 6);
+    ctx.strokeText(label, x1, y - 6);
     ctx.fillStyle = th.label;
-    ctx.fillText(pick + ' mi', x1, y - 6);
+    ctx.fillText(label, x1, y - 6);
     ctx.restore();
   };
 
