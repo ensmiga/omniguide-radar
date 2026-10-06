@@ -469,6 +469,77 @@
     };
   }
 
+  /* ---------- Terrain-specific advice ----------
+
+     Generated from the measured ground at the clicked coordinate: slope,
+     which way it faces, where it sits in the local landform, and which way
+     water and cold air leave it. This is the part that stops the plan being
+     a regional generalisation. */
+
+  function terrainNotes(T, sc, sp) {
+    if (!T) return null;
+    var out = [], wx = sc.wx;
+    var windFrom = env.dirName(wx.windFrom);
+    var flat = T.slopeDeg < 3;
+
+    out.push('The ground at this exact point is ' + T.landform + ' at ' +
+      Math.round(T.elevFt) + ' ft' +
+      (flat ? ', essentially flat.'
+            : ', sloping ' + T.slopeDeg.toFixed(0) + ' degrees and facing ' + T.aspect + '.'));
+
+    if (!flat) {
+      /* Aspect drives snow, green-up and where animals bed. */
+      var south = T.aspectDeg > 112 && T.aspectDeg < 248;
+      var north = T.aspectDeg < 68 || T.aspectDeg > 292;
+      if (south) out.push('A ' + T.aspect + '-facing slope takes the most sun: it sheds snow first, ' +
+        'greens up first, and holds animals on cold mornings.');
+      else if (north) out.push('A ' + T.aspect + '-facing slope stays cold and shaded. It holds snow ' +
+        'longest and keeps heavier, darker cover, which is where animals bed when pressured or warm.');
+    }
+
+    if (T.reliefM > 60) {
+      out.push('There is about ' + Math.round(T.reliefM * 3.28084) + ' ft of relief within a quarter mile, ' +
+        'so thermals will dominate the wind morning and evening regardless of what the forecast says. ' +
+        'Cold air drains ' + T.drain + ' at first light and reverses once the sun hits the slope.');
+    } else if (T.reliefM > 18) {
+      out.push('Mild relief here, around ' + Math.round(T.reliefM * 3.28084) + ' ft within a quarter mile. ' +
+        'The forecast ' + windFrom + ' wind should hold, with a slight drift ' + T.drain + ' before sunrise.');
+    } else {
+      out.push('Flat enough that the forecast ' + windFrom + ' wind is the wind, with no thermal to work around.');
+    }
+
+    if (T.tpiM < -8) {
+      out.push('This sits below the ground around it. Sound and scent pool here, and it will be the ' +
+        'coldest spot on the property at dawn.');
+    } else if (T.tpiM > 8) {
+      out.push('This sits above the ground around it, which means you can see out and be seen. ' +
+        'Keep off the skyline on the approach.');
+    }
+
+    if (sp.group === 'waterfowl' && T.landform.indexOf('bottom') >= 0) {
+      out.push('A bottom is where water collects, which is the right place to be looking for birds, ' +
+        'but check that it actually holds water this year rather than assuming it does.');
+    }
+    if (sp.pursuit === 'fish' && T.slopeDeg > 2) {
+      out.push('Gradient here is steep enough to expect broken, oxygenated water rather than slow pools.');
+    }
+    return out;
+  }
+
+  function terrainSetup(T) {
+    if (!T) return null;
+    return {
+      k: 'Terrain at this point',
+      v: [
+        Math.round(T.elevFt) + ' ft, ' + T.landform,
+        T.slopeDeg < 3 ? 'Slope under 3 degrees' : T.slopeDeg.toFixed(0) + ' degree slope facing ' + T.aspect,
+        Math.round(T.reliefM * 3.28084) + ' ft of relief within a quarter mile',
+        'Cold air and water drain ' + T.drain,
+        'Measured from ' + T.resolutionM + ' m elevation data'
+      ]
+    };
+  }
+
   /* ---------- Failure modes ---------- */
 
   function failureModes(sc, legalRes) {
@@ -554,6 +625,7 @@
   }
 
   global.OG.guide = {
+    terrainNotes: terrainNotes, terrainSetup: terrainSetup,
     plan: plan, outlook: outlook, placeLabel: placeLabel,
     activityCurve: activityCurve, peakWindow: peakWindow, dateFor: dateFor,
     hatchForecast: hatchForecast

@@ -314,12 +314,11 @@
     var head = el('div', 'planhead');
     head.appendChild(el('div', 'ph-title', spotName || plan.place.title));
     head.appendChild(el('div', 'ph-sub', plan.place.sub + '  ·  ' + plan.place.coords));
-    var cellKm = Math.round(geo.RES[App.radar.resolution()] * 111 * 1.8);
     head.appendChild(el('div', 'ph-date', fmtDay(plan.date) + ' · ' + clockAt(st.t) +
       '  ·  ' + plan.species.name));
     head.appendChild(el('div', 'ph-cell', spotName
       ? 'Scored at the saved coordinates'
-      : 'Grid cell, about ' + cellKm + ' km across. Zoom in for a finer cell.'));
+      : 'Scored at these exact coordinates'));
     root.appendChild(head);
 
     /* Score block */
@@ -396,7 +395,29 @@
     /* Recommendation */
     var recSec = section('OmniGuide recommendation');
     plan.body.recommendation.forEach(function (p) { recSec.appendChild(el('p', null, p)); });
+
+    /* Terrain is measured from elevation tiles, which arrive over the
+       network, so the panel renders immediately and this fills in. */
+    var tSlot = el('div', 'terrain-slot');
+    tSlot.appendChild(el('p', 'note', 'Reading the ground at these coordinates…'));
+    recSec.appendChild(tSlot);
     root.appendChild(recSec);
+
+    if (global.OG.terrain) {
+      global.OG.terrain.analyse(lon, lat).then(function (T) {
+        if (!tSlot.isConnected) return;
+        tSlot.innerHTML = '';
+        if (!T) {
+          tSlot.appendChild(el('p', 'note', 'Elevation data could not be reached, so the advice above ' +
+            'is based on the regional habitat model rather than the ground at this point.'));
+          return;
+        }
+        var notes = guide.terrainNotes(T, sc, plan.species) || [];
+        notes.forEach(function (n) { tSlot.appendChild(el('p', null, n)); });
+        var extra = guide.terrainSetup(T);
+        if (extra) tSlot.appendChild(kvList([extra]));
+      });
+    }
 
     /* Fly fishing extras */
     if (plan.body.hatches) {
@@ -1608,12 +1629,12 @@
         var raw = radar.lonLatAt(p[0], p[1]);
         if (!isFinite(raw[0])) return;
 
-        /* Snap to the centre of the hexagon that was actually tapped. The map
-           draws one value per cell; reporting a different value for an
-           arbitrary point inside that same cell is just confusing. */
-        var cell = geo.nearestCell(radar.resolution(), raw[0], raw[1]);
-        var lon = cell[2], lat = cell[3];
-        if (geo.stateIndexAt(lon, lat) < 0) { lon = raw[0]; lat = raw[1]; }
+        /* The exact point, not a snapped cell centre. Clicks used to snap to
+           the hexagon under the cursor so the panel matched the mosaic; with
+           a continuous field there is no mosaic to match, and snapping threw
+           away up to sixteen kilometres of precision - which is the opposite
+           of analysing the ground someone actually pointed at. */
+        var lon = raw[0], lat = raw[1];
         if (geo.stateIndexAt(lon, lat) < 0) return;
 
         if (App.addSpotMode) {
