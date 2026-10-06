@@ -103,29 +103,42 @@
   }
 
   var RULES = [
+    /* These are OUTER ENVELOPES, not season dates: the earliest opening and
+       latest closing the federal framework allows in that part of the
+       country. Real seasons sit inside them, usually with splits, and vary
+       by zone. The envelope is the honest shape for a placeholder - it errs
+       toward showing a week as possibly open rather than wrongly closed. */
     rule({ states: NORTH, species: DUCKS, type: 'Regular duck season',
-      start: '09-28', end: '12-10', status: 'OPEN',
+      start: '09-24', end: '01-10', status: 'OPEN',
       bag: '6 ducks daily, species and sex restrictions apply',
-      possession: '3 times the daily bag', hours: 'waterfowl', source: FEDERAL }),
+      possession: '3 times the daily bag', hours: 'waterfowl',
+      note: 'Framework envelope, not an actual season. Northern states commonly run ' +
+            '60 to 107 days inside this range, usually split, and zoned.',
+      source: FEDERAL }),
     rule({ states: MID, species: DUCKS, type: 'Regular duck season',
-      start: '10-15', end: '01-20', status: 'OPEN',
+      start: '10-01', end: '01-25', status: 'OPEN',
       bag: '6 ducks daily, species and sex restrictions apply',
-      possession: '3 times the daily bag', hours: 'waterfowl', source: FEDERAL }),
+      possession: '3 times the daily bag', hours: 'waterfowl',
+      note: 'Framework envelope, not an actual season. Expect splits and zone differences.',
+      source: FEDERAL }),
     rule({ states: SOUTH, species: DUCKS, type: 'Regular duck season',
-      start: '11-02', end: '01-26', status: 'OPEN',
+      start: '10-25', end: '01-31', status: 'OPEN',
       bag: '6 ducks daily, species and sex restrictions apply',
-      possession: '3 times the daily bag', hours: 'waterfowl', source: FEDERAL }),
+      possession: '3 times the daily bag', hours: 'waterfowl',
+      note: 'Framework envelope, not an actual season. Southern states typically open late ' +
+            'and run to the end of January.',
+      source: FEDERAL }),
 
     rule({ states: NORTH.concat(MID, SOUTH), species: ['canada-goose'], type: 'Early Canada goose season',
       start: '09-01', end: '09-15', status: 'OPEN',
       bag: 'Liberal early-season bag, varies by state',
       possession: '3 times the daily bag', hours: 'waterfowl', source: FEDERAL }),
     rule({ states: NORTH, species: ['canada-goose'], type: 'Regular Canada goose season',
-      start: '09-28', end: '12-22', status: 'OPEN',
+      start: '09-24', end: '01-10', status: 'OPEN',
       bag: '3 dark geese daily, varies by zone',
       possession: '3 times the daily bag', hours: 'waterfowl', source: FEDERAL }),
     rule({ states: MID.concat(SOUTH), species: ['canada-goose'], type: 'Regular Canada goose season',
-      start: '10-25', end: '02-10', status: 'OPEN',
+      start: '10-01', end: '02-15', status: 'OPEN',
       bag: '3 dark geese daily, varies by zone',
       possession: '3 times the daily bag', hours: 'waterfowl', source: FEDERAL }),
 

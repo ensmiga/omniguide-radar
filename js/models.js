@@ -494,6 +494,7 @@
         opportunity: null, movement: null, migration: null, newBird: null,
         weather: null, habitat: Math.round(habModel * 100), confidence: null,
         pressure: null, wx: wx, hab: hab,
+        lon: lon, lat: lat,
         mig: { applies: false, intensity: 0, newBird: 0, pos: [], neg: [] },
         pos: [], neg: [], breakdown: null
       };
@@ -533,7 +534,7 @@
       pressure: Math.round(press * 100),
       wx: wx, hab: hab, mig: mig,
       pos: mv.pos.concat(mig.pos), neg: mv.neg.concat(mig.neg),
-      species: sp, inRange: true, outReason: null,
+      species: sp, inRange: true, outReason: null, lon: lon, lat: lat,
       /* Everything needed to reconstruct the number by hand. */
       breakdown: {
         parts: parts, totalWeight: total, weighted: weighted,

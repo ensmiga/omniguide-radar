@@ -158,25 +158,32 @@ async function ingestForecast() {
 /* ------------------------------------------------------------------- water */
 
 /* Discharge (00060) and water temperature (00010) from USGS NWIS. Free, no
- * key, updated every 15 to 60 minutes. The bBox limit is 25 degrees per side
- * and the product of the sides is capped too, so CONUS is walked in tiles. */
-const WATER_TILES = [
-  [-125, 31, -112, 49.5], [-112, 31, -100, 49.5],
-  [-100, 36, -88, 49.5], [-100, 25, -88, 36],
-  [-88, 36, -75, 49.5], [-88, 25, -75, 36],
-  [-75, 36, -66.5, 47.5], [-75, 25, -66.5, 36]
+ * key, updated every 15 to 60 minutes.
+ *
+ * Queried per state, not by bounding box. The bBox endpoint returns 503 for
+ * anything useful-sized, which is why the first version of this silently
+ * produced an empty file: the failures were caught and skipped, so the run
+ * went green with no data in it. */
+const STATES = [
+  'al', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'fl', 'ga', 'id', 'il', 'in', 'ia',
+  'ks', 'ky', 'la', 'me', 'md', 'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv',
+  'nh', 'nj', 'nm', 'ny', 'nc', 'nd', 'oh', 'ok', 'or', 'pa', 'ri', 'sc', 'sd',
+  'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy'
 ];
 
 async function ingestWater() {
   const sites = new Map();
-  for (const [a, b, c, d] of WATER_TILES) {
+  let ok = 0, failed = 0;
+  for (const st of STATES) {
     const url = 'https://waterservices.usgs.gov/nwis/iv/?format=json' +
-      `&bBox=${a},${b},${c},${d}&parameterCd=00010,00060&siteStatus=active`;
+      `&stateCd=${st}&parameterCd=00010,00060&siteStatus=active`;
     let payload;
     try {
-      payload = await getJSON(url, { label: `water tile ${a},${b}` });
+      payload = await getJSON(url, { label: `water ${st.toUpperCase()}` });
+      ok++;
     } catch (err) {
-      console.warn(`  skipping tile ${a},${b}: ${err.message}`);
+      failed++;
+      console.warn(`  skipping ${st.toUpperCase()}: ${err.message}`);
       continue;
     }
     for (const series of payload?.value?.timeSeries ?? []) {
@@ -200,8 +207,15 @@ async function ingestWater() {
       if (code === '00060') row.cfs = Math.round(v);
       row.at = pt.dateTime;
     }
-    console.log(`  tile ${a},${b}: ${sites.size} sites so far`);
-    await sleep(800);
+    console.log(`  ${st.toUpperCase()}: ${sites.size} sites so far`);
+    await sleep(500);
+  }
+
+  /* An empty result means the endpoint moved or is down. Fail loudly: a
+     green run that quietly wrote an empty file is exactly how this broke
+     the first time, and nobody noticed for a day. */
+  if (sites.size === 0) {
+    throw new Error(`no gauges returned from any state (${ok} ok, ${failed} failed)`);
   }
 
   const rows = [...sites.values()].filter((s) => s.tempC !== undefined || s.cfs !== undefined);

@@ -357,16 +357,36 @@
     var waterTemp = clamp(0.62 * meanT + 16 - (hb.elev / 1000) * 0.8, 32, 80);
     waterTemp = waterTemp * (1 - buffer) + (46 + 6 * seasonalIndex(doy)) * buffer;
 
-    /* Streamflow has no feed in this build; still seasonal and synthetic. */
     var flowIdx = clamp01(0.45 + 0.35 * Math.sin((doy - 80) / 365 * 2 * Math.PI) +
       (fbm(lon * 0.6, lat * 0.6, 31) - 0.5) * 0.5);
+    var flowReal = false, gaugeInfo = null;
+
+    /* A nearby gauge is a measurement, and a measurement beats a model.
+       Only for today, though: a reading taken an hour ago says nothing
+       about Thursday. */
+    var GA = global.OG.gauges;
+    if (GA && GA.available() && t < 1) {
+      var g = GA.at(lon, lat);
+      if (g) {
+        gaugeInfo = g;
+        if (g.waterTempF != null) waterTemp = g.waterTempF;
+        if (g.cfs != null) {
+          /* Discharge in cfs is not comparable between a creek and the
+             Missouri, so it is converted to a position within that gauge's
+             own plausible range rather than used as an absolute. */
+          flowIdx = clamp01(Math.log10(Math.max(1, g.cfs)) / 4.2);
+          flowReal = true;
+        }
+      }
+    }
 
     return {
       tempF: tempF, temp24: temp24, pressure: a.P, pressTrend: pressTrend,
       windFrom: a.WD, windSpd: a.WS, gust: Math.max(a.WG, a.WS),
       cloud: clamp01(a.CC / 100), precip: clamp01(a.PR / 0.08),
       snow: clamp01(a.SF / 0.4), snowDepth: snowDepth,
-      freeze: freeze, waterTemp: waterTemp, flowIdx: flowIdx, flowReal: false,
+      freeze: freeze, waterTemp: waterTemp, flowIdx: flowIdx, flowReal: flowReal,
+      gauge: gaugeInfo,
       frontal: frontal, elev: hb.elev, seas: seasonalIndex(doy), real: true,
       precipIn: a.PR, snowDepthFt: a.SD
     };

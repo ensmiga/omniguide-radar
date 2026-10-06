@@ -446,6 +446,28 @@
         });
       hsec.appendChild(fr);
       root.appendChild(hsec);
+
+      /* Local shops. Linked and credited, never copied - the report is
+         theirs and so is the traffic. */
+      if (plan.body.shops && plan.body.shops.length) {
+        var shSec = section('Local reports and flies');
+        shSec.appendChild(el('p', 'note', 'These shops fish this water every day and post their own ' +
+          'reports. For what actually came off yesterday and what the fish ate, they beat any model.'));
+        plan.body.shops.forEach(function (s) {
+          var row = el('div', 'shoprow');
+          var a = el('a', 'shop-link', s.shop.n);
+          a.href = s.shop.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          row.appendChild(a);
+          row.appendChild(el('div', 'shop-meta', s.shop.town +
+            (s.onWater ? '  ·  fishes this water' : '  ·  about ' + s.miles + ' miles away')));
+          shSec.appendChild(row);
+        });
+        shSec.appendChild(el('p', 'note', 'OmniGuide links to shop reports rather than reproducing them. ' +
+          'If a pattern they recommend is working, buy it from them.'));
+        root.appendChild(shSec);
+      }
     }
 
     /* Setup */
@@ -908,7 +930,7 @@
       var windows = planner.bestWindows(rows, 3);
       var head = el('div', 'planhead');
       head.appendChild(el('div', 'ph-title', target.name));
-      head.appendChild(el('div', 'ph-sub', 'Typical conditions for the next 20 weeks, ' +
+      head.appendChild(el('div', 'ph-sub', 'Seasonal index, next 20 weeks, ' +
         App.speciesName(st.species).toLowerCase()));
       root.appendChild(head);
 
@@ -946,7 +968,7 @@
       });
       chartSec.appendChild(chart);
       chartSec.appendChild(el('div', 'chartkey',
-        'Bar is the typical score for that week. The lighter band is how much it moves in a ' +
+        'Bar is the seasonal index for that week, which ranks weeks and is not a forecast score. The lighter band is how much it moves in a ' +
         'notably warm or notably cold year. Faded bars are weeks the season is not open.'));
       root.appendChild(chartSec);
 
@@ -987,6 +1009,18 @@
       lim.appendChild(el('p', null, 'It says nothing about wind, pressure or front timing. At this range ' +
         'nobody knows them, so those terms are held neutral rather than invented. Inside eight days, go back ' +
         'to the Radar - that is a real forecast and it will beat this every time.'));
+      lim.appendChild(el('p', null, 'Because those three are held neutral, and they are among the strongest ' +
+        'positive drivers, these numbers run lower than a forecast day will. Read them against each other, ' +
+        'not against a Radar score. A 49 here is a strong week, not a mediocre day.'));
+
+      if (models.byId(st.species).group === 'waterfowl') {
+        lim.appendChild(el('p', null, 'On why the curve turns over: cold helps right up until it does not. ' +
+          'Falling temperature drives feeding and pushes new birds down the flyway, so the index climbs ' +
+          'through the first hard weather. Once water locks up, birds leave rather than concentrate, and ' +
+          'the birds upstream that would have replaced them have already gone. The model peaks around ' +
+          'partial freeze and falls away after it, which is why a northern water tops out before the ' +
+          'calendar season ends.'));
+      }
       var cv = rows[0].clim;
       lim.appendChild(el('p', 'note', planner.source + ', ' + planner.period + ', ' +
         planner.stations + ' stations. Nearest station to this point is about ' +

@@ -406,23 +406,60 @@
 
   /* ---------- Fly fishing strategy ---------- */
 
+  /* Hatches are gated on water temperature first and calendar second, which
+     is the right order: a cold tailwater runs weeks behind the freestone
+     next to it, and the bugs follow degrees, not dates.
+
+     Each entry also carries what is happening BELOW the surface, because
+     for most of the day and most of the year that is where the fish are
+     feeding. `peak` is the time of day the emergence concentrates, which
+     drives the activity window. */
   function hatchForecast(wx, doy) {
-    function win(d, a, b) { return clamp01(1 - Math.abs(d - (a + b) / 2) / ((b - a) / 2 + 12)); }
-    var wt = wx.waterTemp, cloud = wx.cloud;
-    var bwoSeason = Math.max(win(doy, 60, 140), win(doy, 250, 330));
+    function win(d, a, b) {
+      var mid = (a + b) / 2, half = (b - a) / 2 + 12;
+      var dd = d - mid;
+      if (dd > 182) dd -= 365;
+      if (dd < -182) dd += 365;
+      return clamp01(1 - Math.abs(dd) / half);
+    }
+    var wt = wx.waterTemp, cloud = wx.cloud, flow = wx.flowIdx;
+
     var list = [
-      { n: 'Blue-winged olive', v: pref(wt, 48, 7) * (0.45 + 0.55 * cloud) * bwoSeason,
-        rig: ['#18 BWO nymph', '#20 BWO emerger'], dry: '#20 parachute BWO' },
-      { n: 'Midge', v: pref(wt, 42, 9) * (0.6 + 0.3 * cloud) * (0.55 + 0.45 * win(doy, 320, 420)),
-        rig: ['#20 zebra midge', '#18 pheasant tail'], dry: '#22 Griffiths gnat' },
-      { n: 'Caddis', v: pref(wt, 56, 6) * win(doy, 110, 180),
+      { n: 'Midge', v: pref(wt, 40, 10) * (0.55 + 0.35 * cloud) * (0.5 + 0.5 * win(doy, 330, 440)),
+        peak: 13, sub: 'Pupae drift all day in slow water and foam lines. The larger fish eat ' +
+          'pupae well below the risers rather than the adults on top.',
+        rig: ['#20-22 zebra midge', '#18 pheasant tail as the anchor'], dry: '#22 Griffiths gnat' },
+      { n: 'Blue-winged olive', v: pref(wt, 47, 7) * (0.35 + 0.65 * cloud) *
+          Math.max(win(doy, 70, 135), win(doy, 255, 325)),
+        peak: 13.5, sub: 'Nymphs get restless hours before they emerge. A swung or lifted emerger ' +
+          'in the film beats a dead-drifted dry while the hatch is building.',
+        rig: ['#18 BWO nymph', '#20 soft hackle emerger'], dry: '#20 parachute BWO' },
+      { n: 'Caddis', v: pref(wt, 55, 6) * win(doy, 115, 185) * (0.7 + 0.3 * (1 - cloud)),
+        peak: 19, sub: 'Pupae rise fast, so fish move to intercept them. A caddis pupa on a tight ' +
+          'line swing accounts for more fish than the evening dry does.',
         rig: ['#16 caddis pupa', '#14 hares ear'], dry: '#16 elk hair caddis' },
-      { n: 'Pale morning dun', v: pref(wt, 57, 5) * win(doy, 150, 225),
-        rig: ['#16 PMD nymph', '#18 flashback'], dry: '#16 PMD sparkle dun' },
-      { n: 'Trico', v: pref(wt, 60, 6) * win(doy, 205, 265),
+      { n: 'Pale morning dun', v: pref(wt, 56, 5) * win(doy, 155, 220),
+        peak: 11, sub: 'Emergers stuck in the film are the easy meal. Cripples outfish duns ' +
+          'through the middle of the hatch.',
+        rig: ['#16 PMD nymph', '#18 flashback'], dry: '#16 PMD cripple' },
+      { n: 'Trico', v: pref(wt, 60, 6) * win(doy, 205, 262),
+        peak: 9, sub: 'Nothing subsurface worth fishing during the spinner fall. Before it, ' +
+          'a small pheasant tail in the riffle.',
         rig: ['#22 trico nymph'], dry: '#22 trico spinner' },
-      { n: 'Terrestrials', v: clamp01(ramp(wx.tempF, 62, 85)) * win(doy, 190, 270) * (0.5 + 0.5 * clamp01(ramp(wx.windSpd, 6, 18))),
-        rig: ['#10 hopper', '#16 beadhead dropper'], dry: '#10 foam hopper' }
+      { n: 'Terrestrials', v: clamp01(ramp(wx.tempF, 62, 86)) * win(doy, 190, 275) *
+          (0.55 + 0.45 * clamp01(ramp(wx.windSpd, 6, 18))),
+        peak: 14, sub: 'Nothing hatching. A beadhead dropper 18 inches under the hopper covers ' +
+          'the fish that will not come up.',
+        rig: ['#10 foam hopper', '#16 beadhead dropper'], dry: '#10 foam hopper' },
+      { isHatch: false, n: 'Baetis nymph drift', v: clamp01(ramp(flow, 0.55, 0.9)) * 0.75 * clamp01(ramp(wt, 38, 50)),
+        peak: 12, sub: 'Rising or off-colour water knocks nymphs loose. This is a bottom-bouncing ' +
+          'day, not a dry fly day, and the fish will be on the inside edges out of the push.',
+        rig: ['#16 beadhead pheasant tail', '#14 rubber legs'], dry: null },
+      { isHatch: false, n: 'Streamer window', v: clamp01(0.3 * clamp01(ramp(flow, 0.5, 0.85)) +
+          0.3 * clamp01(cloud) + 0.2 * clamp01(ramp(52 - wt, 0, 12)) + 0.3 * win(doy, 270, 330)),
+        peak: 10, sub: 'Not a hatch. Big fish hunting rather than feeding, which is why low light ' +
+          'and pushy water matter more than insects.',
+        rig: ['Sculpin pattern on a sink tip', 'Smaller trailing streamer'], dry: null }
     ];
     list.forEach(function (h) { h.v = clamp01(h.v); });
     list.sort(function (a, b) { return b.v - a.v; });
@@ -441,9 +478,25 @@
     var rec = [];
     rec.push('Fish the slower inside seams and the soft water below riffles - that is where fish will hold and ' +
       'feed as the water comes up to temperature.');
-    if (top.v > 0.45) rec.push(top.n + ' activity should be the driver today. Expect it to build as water ' +
-      'temperature reaches the ' + Math.round(wx.waterTemp) + ' degree range and peak through the middle of the day.');
-    else rec.push('No hatch is strong enough to build a day around. Fish subsurface and cover water.');
+    if (top.v > 0.45) {
+      if (top.isHatch === false) {
+        /* Not every driver is a hatch: high water and low light produce
+           their own feeding behaviour and deserve their own sentence. */
+        rec.push(top.n + ' is the pattern today rather than any hatch. Water is around ' +
+          Math.round(wx.waterTemp) + ' degrees' +
+          (wx.flowReal ? ' and running ' + wx.gauge.cfs.toLocaleString() + ' cfs' : '') +
+          ', and the best of it should be near ' + env.hhmm(top.peak * 60) + '.');
+      } else {
+        rec.push(top.n + ' is the driver today. Water is around ' + Math.round(wx.waterTemp) +
+          ' degrees, which is inside the band that brings it off, and it should concentrate near ' +
+          env.hhmm(top.peak * 60) + '.');
+      }
+      rec.push('Below the surface: ' + top.sub);
+    } else {
+      rec.push('Nothing is hatching heavily enough to build a day around, so this is a subsurface day. ' +
+        'Cover water, fish the drift, and let the depth do the work.');
+      if (top.sub) rec.push('Best subsurface option: ' + top.sub);
+    }
     if (surface > 55) rec.push('Surface feeding is likely. Start subsurface, but have the dry rigged and switch the ' +
       'moment you see consistent noses rather than one-off rises.');
     if (streamer > 55) rec.push('Streamer conditions are good - low light and ' +
@@ -451,13 +504,25 @@
     if (wx.windSpd > 16) rec.push('Wind at ' + Math.round(wx.windSpd) + ' mph will make long drifts hard. Shorten up ' +
       'and fish close with a heavier point fly.');
 
+    /* Shops that actually fish this water. Linked and credited, never
+       scraped: the report is theirs. */
+    var shops = global.OG.flyshops
+      ? global.OG.flyshops.near(sc.lon, sc.lat, sc.hab.water, 3) : [];
+
     return {
       headline: rec[0],
       recommendation: rec,
-      hatches: hatches, surface: surface, streamer: streamer,
+      hatches: hatches, surface: surface, streamer: streamer, shops: shops,
       setup: [
-        { k: 'Water', v: Math.round(wx.waterTemp) + ' degrees F, flow index ' + wx.flowIdx.toFixed(2) +
-            (sc.hab.waterCls === 'tailwater' ? ' (tailwater - buffered)' : '') },
+        { k: 'Water', v: wx.gauge
+            ? [Math.round(wx.waterTemp) + ' degrees F' +
+                 (wx.gauge.waterTempF != null ? ' (measured)' : ' (modelled)'),
+               wx.gauge.cfs != null ? wx.gauge.cfs.toLocaleString() + ' cfs measured' : 'Flow modelled',
+               'Gauge: ' + (wx.gauge.flowSite || wx.gauge.tempSite) + ', about ' +
+                 (wx.gauge.flowMiles != null ? wx.gauge.flowMiles : wx.gauge.tempMiles) + ' miles away']
+            : Math.round(wx.waterTemp) + ' degrees F modelled, flow index ' + wx.flowIdx.toFixed(2) +
+              (sc.hab.waterCls === 'tailwater' ? ' (tailwater - buffered)' : '') +
+              '. No USGS gauge within ' + (global.OG.gauges ? global.OG.gauges.maxMiles : 25) + ' miles.' },
         { k: 'Target water', v: ['Slower inside seams below riffles', 'Soft edges and current breaks, not the fast middle'] },
         { k: 'Starting rig', v: top.rig.concat(surface > 55 ? ['Switch to ' + top.dry + ' on consistent risers'] : []) },
         { k: 'Presentation', v: wx.flowIdx > 0.6

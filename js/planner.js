@@ -204,7 +204,14 @@
     var wMig = mig.applies ? w.mig : 0;
 
     /* The weather component is dropped entirely at this range. Its weight is
-       redistributed across the terms climate can actually speak to. */
+       redistributed across the terms climate can actually speak to.
+
+       The result is NOT the Opportunity Score. Wind, pressure and frontal
+       passage are held neutral because climate cannot predict them, and
+       those are three of the strongest positive drivers - so these numbers
+       sit systematically lower than a forecast day would. They rank weeks
+       against each other; they do not predict a day. The UI labels this a
+       seasonal index for that reason. */
     var total = w.hab + w.move + wMig;
     var raw = (w.hab * habV * 100 + w.move * mv.score + wMig * mig.intensity) / total;
     var score = clamp(Math.round(50 + (raw - 51) * 1.42), 1, 99);
