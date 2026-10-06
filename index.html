@@ -386,11 +386,13 @@
     padding: 0; margin-top: 4px; font-size: 11.5px; text-decoration: underline;
   }
 
-  /* Hover readout: value, label, coordinate. */
+  /* Hover readout: value, label, coordinate. Follows the cursor rather than
+     sitting in a fixed corner, which is the only placement that cannot end
+     up behind the layer dock or the plan panel. */
   #hover {
     position: absolute;
-    left: 12px; top: 50%;
-    transform: translateY(-50%);
+    left: 0; top: 0;
+    will-change: transform;
     display: flex;
     align-items: center;
     gap: 10px;

@@ -1938,6 +1938,21 @@
       addSpotAt(g.lon, g.lat);
     });
 
+    /* Sit the readout beside the cursor, flipping away from whichever edge
+       it is about to run off. Measured each time because the box changes
+       width with the value and the coordinate. */
+    function placeHover(node, x, y) {
+      var w = node.offsetWidth || 170, h = node.offsetHeight || 54;
+      var pad = 18, m = 8;
+      var left = x + pad;
+      if (left + w > radar.w - m) left = x - pad - w;
+      if (left < m) left = Math.min(radar.w - w - m, m);
+      var top = y - h / 2;
+      if (top < m) top = m;
+      if (top + h > radar.h - m) top = radar.h - h - m;
+      node.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(top) + 'px)';
+    }
+
     /* Hover readout. */
     var hov = $('#hover');
     var hoverRaf = null, hoverPt = null;
@@ -1945,6 +1960,9 @@
       if (e.pointerType === 'touch') return;
       var r2 = canvas.getBoundingClientRect();
       hoverPt = [e.clientX - r2.left, e.clientY - r2.top];
+      /* Position tracks the pointer immediately; only the value lookup is
+         throttled, so the box never lags behind the cursor. */
+      if (!hov.hidden) placeHover(hov, hoverPt[0], hoverPt[1]);
       if (hoverRaf) return;
       hoverRaf = requestAnimationFrame(function () {
         hoverRaf = null;
@@ -1954,6 +1972,7 @@
         var v = radar.fieldAt(ll[0], ll[1], false);
         var wxl = radarNS.WX_LAYERS[App.state.layer];
         hov.hidden = false;
+        placeHover(hov, hoverPt[0], hoverPt[1]);
         hov.querySelector('.hv-coord').textContent =
           Math.abs(ll[1]).toFixed(4) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + '  ' +
           Math.abs(ll[0]).toFixed(4) + '° ' + (ll[0] >= 0 ? 'E' : 'W');
