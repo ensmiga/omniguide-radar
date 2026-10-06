@@ -67,18 +67,38 @@
     return rings;
   }
 
-  /* ---------- Albers conic equal-area, tuned for the lower 48 ---------- */
+  /* ---------- Spherical Mercator ----------
 
-  var p1 = 29.5 * D2R, p2 = 45.5 * D2R, p0 = 37.5 * D2R, l0 = -96 * D2R;
-  var nA = (Math.sin(p1) + Math.sin(p2)) / 2;
-  var cA = Math.cos(p1) * Math.cos(p1) + 2 * nA * Math.sin(p1);
-  var rho0 = Math.sqrt(cA - 2 * nA * Math.sin(p0)) / nA;
+     This used to be Albers conic equal-area, which is the better projection
+     for a national thematic map: it keeps cell areas comparable so a hexagon
+     in Montana means the same as one in Texas.
 
-  function albersRaw(lon, lat, out) {
-    var th = nA * (lon * D2R - l0);
-    var r = Math.sqrt(Math.max(0, cA - 2 * nA * Math.sin(lat * D2R))) / nA;
-    out[0] = r * Math.sin(th);
-    out[1] = rho0 - r * Math.cos(th);
+     It was swapped for Web Mercator because every raster tile service on
+     earth publishes in Web Mercator, and a hillshade or satellite basemap
+     that does not line up with the geometry drawn over it is worthless. The
+     cost is that area is exaggerated toward the north. That mattered when
+     the map drew discrete equal-area cells; it matters much less now that
+     the field is rendered as a smooth continuous surface, and every score is
+     computed in lon/lat regardless of how it is drawn.
+
+     World space is the full Mercator square, 0..WORLD on both axes, so tile
+     maths is just WORLD / 2^z. */
+
+  var WORLD = 1000;
+  var MAXLAT = 85.0511;
+
+  function project(lon, lat, out) {
+    out[0] = (lon + 180) / 360 * WORLD;
+    var la = lat > MAXLAT ? MAXLAT : lat < -MAXLAT ? -MAXLAT : lat;
+    var s = Math.sin(la * D2R);
+    out[1] = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * WORLD;
+    return out;
+  }
+
+  function unproject(wx, wy, out) {
+    out[0] = wx / WORLD * 360 - 180;
+    var n = Math.PI - 2 * Math.PI * wy / WORLD;
+    out[1] = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))) / D2R;
     return out;
   }
 
@@ -110,43 +130,9 @@
     });
   }
 
-  /* Normalize projected coordinates into a 1000-unit-wide world box. */
-  var tmp = [0, 0], minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  var tmp = [0, 0];
   var s, i2, ring, j;
-  for (s = 0; s < states.length; s++) {
-    for (i2 = 0; i2 < states[s].rings.length; i2++) {
-      ring = states[s].rings[i2];
-      for (j = 0; j < ring.length; j += 2) {
-        albersRaw(ring[j], ring[j + 1], tmp);
-        if (tmp[0] < minX) minX = tmp[0];
-        if (tmp[0] > maxX) maxX = tmp[0];
-        if (tmp[1] < minY) minY = tmp[1];
-        if (tmp[1] > maxY) maxY = tmp[1];
-      }
-    }
-  }
-  var K = 1000 / (maxX - minX), OX = minX, OYTOP = maxY;
-  var WORLD_W = 1000, WORLD_H = (maxY - minY) * K;
-
-  /* The projection puts north at a larger y; canvas puts north at a smaller y.
-     Subtracting from the top edge flips it the right way up. */
-  function project(lon, lat, out) {
-    albersRaw(lon, lat, out);
-    out[0] = (out[0] - OX) * K;
-    out[1] = (OYTOP - out[1]) * K;
-    return out;
-  }
-
-  function unproject(wx, wy, out) {
-    var X = wx / K + OX, Y = OYTOP - wy / K;
-    var dy = rho0 - Y;
-    var rho = Math.sqrt(X * X + dy * dy) * (nA < 0 ? -1 : 1);
-    var theta = Math.atan2(X, dy);
-    var sinPhi = (cA - rho * rho * nA * nA) / (2 * nA);
-    out[0] = (l0 + theta / nA) / D2R;
-    out[1] = Math.asin(Math.max(-1, Math.min(1, sinPhi))) / D2R;
-    return out;
-  }
+  var WORLD_W = WORLD, WORLD_H = WORLD;
 
   /* Area-weighted centroid of a ring, used to place labels inside the shape. */
   function ringCentroid(r) {
@@ -481,7 +467,7 @@
     states: states, counties: counties, cities: cities,
     rivers: rivers, lakes: lakes,
     project: project, unproject: unproject,
-    WORLD_W: WORLD_W, WORLD_H: WORLD_H,
+    WORLD_W: WORLD_W, WORLD_H: WORLD_H, WORLD: WORLD,
     stateIndexAt: stateIndexAt, countyAt: countyAt,
     forEachCell: forEachCell, hexWorld: hexWorld, cellIndexAt: cellIndexAt,
     cellCenter: cellCenter, nearestCell: nearestCell,

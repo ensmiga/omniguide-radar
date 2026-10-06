@@ -92,6 +92,8 @@
     }
   };
 
+  var LEGAL_RGB = { 90: [63, 167, 118], 65: [214, 160, 54], 45: [150, 120, 200], 15: [104, 120, 128], 0: [130, 140, 146] };
+
   var STATUS_COLOR = {
     OPEN: 'rgba(63,167,118,0.72)', LIMITED: 'rgba(214,160,54,0.72)',
     PERMIT: 'rgba(150,120,200,0.70)', CLOSED: 'rgba(104,120,128,0.42)',
@@ -210,15 +212,16 @@
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    if (!this.fitted) { this.fit(); this.fitted = true; }
+    /* Don't fit until the layout has a real size. The first resize can fire
+       with a one-pixel-tall canvas, and fitting to that pins the zoom at
+       effectively nothing. */
+    if (!this.fitted && this.w > 80 && this.h > 80) { this.fit(); this.fitted = true; }
   };
 
-  Radar.prototype.fit = function (pad) {
-    pad = pad || 28;
-    var z = Math.min((this.w - pad * 2) / geo.WORLD_W, (this.h - pad * 2 - 40) / geo.WORLD_H);
-    this.view.zoom = z;
-    this.view.cx = geo.WORLD_W / 2;
-    this.view.cy = geo.WORLD_H / 2;
+  /* World space is the whole Mercator square now, so the opening view frames
+     the lower 48 rather than the planet. */
+  Radar.prototype.fit = function () {
+    this.zoomToBounds(-125.2, 24.2, -66.6, 49.6, 0.06);
   };
 
   Radar.prototype.toScreen = function (wx, wy, out) {
@@ -238,11 +241,100 @@
     return geo.unproject(w[0], w[1], [0, 0]);
   };
 
+  /* ---------- Raster basemap ----------
+
+     Tiles only work outside the artifact sandbox, where the content security
+     policy blocks every external image. On a real origin they load normally;
+     inside the sandbox every request fails silently and the map falls back to
+     flat land shapes, which still works, just without the relief. */
+
+  var BASEMAPS = {
+    relief: {
+      name: 'Relief',
+      url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',
+      credit: 'Esri, USGS, NOAA',
+      maxZoom: 15, premium: false
+    },
+    satellite: {
+      name: 'Satellite',
+      url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      credit: 'Esri, Maxar, Earthstar Geographics',
+      maxZoom: 18, premium: true
+    },
+    none: { name: 'No basemap', url: null, credit: null, maxZoom: 0, premium: false }
+  };
+
+  var tileCache = new Map();     // key -> {img, ok} ; img.complete when drawable
+  var tileFails = 0, tileTried = 0;
+
+  function tileKey(b, z, x, y) { return b + '/' + z + '/' + x + '/' + y; }
+
+  function getTile(radar, bkey, z, x, y) {
+    var k = tileKey(bkey, z, x, y);
+    var t = tileCache.get(k);
+    if (t) return t;
+    var def = BASEMAPS[bkey];
+    if (!def || !def.url) return null;
+    var n = 1 << z;
+    if (x < 0 || y < 0 || x >= n || y >= n) return null;
+
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    t = { img: img, ok: false, failed: false };
+    tileTried++;
+    img.onload = function () { t.ok = true; radar.app.dirty = true; };
+    img.onerror = function () { t.failed = true; tileFails++; radar.app.dirty = true; };
+    img.src = def.url.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+    if (tileCache.size > 900) {
+      /* Crude eviction: drop the oldest third rather than grow without end. */
+      var drop = Math.floor(tileCache.size / 3), it = tileCache.keys();
+      for (var i = 0; i < drop; i++) tileCache.delete(it.next().value);
+    }
+    tileCache.set(k, t);
+    return t;
+  }
+
+  /* True once enough tile requests have failed that we are clearly offline or
+     sandboxed, so the renderer can draw land shapes instead. */
+  function tilesBlocked() { return tileTried >= 6 && tileFails / tileTried > 0.8; }
+
+  Radar.prototype.drawBasemap = function () {
+    var bkey = this.app.state.basemap || 'relief';
+    var def = BASEMAPS[bkey];
+    if (!def || !def.url || tilesBlocked()) return false;
+
+    var ctx = this.ctx, W = geo.WORLD;
+    /* Pick the zoom level whose tiles land nearest 256 screen pixels. */
+    var z = Math.round(Math.log2(this.view.zoom * W / 256));
+    z = Math.max(2, Math.min(def.maxZoom, z));
+    var n = 1 << z, tileWorld = W / n;
+    var tilePx = tileWorld * this.view.zoom;
+
+    var tl = this.toWorld(0, 0, [0, 0]), br = this.toWorld(this.w, this.h, [0, 0]);
+    var x0 = Math.floor(tl[0] / tileWorld), x1 = Math.floor(br[0] / tileWorld);
+    var y0 = Math.floor(tl[1] / tileWorld), y1 = Math.floor(br[1] / tileWorld);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 400) return false;   // sanity guard
+
+    var drew = 0, p = this._pt;
+    for (var ty = y0; ty <= y1; ty++) {
+      for (var tx = x0; tx <= x1; tx++) {
+        var t = getTile(this, bkey, z, tx, ty);
+        if (!t || !t.ok) continue;
+        this.toScreen(tx * tileWorld, ty * tileWorld, p);
+        /* The half-pixel overdraw hides seams from fractional positions. */
+        ctx.drawImage(t.img, p[0], p[1], tilePx + 1, tilePx + 1);
+        drew++;
+      }
+    }
+    this.basemapCredit = drew ? def.credit : null;
+    return drew > 0;
+  };
+
   Radar.prototype.resolution = function () {
     var z = this.view.zoom;
-    if (z < 1.8) return 0;
-    if (z < 3.1) return 1;
-    if (z < 5.2) return 2;
+    if (z < 15) return 0;
+    if (z < 26) return 1;
+    if (z < 44) return 2;
     return 3;
   };
 
@@ -316,174 +408,193 @@
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
   };
 
+  /* ---------- Continuous field ----------
+
+     The hexagons are gone. They made the map read as a mosaic of decisions
+     when what the model actually produces is a smooth surface, and at
+     national scale the mesh was pure noise.
+
+     Scores are sampled on a lattice in WORLD space rather than screen space,
+     so panning reuses what was already computed and the samples stay put
+     instead of shimmering. World space is an affine function of the screen,
+     so the small sample canvas can simply be stretched to fit, and the
+     browser's own bilinear filtering is what turns a lattice of numbers into
+     a continuous surface. */
+
+  var fieldVals = new Map();      // numeric key -> display value, NaN = nothing here
+  var fieldAux = new Map();       // numeric key -> wind direction, for streamlines
+  var fieldStamp = '';
+
+  function fkey(gx, gy) { return (gx + 32768) * 65536 + (gy + 32768); }
+
+  Radar.prototype.fieldValue = function (gx, gy, nodeWorld, spId, layer, t, day, ent) {
+    var k = fkey(gx, gy);
+    var v = fieldVals.get(k);
+    if (v !== undefined) return v;
+
+    var ll = geo.unproject(gx * nodeWorld, gy * nodeWorld, this._ll || (this._ll = [0, 0]));
+    var lon = ll[0], lat = ll[1];
+    var si = geo.stateIndexAt(lon, lat);
+    var out = NaN, aux = 0;
+
+    if (si >= 0) {
+      var st = geo.states[si];
+      var wxl = WX_LAYERS[layer];
+      if (wxl) {
+        var w = env.conditions(lon, lat, t, env.doyFor(t));
+        out = wxl.get(w);
+        aux = w.windFrom;
+      } else if (!ent.pro && !(ent.state === st.abbr && ent.species === spId)) {
+        out = -1;                                     // locked: drawn as a flat preview
+      } else if (layer === 'legal') {
+        out = STATUS_ORDER[legalAt(lon, lat, spId, day)];
+      } else {
+        var sc = models.scoreAt(lon, lat, t, env.doyFor(t), spId);
+        if (!sc.inRange || !regs.hasSeasonRecord(st.abbr, spId)) out = NaN;
+        else {
+          out = layer === 'movement' ? sc.movement : layer === 'migration' ? sc.migration :
+                layer === 'newbird' ? sc.newBird : layer === 'confidence' ? sc.confidence :
+                sc.opportunity;
+          aux = sc.mig.applies ? sc.migration : 0;
+        }
+      }
+    }
+    if (fieldVals.size > 400000) { fieldVals.clear(); fieldAux.clear(); }
+    fieldVals.set(k, out);
+    fieldAux.set(k, aux);
+    return out;
+  };
+
+  var STATUS_ORDER = { OPEN: 90, LIMITED: 65, PERMIT: 45, CLOSED: 15, UNKNOWN: 0 };
+
+  Radar.prototype.drawField = function (layer, spId, t, day, ent) {
+    var ctx = this.ctx, z = this.view.zoom;
+
+    /* Roughly 15 screen pixels between samples: fine enough that the
+       upscaled surface shows real structure, coarse enough to stay live. */
+    var nodeWorld = 15 / z;
+    var stamp = [spId, layer, t, nodeWorld.toFixed(6), ent.pro ? 1 : 0, ent.state, ent.species].join('|');
+    if (stamp !== fieldStamp) { fieldVals.clear(); fieldAux.clear(); fieldStamp = stamp; }
+
+    var tl = this.toWorld(0, 0, [0, 0]), br = this.toWorld(this.w, this.h, [0, 0]);
+    var gx0 = Math.floor(tl[0] / nodeWorld) - 1, gx1 = Math.ceil(br[0] / nodeWorld) + 1;
+    var gy0 = Math.floor(tl[1] / nodeWorld) - 1, gy1 = Math.ceil(br[1] / nodeWorld) + 1;
+    var cols = gx1 - gx0 + 1, rows = gy1 - gy0 + 1;
+    if (cols < 2 || rows < 2 || cols * rows > 60000) return;
+
+    if (!this._fc) {
+      this._fc = document.createElement('canvas');
+      this._fcx = this._fc.getContext('2d');
+    }
+    if (this._fc.width !== cols || this._fc.height !== rows) {
+      this._fc.width = cols; this._fc.height = rows;
+    }
+    var img = this._fcx.createImageData(cols, rows);
+    var data = img.data;
+
+    var wxl = WX_LAYERS[layer];
+    var lo = wxl ? wxl.min : 0, span = wxl ? (wxl.max - wxl.min) : 100;
+    var legalMode = layer === 'legal';
+    var alpha = wxl ? (layer === 'precip' || layer === 'snowpack' ? 0 : 200) : 205;
+
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        var v = this.fieldValue(gx0 + c, gy0 + r, nodeWorld, spId, layer, t, day, ent);
+        var o = (r * cols + c) * 4;
+        if (v !== v) continue;                                  // NaN: transparent
+        var col, a;
+        if (v === -1) { col = [128, 138, 134]; a = 46; }         // locked preview
+        else if (legalMode) {
+          var sc2 = LEGAL_RGB[v] || [130, 140, 146];
+          col = sc2; a = 150;
+        } else if (wxl) {
+          col = wxl.ramp((v - lo) / span);
+          a = alpha || Math.round(20 + 210 * Math.min(1, Math.max(0, (v - lo) / span) * 2.2));
+        } else {
+          col = rampRGB(v / 100);
+          a = 205;
+        }
+        data[o] = col[0]; data[o + 1] = col[1]; data[o + 2] = col[2]; data[o + 3] = a;
+      }
+    }
+    this._fcx.putImageData(img, 0, 0);
+
+    var p = this._pt;
+    this.toScreen(gx0 * nodeWorld, gy0 * nodeWorld, p);
+    var px = p[0], py = p[1];
+    var pw = (cols - 1) * nodeWorld * z, ph = (rows - 1) * nodeWorld * z;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    /* Half a node of inset on each side: the outer ring of samples exists
+       only to give the filter something to interpolate against. */
+    var half = nodeWorld * z / 2;
+    ctx.drawImage(this._fc, 0.5, 0.5, cols - 1, rows - 1,
+                  px + half, py + half, pw, ph);
+    ctx.restore();
+
+    this.field = { gx0: gx0, gy0: gy0, cols: cols, rows: rows, nodeWorld: nodeWorld };
+  };
+
+  /* Bilinear read-back of the field the last frame drew, for streamlines and
+     for the value shown next to town labels. */
+  Radar.prototype.fieldAt = function (lon, lat, wantAux) {
+    var f = this.field;
+    if (!f) return NaN;
+    var w = geo.project(lon, lat, [0, 0]);
+    var fx = w[0] / f.nodeWorld, fy = w[1] / f.nodeWorld;
+    var ix = Math.floor(fx), iy = Math.floor(fy);
+    var tx = fx - ix, ty = fy - iy, sum = 0, wsum = 0;
+    var src = wantAux ? fieldAux : fieldVals;
+    for (var a = 0; a <= 1; a++) {
+      for (var b = 0; b <= 1; b++) {
+        var v = src.get(fkey(ix + a, iy + b));
+        if (v === undefined || v !== v || v === -1) continue;
+        var ww = (a ? tx : 1 - tx) * (b ? ty : 1 - ty);
+        if (ww <= 0) continue;
+        sum += v * ww; wsum += ww;
+      }
+    }
+    return wsum > 0.2 ? sum / wsum : NaN;
+  };
+
   Radar.prototype.draw = function () {
     var app = this.app, ctx = this.ctx, theme = app.theme();
     ctx.clearRect(0, 0, this.w, this.h);
     ctx.fillStyle = theme.mapBg;
     ctx.fillRect(0, 0, this.w, this.h);
 
-    this.drawLand(theme.land, null, 0);
+    var tiles = this.drawBasemap();
+    if (!tiles) this.drawLand(theme.land, null, 0);
 
-    var res = this.resolution();
     var win = this.visibleLonLat();
+    var res = this.resolution();
     var t = app.state.t;
-    /* App time is quantised to the forecast's own 3-hour step (see STEP_T in
-       app.js), so there is nothing to cross-fade: the map draws the score at
-       exactly the instant the panel computes it. Blending between two cached
-       snapshots is what used to make the hexagon and the plan disagree -
-       lerping two scores is not the same as scoring the midpoint, because
-       everything between the conditions and the final number is non-linear. */
-    var tq0 = t, tq1 = t, f = 0;
     var spId = app.state.species;
     var layer = app.state.layer;
     var day = Math.floor(t);
     var ent = app.entitlement();
-    var self = this;
-    var p = this._pt, verts = new Float32Array(12);
-    var closed = 0, lockedCount = 0;
-    var cellPx = geo.RES[res] * (geo.WORLD_H / 25.4) * this.view.zoom;
-    var showNums = cellPx > 26;
 
-    this.frameCells.clear();
-    this.frameVal.clear();
-    this.frameWind.clear();
     this.labelBoxes.length = 0;
-    ctx.lineJoin = 'round';
 
-    geo.forEachCell(res, win.lon0, win.lat0, win.lon1, win.lat1, function (lon, lat, j, i) {
-      var si = landFor(res, j, i, lon, lat);
-      if (si < 0) return;
-      var st = geo.states[si];
+    this.drawField(layer, spId, t, day, ent);
 
-      var wxl = WX_LAYERS[layer] || null;
-      var val, wxNow = null;
-
-      if (wxl) {
-        /* Weather layers are species independent and read straight from the
-           interpolated forecast rather than from the opportunity models. */
-        var w0 = wxAt(res, j, i, lon, lat, tq0);
-        var w1 = tq1 === tq0 ? w0 : wxAt(res, j, i, lon, lat, tq1);
-        wxNow = w0;
-        var raw = wxl.get(w0) + (wxl.get(w1) - wxl.get(w0)) * f;
-        val = raw;
-        self.frameVal.set(j + ':' + i, raw);
-        self.frameWind.set(j + ':' + i, [w0.windFrom, w0.windSpd]);
-      } else {
-        var s0 = scoresAt(res, j, i, lon, lat, spId, tq0);
-        /* Out of range, or no season record in this state: the ground stays
-           blank. A faint score here would be worse than nothing. */
-        if (!s0[5] || !regs.hasSeasonRecord(st.abbr, spId)) {
-          ctx.fillStyle = theme.outRange;
-          ctx.fill();
-          return;
-        }
-        var idx = layer === 'movement' ? 1 : layer === 'migration' ? 2 :
-                  layer === 'newbird' ? 3 : layer === 'confidence' ? 4 : 0;
-        val = s0[idx];
-        self.frameCells.set(j + ':' + i, s0[2]);
-        self.frameVal.set(j + ':' + i, s0[0]);
-      }
-
-      var hx = hexFor(res, j, i, lon, lat);
-      ctx.beginPath();
-      self.toScreen(hx[0], hx[1], p);
-      ctx.moveTo(p[0], p[1]);
-      for (var k = 2; k < 12; k += 2) {
-        self.toScreen(hx[k], hx[k + 1], p);
-        ctx.lineTo(p[0], p[1]);
-      }
-      ctx.closePath();
-
-      /* Weather is not a species entitlement; it is open to everyone. */
-      var unlocked = wxl ? true : (ent.pro || (ent.state === st.abbr && ent.species === spId));
-      if (!unlocked) {
-        ctx.fillStyle = 'rgba(120,134,140,' + (0.10 + val / 100 * 0.17) + ')';
-        ctx.fill();
-        lockedCount++;
-        return;
-      }
-
-      if (wxl) {
-        var cw = wxl.ramp((val - wxl.min) / (wxl.max - wxl.min));
-        ctx.fillStyle = 'rgba(' + cw[0] + ',' + cw[1] + ',' + cw[2] + ',' +
-          (layer === 'precip' || layer === 'snowpack'
-            ? (0.12 + 0.78 * Math.min(1, Math.max(0, (val - wxl.min) / (wxl.max - wxl.min)) * 2.2))
-            : 0.82) + ')';
-        ctx.fill();
-        if (showNums) {
-          ctx.fillStyle = 'rgba(248,250,248,0.92)';
-          ctx.font = '600 ' + Math.min(14, Math.max(9, cellPx * 0.38)) + 'px "IBM Plex Mono", monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          geo.project(lon, lat, verts);
-          self.toScreen(verts[0], verts[1], p);
-          ctx.lineWidth = 2.5;
-          ctx.strokeStyle = 'rgba(10,16,14,0.55)';
-          var txt = wxl.digits ? val.toFixed(wxl.digits) : String(Math.round(val));
-          ctx.strokeText(txt, p[0], p[1]);
-          ctx.fillText(txt, p[0], p[1]);
-        }
-        return;
-      }
-
-      var status = legalAt(lon, lat, spId, day);
-
-      if (layer === 'legal') {
-        ctx.fillStyle = STATUS_COLOR[status] || STATUS_COLOR.UNKNOWN;
-        ctx.fill();
-        return;
-      }
-
-      var legalOk = status === 'OPEN' || status === 'LIMITED';
-      if (app.state.legalOverlay && !legalOk) {
-        /* Biology stays visible, but muted, and never reads as a legal hunt. */
-        var c = rampRGB(val / 100);
-        var g = (c[0] * 0.3 + c[1] * 0.5 + c[2] * 0.2);
-        ctx.fillStyle = 'rgba(' + Math.round((c[0] + g * 1.6) / 2.6) + ',' +
-          Math.round((c[1] + g * 1.6) / 2.6) + ',' + Math.round((c[2] + g * 1.6) / 2.6) + ',0.40)';
-        ctx.fill();
-        closed++;
-        ctx.fillStyle = self.hatch;
-        ctx.globalAlpha = status === 'UNKNOWN' ? 0.25 : 0.45;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      } else {
-        ctx.fillStyle = rampCSS(val / 100, 0.84);
-        ctx.fill();
-        if (layer === 'confidence' && val < 55) {
-          ctx.fillStyle = self.hatch;
-          ctx.globalAlpha = 0.22;
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        }
-      }
-
-      if (showNums) {
-        ctx.fillStyle = val > 62 ? 'rgba(14,20,18,0.86)' : 'rgba(236,243,238,0.90)';
-        ctx.font = '600 ' + Math.min(15, Math.max(9, cellPx * 0.42)) + 'px "IBM Plex Mono", monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        geo.project(lon, lat, verts);
-        self.toScreen(verts[0], verts[1], p);
-        ctx.fillText(Math.round(val), p[0], p[1]);
-      }
-    });
-
-    /* Reference geography over the heat, fine detail first so the heavier
-       state lines read as the stronger boundary. */
-    this.drawHydro(win);
-    if (this.view.zoom > 2.1) this.drawCounties(win);
-    this.drawLand(null, theme.border, this.view.zoom > 3 ? 1.2 : 0.8);
+    if (!tiles) this.drawHydro(win);
+    if (this.view.zoom > 22) this.drawCounties(win);
+    this.drawLand(null, theme.border, this.view.zoom > 25 ? 1.2 : 0.9);
 
     if (layer === 'migration') this.drawMigration(res);
     if (layer === 'wind' || layer === 'gusts') this.drawWindFlow(res);
     this.drawPlaceLabels(win, res);
+    this.drawGraticule();
     this.drawSpots();
+    this.drawUserLocation();
     this.drawSelection();
     this.drawScaleBar();
     this.drawWhereAmI();
-
-    if (lockedCount && !ent.pro) this.drawLockHint();
+    this.drawEdgeCoords();
+    if (!ent.pro) this.drawLockHint();
   };
 
   /* ---------- Reference geography ---------- */
@@ -492,7 +603,7 @@
      it is the thing being hunted, so it draws over the heat, not under it. */
   Radar.prototype.drawHydro = function (win) {
     var ctx = this.ctx, p = this._pt, z = this.view.zoom, th = this.app.theme();
-    var maxRank = z < 1.5 ? 4 : z < 2.6 ? 6 : z < 5 ? 8 : z < 9 ? 10 : 99;
+    var maxRank = z < 13 ? 4 : z < 22 ? 6 : z < 42 ? 8 : z < 75 ? 10 : 99;
 
     var lakes = geo.lakes, i, k, ring;
     ctx.fillStyle = th.water;
@@ -554,7 +665,7 @@
     for (var i = 0; i < this.particles.length; i++) {
       var q = this.particles[i];
       var ci = geo.cellIndexAt(res, q.lon, q.lat);
-      var wv = this.frameWind.get(ci[0] + ':' + ci[1]);
+      var dirv = this.fieldAt(q.lon, q.lat, true); var spdv = this.fieldAt(q.lon, q.lat, false); var wv = (dirv === dirv && spdv === spdv) ? [dirv, spdv] : null;
       if (!wv) { q.age = 999; }
       var dirTo = wv ? (wv[0] + 180) * Math.PI / 180 : 0;
       var spd = wv ? wv[1] : 0;
@@ -604,7 +715,7 @@
       }
     }
     ctx.strokeStyle = this.app.theme().county;
-    ctx.lineWidth = z > 6 ? 0.8 : 0.6;
+    ctx.lineWidth = z > 50 ? 0.8 : 0.6;
     ctx.globalAlpha = Math.min(1, (z - 2.1) / 1.6);
     ctx.stroke();
     ctx.globalAlpha = 1;
@@ -643,8 +754,8 @@
     var halo = th.halo;
 
     /* State names carry the national view; they fade out as counties arrive. */
-    if (z < 4.2) {
-      var sa = z > 2.6 ? 0.35 : 0.72;
+    if (z < 35) {
+      var sa = z > 22 ? 0.35 : 0.72;
       ctx.globalAlpha = sa;
       for (var s = 0; s < geo.states.length; s++) {
         var st = geo.states[s];
@@ -659,7 +770,7 @@
     }
 
     /* County names once the county lines are legible. */
-    if (z > 5) {
+    if (z > 42) {
       ctx.globalAlpha = 0.62;
       var cs = geo.counties;
       for (var c = 0; c < cs.length; c++) {
@@ -674,12 +785,12 @@
 
     /* Towns, most prominent first, each one placed only where it fits. */
     var budget = Math.max(18, Math.min(90, Math.round(this.w * this.h / 13000)));
-    var showScore = z > 2.4;
+    var showScore = z > 20;
     var cities = geo.cities, placed = 0;
     for (var i = 0; i < cities.length && placed < budget; i++) {
       var ct = cities[i];
       if (ct.lon < win.lon0 || ct.lon > win.lon1 || ct.lat < win.lat0 || ct.lat > win.lat1) continue;
-      if (!ct.major && z < 2.0) continue;
+      if (!ct.major && z < 17) continue;
       this.toScreen(ct.wx, ct.wy, p);
       var x = p[0], y = p[1];
       if (x < 4 || y < 4 || x > this.w - 4 || y > this.h - 4) continue;
@@ -687,7 +798,7 @@
       var val = null;
       if (showScore) {
         var ci2 = geo.cellIndexAt(res, ct.lon, ct.lat);
-        var v = this.frameVal.get(ci2[0] + ':' + ci2[1]);
+        var v = this.fieldAt(ct.lon, ct.lat, false);  if (v !== v) v = undefined;
         if (v !== undefined) val = Math.round(v);
       }
       var size = ct.major ? 12 : 11;
@@ -712,6 +823,101 @@
   };
 
   /* ---------- Map chrome ---------- */
+
+  /* Thin crosshair ticks instead of a full graticule: enough to register as a
+     surveyed surface without drawing a cage over the data. */
+  Radar.prototype.drawGraticule = function () {
+    var ctx = this.ctx, th = this.app.theme(), p = this._pt;
+    var z = this.view.zoom;
+    var stepDeg = z < 10 ? 10 : z < 25 ? 5 : z < 67 ? 2 : z < 167 ? 1 : 0.5;
+    var win = this.visibleLonLat();
+    ctx.save();
+    ctx.strokeStyle = th.graticule;
+    ctx.lineWidth = 1;
+    var lo0 = Math.ceil(win.lon0 / stepDeg) * stepDeg;
+    var la0 = Math.ceil(win.lat0 / stepDeg) * stepDeg;
+    for (var lon = lo0; lon <= win.lon1; lon += stepDeg) {
+      for (var lat = la0; lat <= win.lat1; lat += stepDeg) {
+        geo.project(lon, lat, p);
+        this.toScreen(p[0], p[1], p);
+        if (p[0] < 0 || p[1] < 0 || p[0] > this.w || p[1] > this.h) continue;
+        ctx.beginPath();
+        ctx.moveTo(p[0] - 5, p[1]); ctx.lineTo(p[0] + 5, p[1]);
+        ctx.moveTo(p[0], p[1] - 5); ctx.lineTo(p[0], p[1] + 5);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  };
+
+  function dms(v, posChar, negChar) {
+    var sign = v < 0 ? negChar : posChar;
+    v = Math.abs(v);
+    var d = Math.floor(v), m = Math.floor((v - d) * 60), s = Math.round((((v - d) * 60) - m) * 60);
+    if (s === 60) { s = 0; m++; }
+    if (m === 60) { m = 0; d++; }
+    return d + '° ' + (m < 10 ? '0' : '') + m + "' " + (s < 10 ? '0' : '') + s + '" ' + sign;
+  }
+
+  /* Rotated coordinate readout down the right edge. */
+  Radar.prototype.drawEdgeCoords = function () {
+    var c = this.lonLatAt(this.w / 2, this.h / 2);
+    if (!isFinite(c[0])) return;
+    var ctx = this.ctx, th = this.app.theme();
+    ctx.save();
+    ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.fillStyle = th.micro;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.translate(this.w - 10, this.h * 0.30);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText(dms(c[1], 'N', 'S'), 0, 0);
+    ctx.restore();
+    ctx.save();
+    ctx.font = '500 10px "IBM Plex Mono", monospace';
+    ctx.fillStyle = th.micro;
+    ctx.textAlign = 'center';
+    ctx.translate(this.w - 10, this.h * 0.62);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText(dms(c[0], 'E', 'W'), 0, 0);
+    ctx.restore();
+  };
+
+  /* Where the device says you are. */
+  Radar.prototype.drawUserLocation = function () {
+    var g = this.app.state.gps;
+    if (!g) return;
+    var ctx = this.ctx, p = this._pt;
+    geo.project(g.lon, g.lat, p);
+    this.toScreen(p[0], p[1], p);
+    if (p[0] < -50 || p[1] < -50 || p[0] > this.w + 50 || p[1] > this.h + 50) return;
+
+    if (g.accuracy) {
+      /* Accuracy circle, in real metres rather than a fixed pixel radius. */
+      var mPerPx = this.metresPerPixel(g.lat);
+      var rad = g.accuracy / mPerPx;
+      if (rad > 6 && rad < 2000) {
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], rad, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(198,242,78,0.12)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(198,242,78,0.45)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#C6F24E';
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(12,16,12,0.9)';
+    ctx.stroke();
+  };
+
+  Radar.prototype.metresPerPixel = function (lat) {
+    return (40075016.686 * Math.cos(lat * Math.PI / 180) / geo.WORLD) / this.view.zoom;
+  };
 
   /* The legend goes full width at phone sizes, so map chrome lifts above it. */
   Radar.prototype.bottomPad = function () { return this.w < 720 ? 104 : 16; };
@@ -757,7 +963,7 @@
   };
 
   Radar.prototype.drawWhereAmI = function () {
-    if (this.view.zoom < 2.1) return;
+    if (this.view.zoom < 18) return;
     var ll = this.lonLatAt(this.w / 2, this.h / 2);
     if (!isFinite(ll[0])) return;
     var key = ll[0].toFixed(2) + ',' + ll[1].toFixed(2);
@@ -805,7 +1011,7 @@
     for (var i = 0; i < this.particles.length; i++) {
       var q = this.particles[i];
       var ci = geo.cellIndexAt(res, q.lon, q.lat);
-      var inten = this.frameCells.get(ci[0] + ':' + ci[1]);
+      var inten = this.fieldAt(q.lon, q.lat, false); if (inten !== inten) inten = 0;
       if (inten === undefined) inten = 0;
       var fw = geo.flyway(q.lon);
       var br = (geo.UPFLYWAY[fw] + 180) * Math.PI / 180;
@@ -859,7 +1065,7 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(sc.opp, p[0], p[1] + 0.5);
-      if (this.view.zoom > 2.4) {
+      if (this.view.zoom > 20) {
         ctx.font = '600 11px "Saira Condensed", sans-serif';
         ctx.fillStyle = this.app.theme().label;
         ctx.textBaseline = 'top';

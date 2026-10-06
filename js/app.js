@@ -38,6 +38,7 @@
     state: {
       species: 'ducks',
       layer: 'opportunity',
+      basemap: load('og.basemap', 'relief'),
       t: 1,
       playing: false,
       legalOverlay: true,
@@ -63,8 +64,10 @@
       stateLabel: cs.getPropertyValue('--map-state-label').trim(),
       countyLabel: cs.getPropertyValue('--map-county-label').trim(),
       cityLabel: cs.getPropertyValue('--map-city-label').trim(),
-      water: cs.getPropertyValue("--map-water").trim(),
-      outRange: cs.getPropertyValue("--map-outrange").trim(),
+      water: cs.getPropertyValue('--map-water').trim(),
+      outRange: cs.getPropertyValue('--map-outrange').trim(),
+      graticule: cs.getPropertyValue('--graticule').trim(),
+      micro: cs.getPropertyValue('--micro').trim(),
       label: cs.getPropertyValue('--text').trim()
     };
     return this._theme;
@@ -1562,8 +1565,8 @@
       ['0', '25', '50', '75', '100'].forEach(function (x) { sc.appendChild(el('span', null, x)); });
       lg.appendChild(sc);
       lg.appendChild(el('div', 'lg-note', App.state.layer === 'confidence'
-        ? 'Hatching marks low-confidence cells.'
-        : App.state.legalOverlay ? 'Hatched cells are closed or unverified.' : 'Legal overlay off.'));
+        ? 'Low confidence reads darker and flatter.'
+        : 'Blank ground means out of range, no season record, or outside your plan.'));
     }
   }
 
@@ -1806,6 +1809,133 @@
     $('#btn-alerts').addEventListener('click', renderAlertsPanel);
     $('#btn-log').addEventListener('click', function () { renderLogPanel(); });
     $('#btn-account').addEventListener('click', renderAccountPanel);
+
+    /* GPS. Needs a secure origin, which GitHub Pages provides and the
+       artifact sandbox does not. */
+    var gpsBtn = $('#btn-gps');
+    var watchId = null;
+    gpsBtn.addEventListener('click', function () {
+      if (!navigator.geolocation) { gpsBtn.textContent = 'No GPS'; return; }
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        App.state.gps = null;
+        gpsBtn.classList.remove('on');
+        gpsBtn.textContent = 'Locate';
+        App.dirty = true;
+        return;
+      }
+      gpsBtn.textContent = 'Locating';
+      watchId = navigator.geolocation.watchPosition(function (pos) {
+        App.state.gps = {
+          lon: pos.coords.longitude, lat: pos.coords.latitude,
+          accuracy: pos.coords.accuracy
+        };
+        gpsBtn.classList.add('on');
+        gpsBtn.textContent = 'You';
+        if (!App._gpsCentred) {
+          App._gpsCentred = true;
+          radar.zoomToBounds(App.state.gps.lon - 0.22, App.state.gps.lat - 0.16,
+                             App.state.gps.lon + 0.22, App.state.gps.lat + 0.16, 0.1);
+          scheduleBands();
+        }
+        App.dirty = true;
+      }, function (err) {
+        gpsBtn.textContent = err.code === 1 ? 'Denied' : 'No fix';
+        gpsBtn.classList.remove('on');
+        watchId = null;
+      }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+    });
+
+    /* Mark the current GPS fix as a saved spot - the point of having GPS. */
+    $('#btn-markhere').addEventListener('click', function () {
+      var g = App.state.gps;
+      if (!g) { gpsBtn.click(); return; }
+      addSpotAt(g.lon, g.lat);
+    });
+
+    /* Hover readout. */
+    var hov = $('#hover');
+    var hoverRaf = null, hoverPt = null;
+    canvas.addEventListener('pointermove', function (e) {
+      if (e.pointerType === 'touch') return;
+      var r2 = canvas.getBoundingClientRect();
+      hoverPt = [e.clientX - r2.left, e.clientY - r2.top];
+      if (hoverRaf) return;
+      hoverRaf = requestAnimationFrame(function () {
+        hoverRaf = null;
+        if (!hoverPt) return;
+        var ll = radar.lonLatAt(hoverPt[0], hoverPt[1]);
+        if (!isFinite(ll[0]) || geo.stateIndexAt(ll[0], ll[1]) < 0) { hov.hidden = true; return; }
+        var v = radar.fieldAt(ll[0], ll[1], false);
+        var wxl = radarNS.WX_LAYERS[App.state.layer];
+        hov.hidden = false;
+        hov.querySelector('.hv-coord').textContent =
+          Math.abs(ll[1]).toFixed(4) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + '  ' +
+          Math.abs(ll[0]).toFixed(4) + '° ' + (ll[0] >= 0 ? 'E' : 'W');
+        var vn = hov.querySelector('.hv-val');
+        if (v !== v) {
+          vn.textContent = '--';
+          vn.style.color = '';
+          hov.querySelector('.hv-lab').textContent = 'No data';
+        } else if (v === -1) {
+          vn.textContent = '—';
+          vn.style.color = '';
+          hov.querySelector('.hv-lab').textContent = 'Locked';
+        } else {
+          vn.textContent = wxl ? (wxl.digits ? v.toFixed(wxl.digits) : Math.round(v)) : Math.round(v);
+          vn.style.color = wxl ? '' : radarNS.rampCSS(v / 100, 1);
+          hov.querySelector('.hv-lab').textContent = wxl ? wxl.name + ' ' + wxl.unit
+            : App.state.layer === 'legal' ? 'Season' : band(Math.round(v));
+        }
+      });
+    });
+    canvas.addEventListener('pointerleave', function () { hov.hidden = true; hoverPt = null; });
+
+    /* Basemap. Satellite is a Pro layer: imagery is what lets someone pick a
+       slough or a field edge out by eye, so it is worth paying for. */
+    var bmBtn = $('#btn-basemap');
+    var BM_CYCLE = ['relief', 'satellite', 'none'];
+    function bmLabel() {
+      var k = App.state.basemap;
+      return k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite' : 'No base';
+    }
+    function syncBasemap() {
+      bmBtn.textContent = bmLabel();
+      bmBtn.classList.toggle('pro-locked', App.state.basemap === 'satellite' && !App.entitlement().pro);
+    }
+    bmBtn.addEventListener('click', function () {
+      var i = BM_CYCLE.indexOf(App.state.basemap);
+      var next = BM_CYCLE[(i + 1) % BM_CYCLE.length];
+      if (next === 'satellite' && !App.entitlement().pro) {
+        openPanel('Satellite imagery', function () {
+          var root = frag();
+          root.appendChild(el('div', 'lede', 'Satellite imagery is part of OmniGuide Pro.'));
+          root.appendChild(el('p', null, 'Aerial imagery is how you pick out the slough, the treeline and ' +
+            'the field edge you are actually going to hunt, rather than guessing from a relief map. ' +
+            'It is the difference between marking a spot and marking the right spot.'));
+          var b = el('button', 'btn primary', 'Simulate Pro in this demo');
+          b.addEventListener('click', function () {
+            App.state.ent.pro = true;
+            save('og.ent', App.state.ent);
+            App.state.basemap = 'satellite';
+            save('og.basemap', 'satellite');
+            radarNS.clearScores();
+            App.dirty = true;
+            syncBasemap();
+            closePanel();
+          });
+          root.appendChild(b);
+          return root;
+        });
+        return;
+      }
+      App.state.basemap = next;
+      save('og.basemap', next);
+      App.dirty = true;
+      syncBasemap();
+    });
+    syncBasemap();
 
     /* Theme toggle */
     var tt = $('#themebtn');

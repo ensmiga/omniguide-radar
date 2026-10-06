@@ -1,6 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Predictive outdoor intelligence for hunters and anglers.">
 <title>OmniGuide Radar</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* Baseline the artifact wrapper used to inject. Needed now that this is a
+     standalone document rather than an embedded fragment. */
+  :root { color-scheme: light dark; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
 <style>
   :root {
     --bg: #F1EFE8;
@@ -10,8 +25,8 @@
     --line-soft: #E6E2D7;
     --text: #16201C;
     --muted: #5C6A62;
-    --accent: #A9671A;
-    --accent-ink: #FFF7EA;
+    --accent: #6B7A12;
+    --accent-ink: #FFFFFF;
     --map-bg: #D6E0DC;
     --map-land: #EBE8DE;
     --map-border: rgba(30, 46, 40, 0.48);
@@ -21,6 +36,8 @@
     --map-county-label: rgba(22, 32, 28, 0.70);
     --map-city-label: #16201C;
     --map-outrange: rgba(120, 128, 124, 0.10);
+    --graticule: rgba(30, 40, 36, 0.22);
+    --micro: rgba(30, 40, 36, 0.55);
     --map-water: rgba(58, 118, 156, 0.55);
     --good: #2C7A52;
     --warn: #A3700F;
@@ -41,8 +58,8 @@
       --line-soft: #1D2A24;
       --text: #E6EDE7;
       --muted: #8CA096;
-      --accent: #E8A93A;
-      --accent-ink: #14110A;
+      --accent: #C6F24E;
+      --accent-ink: #11160A;
       --map-bg: #070C0B;
       --map-land: #151F1B;
       --map-border: rgba(164, 196, 180, 0.34);
@@ -52,7 +69,8 @@
       --map-county-label: rgba(230, 237, 231, 0.62);
       --map-city-label: #EFF4EE;
     --map-outrange: rgba(120, 136, 128, 0.10);
-      --map-outrange: rgba(120, 136, 128, 0.10);
+    --graticule: rgba(226, 236, 230, 0.20);
+    --micro: rgba(226, 236, 230, 0.55);
     --map-water: rgba(96, 168, 206, 0.46);
       --map-water: rgba(96, 168, 206, 0.46);
       --good: #46A877;
@@ -64,6 +82,8 @@
     }
   }
   :root[data-theme="dark"] {
+    --graticule: rgba(226, 236, 230, 0.20);
+    --micro: rgba(226, 236, 230, 0.55);
     --bg: #0B1210;
     --surface: #121C18;
     --raised: #18241F;
@@ -71,8 +91,8 @@
     --line-soft: #1D2A24;
     --text: #E6EDE7;
     --muted: #8CA096;
-    --accent: #E8A93A;
-    --accent-ink: #14110A;
+    --accent: #C6F24E;
+    --accent-ink: #11160A;
     --map-bg: #070C0B;
     --map-land: #151F1B;
     --map-border: rgba(164, 196, 180, 0.34);
@@ -304,6 +324,50 @@
   #notice button {
     background: none; border: 0; cursor: pointer; color: var(--accent);
     padding: 0; margin-top: 4px; font-size: 11.5px; text-decoration: underline;
+  }
+
+  /* Hover readout: value, label, coordinate. */
+  #hover {
+    position: absolute;
+    left: 12px; top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 13px;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .hv-val {
+    font-family: var(--mono);
+    font-size: 27px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .hv-side { display: grid; gap: 2px; }
+  .hv-lab {
+    font-family: var(--disp);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .hv-coord { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+  .tool.on { color: var(--accent); border-color: var(--accent); }
+  .tool.pro-locked::after {
+    content: "PRO";
+    font-size: 8px;
+    vertical-align: super;
+    margin-left: 3px;
+    color: var(--accent);
   }
 
   #hint {
@@ -858,6 +922,8 @@
     * { animation: none !important; transition: none !important; }
   }
 </style>
+</head>
+<body>
 
 <div id="boot">
   <div>
@@ -892,6 +958,9 @@
       <button class="tool" id="btn-alerts">Alerts<span class="badge" id="alertdot" hidden></span></button>
       <button class="tool" id="btn-log">Log</button>
       <button class="tool" id="btn-account">Account</button>
+      <button class="tool" id="btn-gps" title="Show my location">Locate</button>
+      <button class="tool" id="btn-markhere" title="Save a spot at my location">Mark here</button>
+      <button class="tool" id="btn-basemap" title="Switch the base map">Relief</button>
       <button class="tool" id="themebtn" title="Switch light and dark">Theme</button>
     </nav>
   </header>
@@ -906,6 +975,13 @@
       <br><b>Real forecast, frozen in time.</b> <span id="wxnote">Loading forecast metadata.</span>
       This page cannot refresh it, so it ages.
       <br><button id="notice-x">Dismiss</button>
+    </div>
+    <div id="hover" hidden>
+      <div class="hv-val">--</div>
+      <div class="hv-side">
+        <div class="hv-lab"></div>
+        <div class="hv-coord"></div>
+      </div>
     </div>
     <div id="hint">Tap anywhere for the OmniGuide Plan &middot; scroll to zoom</div>
   </main>
@@ -962,3 +1038,5 @@
     });
   })();
 </script>
+</body>
+</html>
