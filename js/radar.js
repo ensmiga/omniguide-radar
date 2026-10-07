@@ -593,7 +593,13 @@
     ctx.fillRect(0, 0, this.w, this.h);
 
     var tiles = this.drawBasemap();
-    if (!tiles) this.drawLand(theme.land, null, 0);
+    var waterMode = (this.app.state.basemap || 'relief') === 'waterways';
+    if (!tiles && !waterMode) this.drawLand(theme.land, null, 0);
+
+    /* Duck water is a BASEMAP, so it goes under the data layer. It was
+       being drawn after drawField, which meant its white ground painted
+       straight over the thing you came to look at. */
+    if (waterMode) this.drawWaterways(this.visibleLonLat());
 
     var win = this.visibleLonLat();
     var res = this.resolution();
@@ -607,14 +613,13 @@
 
     this.drawField(layer, spId, t, day, ent);
 
-    var waterMode = (this.app.state.basemap || 'relief') === 'waterways';
-    if (waterMode) this.drawWaterways(win);
-    else if (!tiles) this.drawHydro(win);
+    if (!waterMode && !tiles) this.drawHydro(win);
     if (this.view.zoom > 22) this.drawCounties(win);
     this.drawLand(null, theme.border, this.view.zoom > 25 ? 1.2 : 0.9);
 
     if (layer === 'migration') this.drawMigration(res);
     if (layer === 'wind' || layer === 'gusts') this.drawWindFlow(res);
+    if (layer === 'movement') this.drawMovementFlow(res);
     this.drawPlaceLabels(win, res);
     this.drawGraticule();
     this.drawSpots();
@@ -798,6 +803,91 @@
   };
 
   /* Wind streamlines, reusing the migration particle field. */
+  /* Which way the movement is running.
+
+     Two different answers depending on what is happening. When a
+     migratory species is inside its migration window the meaningful
+     direction is the flyway - new birds are arriving from up it, and
+     that is the thing worth seeing. The rest of the time it is the
+     wind, which is the dominant term in every movement curve in the
+     model and the thing animals actually orient to.
+
+     Deliberately slower and thinner than the wind streamlines, and a
+     different colour, so the two are not mistaken for each other. */
+  Radar.prototype.drawMovementFlow = function (res) {
+    var ctx = this.ctx, p = this._pt, app = this.app;
+    var win = this.visibleLonLat();
+    var t = app.state.t, spId = app.state.species;
+    var doy = env.doyFor(t);
+
+    /* Decide once per frame at the centre of the view rather than per
+       particle: whether birds are migrating here is a regional fact. */
+    var cLon = (win.lon0 + win.lon1) / 2, cLat = (win.lat0 + win.lat1) / 2;
+    var migBearing = null;
+    try {
+      var sc = models.scoreAt(cLon, cLat, t, doy, spId);
+      if (sc.inRange && sc.mig && sc.mig.applies && sc.migration > 28) {
+        migBearing = geo.UPFLYWAY[geo.flyway(cLon)];
+      }
+    } catch (e) { migBearing = null; }
+
+    if (!this.mparticles) this.mparticles = [];
+    var ps = this.mparticles;
+    while (ps.length < 260) {
+      ps.push({
+        lon: win.lon0 + Math.random() * (win.lon1 - win.lon0),
+        lat: win.lat0 + Math.random() * (win.lat1 - win.lat0),
+        age: Math.random() * 110
+      });
+    }
+
+    ctx.lineCap = 'round';
+    for (var i = 0; i < ps.length; i++) {
+      var q = ps[i];
+      var v = this.fieldAt(q.lon, q.lat, false);
+      var alive = v === v && v > 0;
+
+      var fromDeg, speed;
+      if (migBearing != null) {
+        fromDeg = migBearing;
+        speed = 0.026;
+      } else {
+        var w = env.conditions(q.lon, q.lat, t, doy);
+        fromDeg = w.windFrom;
+        speed = 0.004 + (w.windSpd / 40) * 0.030;
+      }
+      var dirTo = (fromDeg + 180) * Math.PI / 180;
+
+      var plon = q.lon, plat = q.lat;
+      q.lat += speed * Math.cos(dirTo);
+      q.lon += speed * Math.sin(dirTo) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
+      q.age += 1;
+      if (q.age > 150 || q.lat < win.lat0 || q.lat > win.lat1 ||
+          q.lon < win.lon0 || q.lon > win.lon1) {
+        q.lon = win.lon0 + Math.random() * (win.lon1 - win.lon0);
+        q.lat = win.lat0 + Math.random() * (win.lat1 - win.lat0);
+        q.age = 0;
+        continue;
+      }
+      /* Only draw over ground that has a movement score. A streamline
+         crossing blank country implies activity that is not there. */
+      if (!alive) continue;
+
+      var w0 = geo.project(plon, plat, [0, 0]), w1 = geo.project(q.lon, q.lat, [0, 0]);
+      this.toScreen(w0[0], w0[1], p);
+      var x0 = p[0], y0 = p[1];
+      this.toScreen(w1[0], w1[1], p);
+      var fade = Math.sin(Math.min(1, q.age / 150) * Math.PI);
+      var str = Math.min(1, Math.max(0, (v - 20) / 60));
+      ctx.strokeStyle = 'rgba(246,176,64,' + (0.14 + 0.5 * fade * str).toFixed(3) + ')';
+      ctx.lineWidth = 0.8 + 1.5 * str;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(p[0], p[1]);
+      ctx.stroke();
+    }
+  };
+
   Radar.prototype.drawWindFlow = function (res) {
     var ctx = this.ctx, p = this._pt;
     var win = this.visibleLonLat();

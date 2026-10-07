@@ -224,6 +224,53 @@
 
   /* ---------- Charts ---------- */
 
+  /* Reads the frontal and pressure terms the model already computes and
+     turns them into the sentence a hunter would say. Nothing here is a
+     new prediction - it is the same numbers the score is built from,
+     stated out loud, because "peak window 11:00-15:00" with no
+     explanation looks like a bug rather than a front. */
+  function frontCommentary(plan) {
+    var wx = plan.score.wx;
+    if (!wx) return null;
+    var fr = wx.frontal || 0;
+    var tr = wx.pressTrend || 0;
+    var drop = -(wx.temp24 || 0);
+
+    if (fr >= 0.55 && tr < -0.25) {
+      return {
+        head: 'A front is moving through today',
+        body: 'Pressure is falling ' + Math.abs(tr).toFixed(1) + ' hPa every three hours with the ' +
+          'boundary overhead' + (drop > 4 ? ' and the temperature down ' + Math.round(drop) + ' degrees in ' +
+          'twenty-four hours' : '') + '. Birds move on the weather rather than the clock on a day like ' +
+          'this, so the window above is wide on purpose. Be set up before the wind shifts rather than ' +
+          'planning around first light.'
+      };
+    }
+    if (fr >= 0.55 && tr > 0.25) {
+      return {
+        head: 'A front has just passed',
+        body: 'Pressure is rising ' + tr.toFixed(1) + ' hPa every three hours behind the boundary. ' +
+          'The push came with the front; what is left is cold air and birds that have already ' +
+          'relocated. First light is the better bet again.'
+      };
+    }
+    if (fr >= 0.35) {
+      return {
+        head: 'A boundary is nearby',
+        body: 'Not overhead and not organised enough to pull birds off the clock, but close enough ' +
+          'that the middle of the day is worth more than it usually is. Watch the wind for a shift.'
+      };
+    }
+    if (tr < -0.45) {
+      return {
+        head: 'Pressure is falling steadily',
+        body: 'Down ' + Math.abs(tr).toFixed(1) + ' hPa every three hours with no boundary modelled ' +
+          'overhead. Something is coming. Movement usually picks up ahead of it rather than during.'
+      };
+    }
+    return null;
+  }
+
   function hourlyChart(plan) {
     var sun = plan.hours.sun;
     var lo = Math.max(0, (sun.dawn != null ? sun.dawn / 60 : 5) - 1.0);
@@ -478,6 +525,18 @@
           '. The window above is clipped to legal hours.'));
       }
     }
+    /* When a boundary is the thing driving the day, say so. The peak
+       window above is computed from an activity curve that a front
+       flattens, so without this the panel quietly hands back a wide
+       midday window and never explains why it is not dawn. */
+    var frontNote = frontCommentary(plan);
+    if (frontNote) {
+      var fn = el('div', 'frontnote');
+      fn.appendChild(el('div', 'fn-h', frontNote.head));
+      fn.appendChild(el('div', 'fn-b', frontNote.body));
+      winSec.appendChild(fn);
+    }
+
     var sunLine = el('div', 'sunline');
     sunLine.appendChild(el('span', null, 'Sunrise ' + env.hhmm(plan.hours.sun.sunrise)));
     sunLine.appendChild(el('span', null, 'Sunset ' + env.hhmm(plan.hours.sun.sunset)));
