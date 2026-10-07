@@ -794,6 +794,14 @@
   .calcrow.calcsum { background: var(--surface); font-weight: 600; }
   .calcrow.calcsum .c-c { color: var(--accent); }
 
+  .natstrip { position: relative; height: 34px; margin: 4px 0 2px; border-radius: 5px; background: var(--line-soft); overflow: hidden; }
+  .nt { position: absolute; top: 6px; width: 2px; height: 22px; border-radius: 1px; transform: translateX(-1px); }
+  .nt-me { position: absolute; top: 0; width: 3px; height: 34px; background: var(--accent); transform: translateX(-1.5px); box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent); }
+  .natbest { margin-top: 10px; display: grid; gap: 3px; }
+  .nb-h { font-family: var(--disp); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+  .nb-row { display: grid; grid-template-columns: 18px 1fr 36px; gap: 8px; align-items: baseline; font-size: 13px; }
+  .nb-rank { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .nb-score { font-family: var(--mono); font-size: 14px; font-weight: 600; text-align: right; }
   .flylist { display: grid; gap: 7px; }
   .flyrow { padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
   .fly-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -1057,8 +1065,7 @@
     <div id="notice">
       <b>Not legal advice.</b> Season information is an unverified reference. Confirm every season,
       limit and shooting hour with your state agency before you go.
-      <br><b>Real forecast, frozen in time.</b> <span id="wxnote">Loading forecast metadata.</span>
-      This page cannot refresh it, so it ages.
+      <br><b>Live data, refreshed three times a day.</b> <span id="wxnote">Loading forecast metadata.</span>
       <br><button id="notice-x">Dismiss</button>
     </div>
     <div id="hover" hidden>

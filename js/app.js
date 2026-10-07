@@ -81,7 +81,9 @@
     if (!W || !W.available()) return 'Synthetic forecast - no live feed in this build.';
     var h = W.staleHours();
     var age = h < 1 ? 'under an hour' : h < 48 ? Math.round(h) + ' hours' : Math.round(h / 24) + ' days';
-    return 'Open-Meteo multi-model blend, run captured ' + age + ' ago. Snapshot, not live.';
+    /* Stale enough to be worth saying out loud: the refresh runs every
+       eight hours, so much past that means a job failed. */
+    return 'Model run captured ' + age + ' ago' + (h > 20 ? ' - overdue, a refresh may have failed.' : '.');
   };
 
   /* t carries a time of day, so the day is the floor of it, never the round. */
@@ -1008,6 +1010,63 @@
         'notably warm or notably cold year. Faded bars are weeks the season is not open.'));
       root.appendChild(chartSec);
 
+      /* How this place compares to the rest of the country in its best
+         week. A seasonal index means little until you know what everywhere
+         else is doing at the same time. */
+      if (windows.length) {
+        var peakRow = rows[windows[0].peakIdx];
+        var nat = planner.national(st.species, peakRow.week);
+        if (nat.openCount > 4) {
+          var pc = planner.percentile(nat, peakRow.score);
+          var natSec = section('Compared with the rest of the country');
+
+          var lede2 = el('div', 'lede');
+          lede2.textContent = 'In the week of ' + monthDay(peakRow.date) + ', this spot scores ' +
+            peakRow.score + ' against a national range of ' +
+            nat.open[nat.openCount - 1].score + ' to ' + nat.open[0].score +
+            ' across open country. It is better than ' + pc + '% of where you could legally be.';
+          natSec.appendChild(lede2);
+
+          /* Distribution strip: one tick per sampled open location. */
+          var lo = nat.open[nat.openCount - 1].score, hi = nat.open[0].score;
+          var span = Math.max(1, hi - lo);
+          var strip = el('div', 'natstrip');
+          nat.open.forEach(function (r) {
+            var t = el('div', 'nt');
+            t.style.left = ((r.score - lo) / span * 100) + '%';
+            t.style.background = radarNS.rampCSS(r.score / 100, 0.5);
+            strip.appendChild(t);
+          });
+          var me = el('div', 'nt-me');
+          me.style.left = (Math.max(0, Math.min(1, (peakRow.score - lo) / span)) * 100) + '%';
+          strip.appendChild(me);
+          natSec.appendChild(strip);
+          var sc2 = el('div', 'lg-scale');
+          sc2.appendChild(el('span', null, String(lo)));
+          sc2.appendChild(el('span', null, 'national range'));
+          sc2.appendChild(el('span', null, String(hi)));
+          natSec.appendChild(sc2);
+          natSec.appendChild(el('div', 'chartkey', 'Each tick is one of ' + nat.openCount +
+            ' sampled locations where the season is open that week. The marked one is here.'));
+
+          var topSec = el('div', 'natbest');
+          topSec.appendChild(el('div', 'nb-h', 'Strongest country that week'));
+          nat.top.forEach(function (r, i) {
+            var row = el('div', 'nb-row');
+            row.appendChild(el('span', 'nb-rank', String(i + 1)));
+            row.appendChild(el('span', 'nb-name', r.name));
+            var v = el('span', 'nb-score', String(r.score));
+            v.style.color = radarNS.rampCSS(r.score / 100, 1);
+            row.appendChild(v);
+            topSec.appendChild(row);
+          });
+          natSec.appendChild(topSec);
+          natSec.appendChild(el('p', 'note', 'Sampled on a 2.2 degree lattice, so this is a regional ' +
+            'comparison rather than a ranking of specific spots. Closed states are excluded.'));
+          root.appendChild(natSec);
+        }
+      }
+
       /* Ranked windows */
       if (windows.length) {
         var wSec = section('Best windows');
@@ -1384,24 +1443,51 @@
       root.appendChild(p);
 
       var about = section('What is real in this build');
-      about.appendChild(el('p', null, 'Geography, the Albers projection, the H3-style multi-resolution cell ' +
-        'grid, solar geometry and legal shooting light, the species models, the migration and confidence ' +
-        'engines, the strategy rules, entitlement enforcement and the learning loop are all real code.'));
-      about.appendChild(el('p', null, 'The forecast is real: a 987-point grid over the lower 48, every three ' +
-        'hours for eight days, from the Open-Meteo multi-model blend, bilinearly interpolated and ' +
-        'lapse-corrected to the terrain elevation of each cell. It is a snapshot taken when this build was ' +
-        'assembled, because the artifact sandbox blocks all network calls, so it ages and cannot refresh. ' +
-        App.wxNote()));
-      about.appendChild(el('p', null, 'Plan a hunt uses NOAA 1991-2020 daily climate normals from about ' +
-        (global.OG.planner ? global.OG.planner.stations : 0) + ' first-order stations, aggregated to 52 ' +
-        'weeks and interpolated with an elevation correction. It ranks weeks on seasonal factors only and ' +
-        'deliberately refuses to guess wind or front timing that far out.'));
-      about.appendChild(el('p', null, 'There is no satellite imagery layer. The artifact sandbox blocks ' +
-        'external images along with everything else on the network, so map tiles cannot load here. Hosted ' +
-        'outside the sandbox, an imagery basemap is straightforward to add.'));
-      about.appendChild(el('p', null, 'Streamflow has no live feed yet and remains seasonal and synthetic. ' +
-        'Every regulation record is still an unverified placeholder. Both sit behind single modules so ' +
-        'production can swap in USGS gauge data and verified agency rules without touching anything above them.'));
+
+      about.appendChild(el('p', null, 'Measured, from live sources: the forecast, water, snow, terrain and ' +
+        'land cover. Modelled from real code on top of those: the species behaviour, migration, confidence ' +
+        'and strategy engines. Invented: the regulation dates, and nothing else.'));
+
+      var real = el('ul', 'drivers pos');
+      [
+        'Forecast: 987 points over the lower 48, every three hours for eight days, from the Open-Meteo ' +
+          'multi-model blend. Bilinearly interpolated and lapse-corrected to the terrain elevation of ' +
+          'the point being scored. ' + App.wxNote(),
+        'Water: ' + (global.OG.gauges ? global.OG.gauges.count.toLocaleString() : 0) + ' USGS gauges. ' +
+          'Where one is within ' + (global.OG.gauges ? global.OG.gauges.maxMiles : 25) + ' miles, water ' +
+          'temperature and discharge are measured rather than modelled.',
+        'Snow: NOHRSC SNODAS daily national snow model' +
+          (global.OG.snow && global.OG.snow.available() ? ', dated ' + global.OG.snow.date : '') +
+          '. It assimilates observations, so for today it replaces the forecast model’s own snow field.',
+        'Terrain: elevation tiles read at the clicked coordinate, giving slope, aspect, relief and ' +
+          'drainage at roughly 13 m rather than a regional average.',
+        'Land cover: NLCD 2021, sampled at the pin and on a ring around it.',
+        'Climate: NOAA 1991-2020 daily normals from ' +
+          (global.OG.planner ? global.OG.planner.stations : 0) + ' stations, for Plan a hunt.',
+        'Geography: Census state and county boundaries, Natural Earth water, 17,028 towns.',
+        'Solar geometry and legal shooting light are computed, not looked up.'
+      ].forEach(function (t) { real.appendChild(el('li', null, t)); });
+      about.appendChild(real);
+
+      about.appendChild(el('p', null, 'The data above refreshes three times a day on its own. Between ' +
+        'refreshes it is a snapshot, so the age shown next to the forecast is the number that matters.'));
+
+      var notReal = el('ul', 'drivers neg');
+      [
+        'Season dates are placeholders. They are framework envelopes shaped like real seasons, not real ' +
+          'seasons, and they are the one thing here that can get you cited. Confirm with the agency.',
+        'Species models are uncalibrated. The weights are reasoned, not fitted to outcome data, because ' +
+          'there is no outcome data yet.',
+        'Species range uses occurrence records as a presence signal, which is coarser than a real ' +
+          'abundance estimate.',
+        'Hunting pressure is a proxy from metro proximity, not measured pressure.',
+        'Alaska and Hawaii are not covered.'
+      ].forEach(function (t) { notReal.appendChild(el('li', null, t)); });
+      about.appendChild(notReal);
+
+      about.appendChild(el('p', 'note', 'The map projection is Web Mercator so raster basemaps line up. ' +
+        'Relief and satellite imagery are Esri tile services; the opportunity surface is sampled on a ' +
+        'world-space lattice and upscaled, which is why there are no longer any hexagons.'));
       root.appendChild(about);
       return root;
     });

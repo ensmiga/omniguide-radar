@@ -271,7 +271,95 @@
     return runs.slice(0, maxRuns || 3);
   }
 
+  /* ---------- National comparison ----------
+
+     "Is week eleven the best week here" is a different question from "is
+     here anywhere near the best place". A season index of 49 means nothing
+     on its own; it means a great deal once you know whether the rest of the
+     country is sitting at 30 or at 80 that same week.
+
+     Samples a 2.5 degree lattice over land, scores every point for the one
+     week in question, and reports where the chosen spot falls in that
+     distribution. Only legally open points count toward the ranking,
+     because a brilliant score in a closed state is not an option. */
+
+  var natCache = new Map();
+
+  function sampleGrid() {
+    if (sampleGrid._pts) return sampleGrid._pts;
+    var pts = [];
+    for (var lat = 25.5; lat <= 49; lat += 2.2) {
+      for (var lon = -124; lon <= -67; lon += 2.2) {
+        var si = geo.stateIndexAt(lon, lat);
+        if (si < 0) continue;
+        pts.push({ lon: lon, lat: lat, state: geo.states[si].abbr, stateName: geo.states[si].name });
+      }
+    }
+    sampleGrid._pts = pts;
+    return pts;
+  }
+
+  /* A readable name for a sample point: the habitat complex it sits in if
+     there is one, otherwise the state. */
+  function regionName(p) {
+    var best = null, bd = 1e9;
+    var all = env.WF_REGIONS.concat(env.TROUT_WATERS);
+    for (var i = 0; i < all.length; i++) {
+      var r = all[i];
+      var dx = (p.lon - r.lon) / (r.rx * 1.6), dy = (p.lat - r.lat) / (r.ry * 1.6);
+      var d = dx * dx + dy * dy;
+      if (d < 1 && d < bd) { bd = d; best = r.n; }
+    }
+    return best ? best + ', ' + p.state : p.stateName;
+  }
+
+  function national(spId, week) {
+    var key = spId + ':' + week;
+    if (natCache.has(key)) return natCache.get(key);
+
+    var pts = sampleGrid(), rows = [];
+    for (var i = 0; i < pts.length; i++) {
+      var r = scoreWeek(pts[i].lon, pts[i].lat, week, spId);
+      if (!r) continue;
+      rows.push({
+        lon: pts[i].lon, lat: pts[i].lat, state: pts[i].state,
+        name: regionName(pts[i]), score: r.score, open: r.legalOpen
+      });
+    }
+    var openRows = rows.filter(function (r) { return r.open; });
+    openRows.sort(function (a, b) { return b.score - a.score; });
+
+    /* Several lattice points land inside one named complex, so the best
+       of each gets the entry. A top five listing the Prairie Potholes
+       three times is not a top five. */
+    var seen = {}, top = [];
+    for (var k = 0; k < openRows.length && top.length < 5; k++) {
+      if (seen[openRows[k].name]) continue;
+      seen[openRows[k].name] = true;
+      top.push(openRows[k]);
+    }
+
+    var out = {
+      week: week, species: spId,
+      all: rows, open: openRows,
+      sampled: rows.length, openCount: openRows.length,
+      top: top
+    };
+    if (natCache.size > 40) natCache.clear();
+    natCache.set(key, out);
+    return out;
+  }
+
+  /* Where a score falls against the open-season national distribution. */
+  function percentile(nat, score) {
+    if (!nat.openCount) return null;
+    var below = 0;
+    for (var i = 0; i < nat.open.length; i++) if (nat.open[i].score < score) below++;
+    return Math.round(below / nat.openCount * 100);
+  }
+
   global.OG.planner = {
+    national: national, percentile: percentile,
     available: available, at: at, horizon: horizon, scoreWeek: scoreWeek,
     bestWindows: bestWindows, weekDate: weekDate, currentWeek: currentWeek,
     period: N ? N.period : null, source: N ? N.source : null,
