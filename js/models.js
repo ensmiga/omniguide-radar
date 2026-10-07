@@ -667,6 +667,18 @@
 
   var dayCache = {}, natCache = {};
 
+  /* Both the exact Day score and the Day map layer rank today against this
+     many sampled days. Shared so the panel and the map cannot disagree for
+     any reason other than the map's lattice. */
+  var BASELINE_N = 24;
+
+  function thin(days, n) {
+    if (days.length <= n) return days;
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(days[Math.round(i * (days.length - 1) / (n - 1))]);
+    return out;
+  }
+
   /* Days of the year this species may be hunted at this point, from the
      Legal Gate. Those season dates are unverified placeholders (see the
      header of regs.js), so this inherits their accuracy: it decides which
@@ -685,13 +697,13 @@
       if (c.status === 'OPEN' || c.status === 'LIMITED') open.push(k);
     }
     /* Too few open days to rank against - a two-week elk window sampled
-       every other day is seven points, which cannot support a percentile. */
+       every other day is seven points, which cannot carry a spread. */
     if (!any || open.length < 8) {
       var all = [];
-      for (var j = -182; j <= 182; j += 4) all.push(j);
-      return { days: all, baseline: 'year' };
+      for (var j = -182; j <= 182; j += 8) all.push(j);
+      return { days: thin(all, BASELINE_N), baseline: 'year' };
     }
-    return { days: open, baseline: 'season' };
+    return { days: thin(open, BASELINE_N), baseline: 'season' };
   }
 
   /* Today against this spot's own season. Samples at the same time of day as
@@ -701,23 +713,68 @@
     var key = lon.toFixed(2) + ',' + lat.toFixed(2) + ':' + spId + ':' + frac.toFixed(3);
     var c = dayCache[key];
     if (!c) {
+      /* Bounded: the hover readout asks for a new point on every frame. */
+      var ks = Object.keys(dayCache);
+      if (ks.length > 400) for (var kk = 0; kk < 120; kk++) delete dayCache[ks[kk]];
+    }
+    if (!c) {
       var sd = seasonDays(lon, lat, spId);
       var rows = [];
       for (var i = 0; i < sd.days.length; i++) {
         var tt = sd.days[i] + frac;
         var sc = scoreAt(lon, lat, tt, env.doyFor(tt), spId);
-        if (sc.inRange) rows.push({ t: tt, v: sc.opportunity });
+        if (sc.inRange) rows.push({ t: tt, v: sc.opportunity, raw: sc.breakdown.afterPressure });
       }
       if (!rows.length) return null;
       var sorted = rows.map(function (r) { return r.v; }).sort(function (a, b) { return a - b; });
-      c = dayCache[key] = { rows: rows, sorted: sorted, baseline: sd.baseline };
+      var sortedRaw = rows.map(function (r) { return r.raw; }).sort(function (a, b) { return a - b; });
+      c = dayCache[key] = { rows: rows, sorted: sorted, sortedRaw: sortedRaw, baseline: sd.baseline };
     }
 
     var here = scoreAt(lon, lat, t, env.doyFor(t), spId);
     if (!here.inRange) return null;
 
-    /* Midpoint rank, so a run of identical scores sits in the middle of the
-       band it occupies rather than at the top of it. */
+    /* NOT a percentile.
+
+       Ranking today against the season sounds right and behaves badly: a
+       percentile is uniform by construction, so exactly half of every
+       season reads below 50 no matter how good the season is, and a day
+       that is nearly as good as the best day of the year gets pushed down
+       the scale purely because several other days are also good. A fine
+       November morning on the best water in the country should not read
+       "Poor" just because three mornings that month were finer.
+
+       Instead: how far is today from a typical day here, measured in
+       points, scaled by how much this place actually varies. The spread is
+       clamped so a flat season is not amplified into drama and a wild one
+       is not flattened. Then a quarter weight on the absolute score, so
+       that being on genuinely good ground still counts for something on an
+       ordinary day. */
+    /* Measured on the raw weighted score, not on the published 1-99 one.
+       The published score is calibrated against the species' national
+       range, so at a place as good as Devils Lake it sits near the ceiling
+       all season and the whole year compresses into six points - which
+       made every week there look identical. The raw score has room.
+
+       Raw units are converted to published points first, so the clamps
+       below mean the same thing for every species. */
+    var cal2 = CAL[spId] || [15, 70];
+    var calScale = (CAL_HI - CAL_LO) / (cal2[1] - cal2[0]);
+    var R = c.sortedRaw;
+    var medR = R[Math.floor(R.length / 2)];
+    var p10R = R[Math.floor(R.length * 0.10)];
+    var p90R = R[Math.floor(R.length * 0.90)];
+    var med = c.sorted[Math.floor(c.sorted.length / 2)];
+    var half = clamp((p90R - p10R) / 2 * calScale, 7, 28);
+    var dev = (here.breakdown.afterPressure - medR) * calScale;
+    var rel = clamp(50 + 40 * dev / half, 1, 99);
+
+    /* A quarter weight on the absolute score, so being on genuinely good
+       ground still counts for something on an ordinary day. */
+    var blended = 0.75 * rel + 0.25 * here.opportunity;
+
+    /* Kept for the wording in the panel, which still wants to say where
+       today sits in the order of the season. */
     var below = 0, equal = 0;
     for (var m = 0; m < c.sorted.length; m++) {
       if (c.sorted[m] < here.opportunity) below++;
@@ -734,8 +791,9 @@
     }
 
     return {
-      score: clamp(Math.round(1 + 98 * pct), 1, 99),
+      score: clamp(Math.round(blended), 1, 99),
       pct: pct,
+      median: med, spread: Math.round((p90R - p10R) * calScale),
       spot: here.opportunity,
       baseline: c.baseline,
       nDays: c.sorted.length,
@@ -749,10 +807,12 @@
      dayScore above samples a point's whole season, which is right for one
      pin and far too expensive for a field - a screen lattice would be most
      of a million scoreAt calls. This computes it on a 1 degree lattice from
-     at most 14 baseline days and lets the renderer interpolate, which is
+     the same baseline days and lets the renderer interpolate. That is
      honest for this quantity: Day is driven by weather anomalies, and
-     weather anomalies are synoptic. It is a 100 km picture of where today
-     is unusually good, not a statement about a particular ridge. */
+     weather anomalies are synoptic. It is a 50 km picture of where today
+     is unusually good, not a statement about a particular ridge - the
+     plan panel and the hover readout both compute the exact value at the
+     point, and will differ from the surface by a few points. */
 
   var dayFieldCache = {}, seasonByState = {};
 
@@ -775,12 +835,9 @@
     var res;
     if (!any || open.length < 5) {
       res = [];
-      for (var j = -168; j <= 168; j += 28) res.push(j);
-    } else if (open.length > 14) {
-      /* Thin to 14 evenly spaced days across the season. */
-      res = [];
-      for (var q = 0; q < 14; q++) res.push(open[Math.floor(q * (open.length - 1) / 13)]);
-    } else res = open;
+      for (var j = -182; j <= 182; j += 8) res.push(j);
+      res = thin(res, BASELINE_N);
+    } else res = thin(open, BASELINE_N);
     seasonByState[key] = res;
     return res;
   }
@@ -790,7 +847,7 @@
     var key = spId + ':' + tq;
     if (dayFieldCache[key]) return dayFieldCache[key];
 
-    var LON0 = -125, LAT0 = 24, DD = 1, NX = 60, NY = 27;
+    var LON0 = -125, LAT0 = 24, DD = 0.5, NX = 119, NY = 53;
     var vals = new Float32Array(NX * NY);
     for (var i = 0; i < vals.length; i++) vals[i] = NaN;
 
@@ -802,17 +859,24 @@
         if (!here.inRange) continue;
         var days = stateSeasonDays(lon, lat, spId);
         if (!days || !days.length) continue;
-        var frac = tq - Math.floor(tq), below = 0, equal = 0, n = 0;
+        var frac = tq - Math.floor(tq), vs = [];
         for (var q = 0; q < days.length; q++) {
           var tt = days[q] + frac;
           var sc = scoreAt(lon, lat, tt, env.doyFor(tt), spId);
-          if (!sc.inRange) continue;
-          n++;
-          if (sc.opportunity < here.opportunity) below++;
-          else if (sc.opportunity === here.opportunity) equal++;
+          if (sc.inRange) vs.push(sc.breakdown.afterPressure);
         }
-        if (!n) continue;
-        vals[iy * NX + ix] = clamp(1 + 98 * ((below + equal / 2) / n), 1, 99);
+        if (!vs.length) continue;
+        vs.sort(function (a, b) { return a - b; });
+        /* Same scaled-deviation treatment as dayScore - see the comment
+           there for why this is not a percentile, and why it runs on the
+           raw score rather than the published one. */
+        var calF = CAL[spId] || [15, 70];
+        var kScale = (CAL_HI - CAL_LO) / (calF[1] - calF[0]);
+        var medV = vs[Math.floor(vs.length / 2)];
+        var loV = vs[Math.floor(vs.length * 0.10)], hiV = vs[Math.floor(vs.length * 0.90)];
+        var halfV = clamp((hiV - loV) / 2 * kScale, 7, 28);
+        var relV = clamp(50 + 40 * (here.breakdown.afterPressure - medV) * kScale / halfV, 1, 99);
+        vals[iy * NX + ix] = clamp(0.75 * relV + 0.25 * here.opportunity, 1, 99);
       }
     }
 

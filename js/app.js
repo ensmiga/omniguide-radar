@@ -38,6 +38,7 @@
     state: {
       species: 'ducks',
       layer: 'opportunity',
+    oppMode: 'spot',          // 'spot' = place vs country, 'day' = today vs this place's season
       basemap: load('og.basemap', 'relief'),
       t: 1,
       playing: false,
@@ -187,7 +188,6 @@
 
   var LAYERS = [
     { id: 'opportunity', name: 'Opportunity', desc: 'Overall OmniGuide Opportunity Score' },
-    { id: 'day', name: 'Day rating', desc: 'How today ranks against the rest of the season in each place' },
     { id: 'movement', name: 'Movement', desc: 'Expected local animal activity' },
     { id: 'migration', name: 'Migration', desc: 'Expected migratory movement' },
     { id: 'newbird', name: 'New birds', desc: 'Probability fresh birds are arriving' },
@@ -1986,7 +1986,7 @@
 
   /* ---------- Controls ---------- */
 
-  var speciesSel, layerRail, scrub, playBtn, dayChips, timeLabel, pursuitChip, tlBands;
+  var speciesSel, layerRail, scrub, playBtn, dayChips, timeLabel, pursuitChip, tlBands, oppModeWrap;
 
   /* Move the map to a point, optionally pinning it and opening the plan. */
   function goTo(lon, lat, halfDeg, openIt) {
@@ -2012,6 +2012,12 @@
       var isMig = b.dataset.layer === 'migration' || b.dataset.layer === 'newbird';
       b.disabled = isMig && !sp.migratory;
     });
+    if (oppModeWrap) {
+      oppModeWrap.hidden = App.state.layer !== 'opportunity';
+      Array.prototype.forEach.call(oppModeWrap.children, function (mb) {
+        mb.classList.toggle('on', mb.dataset.oppmode === App.state.oppMode);
+      });
+    }
     Array.prototype.forEach.call(dayChips.children, function (b, i) {
       b.classList.toggle('on', App.dayIndex() === i);
     });
@@ -2077,9 +2083,14 @@
       var sc = el('div', 'lg-scale');
       ['0', '25', '50', '75', '100'].forEach(function (x) { sc.appendChild(el('span', null, x)); });
       lg.appendChild(sc);
+      /* The Day layer is normalised per place, so the legend has to say so -
+         red here means "unusually good for this spot", not "good". */
       lg.appendChild(el('div', 'lg-note', App.state.layer === 'confidence'
         ? 'Low confidence reads darker and flatter.'
-        : 'Blank ground means out of range, no season record, or outside your plan.'));
+        : (App.state.layer === 'opportunity' && App.state.oppMode === 'day')
+          ? 'Today against each place’s own season, so red means unusually good ' +
+            'for that spot rather than good outright. Smoothed to about 60 miles.'
+          : 'Blank ground means out of range, no season record, or outside your plan.'));
     }
   }
 
@@ -2310,6 +2321,34 @@
         buildLegend();
       });
       layerRail.appendChild(b);
+
+      /* Opportunity answers two different questions and the colours can
+         only show one at a time, so the choice lives right under it
+         rather than masquerading as a separate layer. */
+      if (l.id === 'opportunity') {
+        oppModeWrap = el('div', 'oppmode');
+        [
+          { id: 'spot', name: 'Spot', sub: 'vs the country' },
+          { id: 'day', name: 'Day', sub: 'vs its own season' }
+        ].forEach(function (m) {
+          var mb = el('button', 'oppbtn');
+          mb.dataset.oppmode = m.id;
+          mb.appendChild(el('span', 'ob-n', m.name));
+          mb.appendChild(el('span', 'ob-s', m.sub));
+          mb.title = m.id === 'spot'
+            ? 'Spot: how good this place is compared with everywhere else in the country today. Answers "where do I drive".'
+            : 'Day: how good today is compared with the other days you could hunt this same place. Answers "do I go today".';
+          mb.addEventListener('click', function () {
+            App.state.oppMode = m.id;
+            App.state.layer = 'opportunity';
+            App.dirty = true;
+            syncControls();
+            buildLegend();
+          });
+          oppModeWrap.appendChild(mb);
+        });
+        layerRail.appendChild(oppModeWrap);
+      }
     });
 
     /* Timeline */
@@ -2454,8 +2493,47 @@
           vn.style.color = wxl ? '' : radarNS.rampCSS(v / 100, 1);
           hov.querySelector('.hv-lab').textContent = wxl ? wxl.name + ' ' + wxl.unit
             : App.state.layer === 'legal' ? 'Season'
-            : App.state.layer === 'day' ? band(Math.round(v)) + ' day here'
             : band(Math.round(v));
+        }
+
+        /* On the Opportunity layer, show both numbers whichever one the
+           colours are set to, with one line each saying what they compare
+           against. They disagree constantly and that is the point. */
+        var pair = hov.querySelector('.hv-pair');
+        if (App.state.layer === 'opportunity' && v === v && v !== -1) {
+          /* Both read exactly at the cursor, the same way the plan panel
+             reads them, so the two surfaces can never quote different
+             numbers for the same point. The colour underneath is a
+             smoothed field and may sit a point or two off. */
+          var sc = models.scoreAt(ll[0], ll[1], App.state.t, env.doyFor(App.state.t), App.state.species);
+          var ds = models.dayScore(ll[0], ll[1], App.state.species, App.state.t);
+          var spotV = sc.inRange ? sc.opportunity : null;
+          var dayV = ds ? ds.score : null;
+          var activeV = App.state.oppMode === 'day' ? dayV : spotV;
+          if (activeV != null) {
+            vn.textContent = String(activeV);
+            vn.style.color = radarNS.rampCSS(activeV / 100, 1);
+            hov.querySelector('.hv-lab').textContent = band(activeV);
+          }
+          pair.innerHTML = '';
+          [
+            { k: 'SPOT', v: spotV, d: 'place vs country',
+              on: App.state.oppMode === 'spot' },
+            { k: 'DAY', v: dayV, d: 'today vs its season',
+              on: App.state.oppMode === 'day' }
+          ].forEach(function (row) {
+            var r = el('div', 'hv-row' + (row.on ? '' : ' dim'));
+            r.appendChild(el('span', 'hp-k', row.k));
+            var vv = el('span', 'hp-v', row.v == null ? '--' : String(row.v));
+            if (row.v != null) vv.style.color = radarNS.rampCSS(row.v / 100, 1);
+            r.appendChild(vv);
+            r.appendChild(el('span', 'hp-b', row.v == null ? '' : band(row.v)));
+            r.appendChild(el('span', 'hp-d', row.d));
+            pair.appendChild(r);
+          });
+          pair.hidden = false;
+        } else {
+          pair.hidden = true;
         }
       });
     });

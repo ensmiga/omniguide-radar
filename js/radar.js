@@ -448,7 +448,7 @@
         out = -1;                                     // locked: drawn as a flat preview
       } else if (layer === 'legal') {
         out = STATUS_ORDER[legalAt(lon, lat, spId, day)];
-      } else if (layer === 'day') {
+      } else if (layer === 'opportunity' && this.app.state.oppMode === 'day') {
         /* Sampled from the coarse Day lattice rather than scored per cell -
            see dayField in models.js for why 1 degree is the honest
            resolution for this quantity. */
@@ -482,7 +482,11 @@
     /* Roughly 15 screen pixels between samples: fine enough that the
        upscaled surface shows real structure, coarse enough to stay live. */
     var nodeWorld = 15 / z;
-    var stamp = [spId, layer, t, nodeWorld.toFixed(6), ent.pro ? 1 : 0, ent.state, ent.species].join('|');
+    /* oppMode is in the stamp because Spot and Day are different numbers
+       for the same cell - without it, switching the toggle would redraw
+       from the cache and show the old surface. */
+    var stamp = [spId, layer, this.app.state.oppMode, t, nodeWorld.toFixed(6),
+                 ent.pro ? 1 : 0, ent.state, ent.species].join('|');
     if (stamp !== fieldStamp) { fieldVals.clear(); fieldAux.clear(); fieldStamp = stamp; }
 
     var tl = this.toWorld(0, 0, [0, 0]), br = this.toWorld(this.w, this.h, [0, 0]);
