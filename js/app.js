@@ -877,17 +877,17 @@
   var plannerWhere = null;     // {lon, lat, name}
   var plannerWeek = null;        // week chosen in the chart, null = use the peak
 
+  /* Defaults to wherever the map is pointed. Falling back to an arbitrary
+     saved spot was worse than showing nothing: it answered a question
+     nobody asked, about a place they were not looking at. */
   function plannerTarget() {
     if (plannerWhere) return plannerWhere;
     if (App.state.selection) {
       return {
         lon: App.state.selection.lon, lat: App.state.selection.lat,
-        name: guide.placeLabel(App.state.selection.lon, App.state.selection.lat).title
+        name: guide.placeLabel(App.state.selection.lon, App.state.selection.lat).title,
+        fromMap: true
       };
-    }
-    if (App.state.spots.length) {
-      var s = App.state.spots[0];
-      return { lon: s.lon, lat: s.lat, name: s.name };
     }
     return null;
   }
@@ -903,46 +903,35 @@
       }
 
       var target = plannerTarget();
-      if (!target) {
-        root.appendChild(el('p', 'note', 'Pick a spot on the map or save a location first, then come back.'));
-        return root;
-      }
 
-      /* Where. One field that takes a saved spot, the current map pin, or
-         anything typed: a town, a county, a named river or raw coordinates.
-         The datalist offers the presets without blocking free text. */
+      /* Where. Defaults to the map pin. The dropdown offers only things the
+         user chose - pick on the map, the current pin, their saved spots -
+         rather than a catalogue of regions nobody asked for. Anything else
+         is typed. */
       var pick = el('div', 'frow');
-      /* A real dropdown rather than a datalist. A datalist filters its
-         options against whatever is already in the input, so with the
-         current location prefilled it matched nothing and opened empty.
-         This also lets the list look like the rest of the app. */
       var combo = el('div', 'combo');
       var locIn = el('input');
       locIn.type = 'text';
       locIn.id = 'plan-loc';
       locIn.autocomplete = 'off';
-      locIn.placeholder = 'Town, county, river, or 45.33, -107.95';
-      locIn.value = target.name;
+      locIn.placeholder = 'Select a location on the map, or type one';
+      locIn.value = target ? target.name : '';
 
       var caret = el('button', 'combo-caret');
       caret.type = 'button';
-      caret.setAttribute('aria-label', 'Show saved and suggested locations');
+      caret.setAttribute('aria-label', 'Choose a location');
       caret.textContent = '▾';
 
       var list = el('div', 'combo-list');
       list.hidden = true;
       var locMsg = el('div', 'loc-msg');
 
-      var entries = [];
-      if (st.selection) entries.push({ group: 'Map', label: 'Current map selection', kind: 'sel' });
+      var entries = [{ group: 'Map', label: 'Select a location on the map', kind: 'pick' }];
+      if (st.selection) {
+        entries.push({ group: 'Map', label: 'Current map selection', kind: 'sel' });
+      }
       st.spots.forEach(function (s) {
         entries.push({ group: 'Saved spots', label: s.name, kind: 'spot', spot: s });
-      });
-      env.WF_REGIONS.forEach(function (r) {
-        entries.push({ group: 'Waterfowl country', label: r.n, kind: 'place', lon: r.lon, lat: r.lat });
-      });
-      env.TROUT_WATERS.forEach(function (r) {
-        entries.push({ group: 'Trout water', label: r.n, kind: 'place', lon: r.lon, lat: r.lat });
       });
 
       var rowsEls = [], active = -1;
@@ -950,6 +939,13 @@
       function choose(e) {
         closeList();
         plannerWeek = null;
+        if (e.kind === 'pick') {
+          /* Hand the map back to the user; the next click lands here. */
+          App.plannerPick = true;
+          document.body.classList.add('adding');
+          closePanel();
+          return;
+        }
         if (e.kind === 'sel') { plannerWhere = null; renderPlannerPanel(); return; }
         if (e.kind === 'spot') {
           plannerWhere = { lon: e.spot.lon, lat: e.spot.lat, name: e.spot.name };
@@ -1084,6 +1080,24 @@
       pick.appendChild(fL);
       pick.appendChild(fS);
       root.appendChild(pick);
+
+      /* No location yet: the field is rendered above, so prompt and stop
+         rather than inventing somewhere to report on. */
+      if (!target) {
+        var empty = el('div', 'planempty');
+        empty.appendChild(el('div', 'pe-h', 'Where are you thinking of hunting?'));
+        empty.appendChild(el('p', null, 'Tap anywhere on the map, or type a town, county, river or ' +
+          'coordinates into the location field above.'));
+        var pickBtn = el('button', 'btn primary', 'Select a location on the map');
+        pickBtn.addEventListener('click', function () {
+          App.plannerPick = true;
+          document.body.classList.add('adding');
+          closePanel();
+        });
+        empty.appendChild(pickBtn);
+        root.appendChild(empty);
+        return root;
+      }
 
       var rows = planner.horizon(target.lon, target.lat, st.species, 20);
       if (!rows.length) {
@@ -2038,6 +2052,17 @@
           App.addSpotMode = false;
           document.body.classList.remove('adding');
           addSpotAt(raw[0], raw[1]);
+          return;
+        }
+        if (App.plannerPick) {
+          App.plannerPick = false;
+          document.body.classList.remove('adding');
+          App.state.selection = { lon: lon, lat: lat };
+          plannerWhere = null;              // follow the pin from here
+          plannerWeek = null;
+          App.dirty = true;
+          scheduleBands();
+          renderPlannerPanel();
           return;
         }
         App.state.selection = { lon: lon, lat: lat };
