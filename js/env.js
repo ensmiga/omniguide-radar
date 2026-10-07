@@ -315,7 +315,11 @@
       whitetail: whitetail, muledeer: muledeer, moose: moose,
       turkey: turkey, upland: upland, pronghorn: pronghorn,
       cls: cls, region: region, water: tw, waterCls: tcls,
-      openness: openness, realHab: realSrc
+      openness: openness, realHab: realSrc,
+      /* Evidence that water here stays open when it turns hard - see
+         openwater.js. Read lazily because the gauge data loads after
+         this file. */
+      openWater: (global.OG && global.OG.openwater) ? global.OG.openwater.at(lon, lat) : 0
     };
     if (habCache.size > 60000) habCache.clear();
     habCache.set(key, out);

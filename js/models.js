@@ -171,6 +171,7 @@
     {
       id: 'ducks', name: 'Ducks', group: 'waterfowl', pursuit: 'hunt',
       migratory: true, migPeak: 310, migWidth: 44, habKey: 'waterfowl',
+      freezeLock: true,
       pressureSens: 0.13,
       distWeight: 0.20,
       habFloor: 0.07, rangeFloor: 0.015,
@@ -190,7 +191,20 @@
           { w: 1.1, v: pref(wx.freeze, 0.52, 0.36),
             hi: 'Partial freeze concentrating birds on the remaining open water',
             lo: wx.freeze > 0.85 ? 'Water largely locked up here' : 'No freeze pressure concentrating birds' },
-          { w: 0.9, v: clamp01(hab.waterfowl * 1.25) * (1 - 0.55 * wx.freeze),
+          /* A hard freeze is not uniformly bad. Where there is evidence of
+             water that stays open - a big river, a tailwater running below
+             a dam - the freeze works for you, because every bird in the
+             county is now on it. */
+          { w: 1.3, v: clamp01(ramp(wx.freeze, 0.35, 0.85)) * clamp01(hab.openWater * 1.3),
+            hi: hab.openWater > 0.55
+              ? 'Hard freeze with open water holding here - birds stacking onto what is left'
+              : 'Freeze pushing birds onto the open water nearby',
+            lo: null },
+          /* Shallow feeding water. The freeze penalty is eased where the
+             open-water evidence is strong, because that is exactly where
+             the shallows stay workable longest. */
+          { w: 0.9, v: clamp01(hab.waterfowl * 1.25) *
+                       (1 - 0.55 * wx.freeze * (1 - 0.70 * clamp01(hab.openWater))),
             hi: 'Shallow feeding water still open', lo: 'Little usable shallow water' },
           { w: 0.7, v: clamp01(wx.snowDepth * 1.4), hi: 'Snow cover pushing birds to food', lo: null }
         ]);
@@ -200,6 +214,7 @@
       id: 'canada-goose', name: 'Canada goose', group: 'waterfowl', pursuit: 'hunt',
       distKey: 'goose',
       migratory: true, migPeak: 322, migWidth: 40, habKey: 'waterfowl',
+      freezeLock: true,
       pressureSens: 0.12,
       distWeight: 0.20,
       habFloor: 0.07, rangeFloor: 0.015,
@@ -214,7 +229,14 @@
           { w: 1.4, v: clamp01(wx.snowDepth * 1.8), hi: 'Snow cover concentrating birds on exposed grain', lo: null },
           { w: 1.0, v: c.front.v, hi: 'Frontal passage overhead' },
           { w: 0.9, v: c.press.v, hi: 'Favorable pressure change', lo: 'Stagnant high pressure' },
-          { w: 1.0, v: clamp01(hab.openness * 0.7 + hab.waterfowl * 0.6), hi: 'Open agricultural ground next to roost water', lo: 'Little field feed near roost water' }
+          { w: 1.0, v: clamp01(hab.openness * 0.7 + hab.waterfowl * 0.6), hi: 'Open agricultural ground next to roost water', lo: 'Little field feed near roost water' },
+          /* Geese need the roost to stay liquid as much as ducks do, and
+             a late-season flock will sit on a tailwater and fly grain for
+             weeks after every pond in the county has locked up. Weighted
+             lower than for ducks because geese will also roost dry. */
+          { w: 0.9, v: clamp01(ramp(wx.freeze, 0.35, 0.85)) * clamp01(hab.openWater * 1.3),
+            hi: 'Open roost water holding through the freeze with grain in reach',
+            lo: null }
         ]);
       }
     },
@@ -506,6 +528,27 @@
     var habV = habModel;
     if (dIdx != null) habV = habModel * ((1 - dw) + dw * dIdx);
 
+    /* FREEZE LOCKOUT.
+
+       Habitat was being treated as a property of the ground, fixed all
+       year. For waterfowl it is not: a prairie pothole in January is not
+       poor habitat, it is a parking lot, and no amount of good wind makes
+       it hold a duck. Meanwhile the tailwater forty miles west is running
+       four thousand feet a second at forty-one degrees and has every bird
+       in the county on it.
+
+       So the usable share of waterfowl habitat is cut by the freeze,
+       except where there is evidence the water stays open - see
+       openwater.js, which reads discharge, USGS tailwater site naming and
+       measured water temperature against NLCD open-water cover. This is
+       what turns a hard freeze from a flat regional penalty into the
+       thing that concentrates birds somewhere specific. */
+    if (sp.freezeLock) {
+      var openW = clamp01((hab.openWater || 0) * 1.15);
+      var lock = clamp01(ramp(wx.freeze, 0.30, 0.90)) * (1 - openW);
+      habV *= (1 - 0.75 * lock);
+    }
+
     /* RANGE GATE.
        Habitat is only part of the weighted sum, so a cell with zero elk
        habitat still collected sixty-odd points from wind, temperature and
@@ -574,7 +617,9 @@
         parts: parts, totalWeight: total, weighted: weighted,
         pressureIdx: press, pressureSens: sens, pressureDrop: pressDrop,
         afterPressure: afterPress, calLo: cal[0], calHi: cal[1], final: opp,
-        habModel: habModel * 100, distIdx: dIdx, distWeight: dw, habAdjusted: habV * 100
+        habModel: habModel * 100, distIdx: dIdx, distWeight: dw, habAdjusted: habV * 100,
+        openWater: hab.openWater == null ? null : hab.openWater * 100,
+        freezeLock: sp.freezeLock ? wx.freeze : null
       }
     };
   }

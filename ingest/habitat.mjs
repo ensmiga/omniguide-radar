@@ -253,11 +253,16 @@ async function taxonKey(name) {
   return j.usageKey;
 }
 
-/* Pages coordinates for one taxon into the grid. GBIF caps offset at
-   100000, which is plenty to define a range at 11 km - this is a presence
-   surface, not a census. */
+/* Pages coordinates for one taxon into the grid.
+
+   Capped at 30000 records. GBIF's deep paging degrades badly past roughly
+   that offset - the first build of this file spent over an hour there -
+   and 30000 points is far more than enough to draw a range at 11 km. This
+   is a presence surface, not a census. The per-species normalisation
+   below means a taxon that hits the cap is not penalised against one that
+   does not. */
 async function occurrences(key, grid) {
-  const LIMIT = 300, MAXOFF = 100000, PAR = 6;
+  const LIMIT = 300, MAXOFF = 30000, PAR = 8;
   let off = 0, got = 0, end = false;
   while (!end && off < MAXOFF) {
     const batch = [];
@@ -342,6 +347,13 @@ async function main() {
       process.stderr.write('  ' + sp + ' / ' + name + ': ' + got + '\n');
     }
     if (total < 500) throw new Error(sp + ' returned only ' + total + ' records - refusing to ship it');
+    /* Normalise to a unit total before it joins the effort sum. Without
+       this, a species whose download hit the record cap contributes fewer
+       counts than one that did not, and its share - the whole point of the
+       denominator - comes out understated through no fault of the birds. */
+    let tot = 0;
+    for (let k = 0; k < NCELL; k++) tot += occ[sp][k];
+    if (tot > 0) for (let k = 0; k < NCELL; k++) occ[sp][k] /= tot;
     for (let k = 0; k < NCELL; k++) effort[k] += occ[sp][k];
   }
 
@@ -354,7 +366,7 @@ async function main() {
     const occS = smooth(occ[sp], 3);
     const share = new Float32Array(NCELL);
     for (let k = 0; k < NCELL; k++) {
-      share[k] = effortS[k] > 0.02 ? occS[k] / effortS[k] : 0;
+      share[k] = effortS[k] > 1e-9 ? occS[k] / effortS[k] : 0;
     }
     /* Normalise against this species' own 97th percentile - species differ
        enormously in how often they are reported, and what matters is where
