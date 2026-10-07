@@ -677,12 +677,34 @@
     var sp = BY_ID[spId];
     var sr = (sunObj.sunrise || 420) / 60, ss = (sunObj.sunset || 1080) / 60;
     var coldWind = clamp01(ramp(wx.windSpd, 8, 22)) * clamp01(ramp(36 - wx.tempF, 0, 20));
+
+    /* FRONTAL PUSH.
+
+       The curves below were built around first and last light, with a
+       midday shoulder that only appeared when it was both cold and
+       windy. That misses the day every waterfowler plans around: a
+       front arriving at one in the afternoon, pressure falling, birds
+       up and moving in the middle of the day. The daily score already
+       rose on a frontal day - frontal and pressure trend are both in
+       the movement blend - but the hour advice still said dawn, so
+       the model was telling you to go on the right day at the wrong
+       time.
+
+       A passing front does not add a third peak at a known hour,
+       because the model does not know what hour the boundary arrives.
+       What it does is flatten the day: birds move when the weather
+       moves rather than when the sun does. So this is a broad lift
+       across the middle, strongest when the boundary is overhead and
+       the pressure is falling. */
+    var falling = clamp01(-(wx.pressTrend || 0) * 0.9);
+    var frontPush = clamp01(clamp01(wx.frontal) * 0.75 + falling * 0.45);
     var a = 0.12;
 
     if (sp.id === 'canada-goose') {
       a += 1.00 * bell(h - (sr + 1.1), 1.05);
       a += 0.80 * bell(h - (ss - 2.0), 1.25);
       a += 0.35 * coldWind * bell(h - 12.5, 2.4);
+      a += 0.95 * frontPush * bell(h - 12.2, 4.2);
     } else if (sp.id === 'elk') {
       a += 1.00 * bell(h - (sr + 0.4), 0.85);
       a += 0.75 * bell(h - (ss - 0.6), 0.8);
@@ -731,8 +753,26 @@
       a += 0.50 * coldWind * bell(h - 12.6, 2.3);
       a += 0.30 * clamp01(ramp(wx.windSpd, 11, 26)) * bell(h - 12.2, 3.0);
       a += 0.22 * clamp01(wx.cloud) * bell(h - 10.5, 2.4);
+      /* Amplitude above the dawn term, so a boundary genuinely
+         overhead with the pressure falling can take the peak hour off
+         first light rather than merely tying it. A moderate front does
+         not: at frontPush below about 0.8 dawn still wins, which is
+         right, because dawn is the one hour that is good almost every
+         day and a front is only sometimes better. */
+      a += 1.18 * frontPush * bell(h - 12.0, 4.4);
+      /* And the dawn flight itself is less distinct under a passing
+         boundary - the birds were never settled to begin with. */
+      a *= 1 - 0.12 * frontPush * bell(h - (sr + 0.55), 1.4);
     }
-    return clamp01(a);
+    /* Soft knee rather than a hard clamp.
+
+       clamp01 flat-topped the curve: under a strong front eight hours
+       of the day all came out at exactly 1.000, so the peak window was
+       decided by whichever hour the loop reached first, not by the
+       model. Dawn always won by accident. This saturates smoothly, so
+       two good hours stay distinguishable however good they both are,
+       and the ordering is never lost. */
+    return 1 - Math.exp(-1.25 * Math.max(0, a));
   }
 
   /* ---------- Two questions, two measures ----------

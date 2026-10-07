@@ -41,6 +41,17 @@
 
   /* How much of a duck hunt each cover type is, on its own. */
   var VALUE = { 95: 1.00, 90: 0.85, 11: 0.55 };
+
+  /* Open water is held at 0.55 because the raster cannot see depth
+     and most of a big lake is not huntable. A tailwater is the
+     exception that matters: the Bighorn below Yellowtail, the White
+     below Bull Shoals, the Missouri below Garrison. In late season
+     those are not generic open water, they are the only liquid water
+     for a hundred miles and every bird in the country is on them.
+     Where the gauge network says the water here is big, moving or
+     released from a dam, open water is worth nearly as much as
+     marsh. */
+  var OPEN_WATER_TAILWATER = 0.95;
   /* And what it becomes when it sits against water. */
   var NEAR_WATER = { 82: 0.60, 81: 0.30, 71: 0.22 };
 
@@ -67,7 +78,27 @@
   }
 
   /* Build the orange overlay for one bbox. Returns a canvas or null. */
-  function render(img, w, h) {
+  /* Evidence that the water in this view stays open and moving,
+     sampled from the gauge network at the centre and corners rather
+     than per pixel - a tailwater reach is tens of kilometres long,
+     so this does not need to be fine. */
+  function openBoost(bbox) {
+    var ow = global.OG.openwater;
+    if (!ow || !ow.at) return 0;
+    var pts = [
+      [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2],
+      [bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[0], bbox[3]], [bbox[2], bbox[3]],
+      [(bbox[0] + bbox[2]) / 2, bbox[1]], [(bbox[0] + bbox[2]) / 2, bbox[3]]
+    ];
+    var best = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var v = ow.at(pts[i][0], pts[i][1]);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  function render(img, w, h, boost) {
     var src = document.createElement('canvas');
     src.width = w; src.height = h;
     var sx = src.getContext('2d', { willReadFrequently: true });
@@ -120,6 +151,10 @@
     var p = od.data;
     for (i = 0, k = 0; i < n; i++, k += 4) {
       var v = VALUE[cls[i]] || 0;
+      /* Lift open water toward marsh value on a tailwater. */
+      if (cls[i] === 11 && boost > 0.25) {
+        v = VALUE[11] + (OPEN_WATER_TAILWATER - VALUE[11]) * Math.min(1, (boost - 0.25) / 0.5);
+      }
       if (!v && near[i]) v = NEAR_WATER[cls[i]] || 0;
       if (!v) continue;
       /* One hue, varying weight, so the eye reads intensity as how much
@@ -157,7 +192,7 @@
     img.onload = function () {
       inflight--;
       var c = null;
-      try { c = render(img, w, h); } catch (e) { c = null; }
+      try { c = render(img, w, h, openBoost(bbox)); } catch (e) { c = null; }
       cache.set(key, c || 'failed');
       if (cache.size > 24) {
         var first = cache.keys().next().value;
