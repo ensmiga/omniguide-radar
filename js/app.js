@@ -875,6 +875,7 @@
   /* ---------- Plan a hunt ---------- */
 
   var plannerWhere = null;     // {lon, lat, name}
+  var plannerWeek = null;        // week chosen in the chart, null = use the peak
 
   function plannerTarget() {
     if (plannerWhere) return plannerWhere;
@@ -946,6 +947,7 @@
         if (v.toLowerCase() === 'current map selection') {
           if (!st.selection) { locMsg.textContent = 'No pin on the map yet.'; return; }
           plannerWhere = null;
+          plannerWeek = null;
           renderPlannerPanel();
           return;
         }
@@ -953,6 +955,7 @@
           return s.name.toLowerCase() === v.toLowerCase();
         })[0];
         if (saved) {
+          plannerWeek = null;
           plannerWhere = { lon: saved.lon, lat: saved.lat, name: saved.name };
           renderPlannerPanel();
           return;
@@ -963,6 +966,7 @@
           locMsg.textContent = '"' + hit.name + '" is outside the modelled region.';
           return;
         }
+        plannerWeek = null;
         plannerWhere = { lon: hit.lon, lat: hit.lat, name: hit.name };
         renderPlannerPanel();
       }
@@ -988,6 +992,7 @@
       });
       spSel.addEventListener('change', function () {
         st.species = spSel.value;
+        plannerWeek = null;
         spotScoreCache.clear();
         App.dirty = true;
         syncControls();
@@ -1033,8 +1038,10 @@
       /* Chart */
       var chartSec = section('Week by week');
       var chart = el('div', 'pweeks');
-      rows.forEach(function (r) {
-        var col = el('div', 'pw' + (r.legalOpen ? '' : ' pw-closed'));
+      var weekBtns = [];
+      rows.forEach(function (r, idx) {
+        var col = el('button', 'pw' + (r.legalOpen ? '' : ' pw-closed'));
+        col.type = 'button';
         var track = el('div', 'pwtrack');
         var bar = el('div', 'pwbar');
         bar.style.height = Math.max(3, r.score) + '%';
@@ -1047,71 +1054,100 @@
         col.appendChild(track);
         col.appendChild(el('div', 'pwlab', monthDay(r.date)));
         col.title = monthDay(r.date) + ': typical ' + r.score +
-          ' (range ' + r.lo + '-' + r.hi + '), season ' + r.status;
+          ' (range ' + r.lo + '-' + r.hi + '), season ' + r.status +
+          '. Click to compare this week nationally.';
+        col.addEventListener('click', function () { selectWeek(idx); });
+        weekBtns.push(col);
         chart.appendChild(col);
       });
       chartSec.appendChild(chart);
       chartSec.appendChild(el('div', 'chartkey',
         'Bar is the seasonal index for that week, which ranks weeks and is not a forecast score. The lighter band is how much it moves in a ' +
-        'notably warm or notably cold year. Faded bars are weeks the season is not open.'));
+        'notably warm or notably cold year. Faded bars are weeks the season is not open. ' +
+        'Click any week to compare it against the rest of the country.'));
       root.appendChild(chartSec);
 
       /* How this place compares to the rest of the country in its best
          week. A seasonal index means little until you know what everywhere
          else is doing at the same time. */
-      if (windows.length) {
-        var peakRow = rows[windows[0].peakIdx];
-        var nat = planner.national(st.species, peakRow.week);
-        if (nat.openCount > 4) {
-          var pc = planner.percentile(nat, peakRow.score);
-          var natSec = section('Compared with the rest of the country');
+      var natSec = section('Compared with the rest of the country');
+      var natBody = el('div', 'natbody');
+      natSec.appendChild(natBody);
+      root.appendChild(natSec);
 
-          var lede2 = el('div', 'lede');
-          lede2.textContent = 'In the week of ' + monthDay(peakRow.date) + ', this spot scores ' +
-            peakRow.score + ' against a national range of ' +
-            nat.open[nat.openCount - 1].score + ' to ' + nat.open[0].score +
-            ' across open country. It is better than ' + pc + '% of where you could legally be.';
-          natSec.appendChild(lede2);
+      /* Rebuilds only this section, so clicking through weeks does not
+         re-run the whole panel or throw away the scroll position. */
+      function renderNational(idx) {
+        var row = rows[idx];
+        natBody.innerHTML = '';
+        weekBtns.forEach(function (b, i) { b.classList.toggle('pw-sel', i === idx); });
 
-          /* Distribution strip: one tick per sampled open location. */
-          var lo = nat.open[nat.openCount - 1].score, hi = nat.open[0].score;
-          var span = Math.max(1, hi - lo);
-          var strip = el('div', 'natstrip');
-          nat.open.forEach(function (r) {
-            var t = el('div', 'nt');
-            t.style.left = ((r.score - lo) / span * 100) + '%';
-            t.style.background = radarNS.rampCSS(r.score / 100, 0.5);
-            strip.appendChild(t);
-          });
-          var me = el('div', 'nt-me');
-          me.style.left = (Math.max(0, Math.min(1, (peakRow.score - lo) / span)) * 100) + '%';
-          strip.appendChild(me);
-          natSec.appendChild(strip);
-          var sc2 = el('div', 'lg-scale');
-          sc2.appendChild(el('span', null, String(lo)));
-          sc2.appendChild(el('span', null, 'national range'));
-          sc2.appendChild(el('span', null, String(hi)));
-          natSec.appendChild(sc2);
-          natSec.appendChild(el('div', 'chartkey', 'Each tick is one of ' + nat.openCount +
-            ' sampled locations where the season is open that week. The marked one is here.'));
-
-          var topSec = el('div', 'natbest');
-          topSec.appendChild(el('div', 'nb-h', 'Strongest country that week'));
-          nat.top.forEach(function (r, i) {
-            var row = el('div', 'nb-row');
-            row.appendChild(el('span', 'nb-rank', String(i + 1)));
-            row.appendChild(el('span', 'nb-name', r.name));
-            var v = el('span', 'nb-score', String(r.score));
-            v.style.color = radarNS.rampCSS(r.score / 100, 1);
-            row.appendChild(v);
-            topSec.appendChild(row);
-          });
-          natSec.appendChild(topSec);
-          natSec.appendChild(el('p', 'note', 'Sampled on a 2.2 degree lattice, so this is a regional ' +
-            'comparison rather than a ranking of specific spots. Closed states are excluded.'));
-          root.appendChild(natSec);
+        var nat = planner.national(st.species, row.week);
+        if (nat.openCount < 5) {
+          natBody.appendChild(el('p', 'note', 'Too little of the country has an open season in the week ' +
+            'of ' + monthDay(row.date) + ' to make a useful comparison.'));
+          return;
         }
+        var pc = planner.percentile(nat, row.score);
+        var lo = nat.open[nat.openCount - 1].score, hi = nat.open[0].score;
+        var span = Math.max(1, hi - lo);
+
+        var lede2 = el('div', 'lede');
+        lede2.textContent = 'In the week of ' + monthDay(row.date) + ', this spot scores ' + row.score +
+          ' against a national range of ' + lo + ' to ' + hi + ' across open country. ' +
+          (row.legalOpen
+            ? 'It is better than ' + pc + '% of where you could legally be.'
+            : 'The season is not open here that week, so it is shown for comparison only.');
+        natBody.appendChild(lede2);
+
+        var strip = el('div', 'natstrip');
+        nat.open.forEach(function (r) {
+          var t = el('div', 'nt');
+          t.style.left = ((r.score - lo) / span * 100) + '%';
+          t.style.background = radarNS.rampCSS(r.score / 100, 0.5);
+          strip.appendChild(t);
+        });
+        var me = el('div', 'nt-me' + (row.legalOpen ? '' : ' nt-closed'));
+        me.style.left = (Math.max(0, Math.min(1, (row.score - lo) / span)) * 100) + '%';
+        strip.appendChild(me);
+        natBody.appendChild(strip);
+
+        var sc2 = el('div', 'lg-scale');
+        sc2.appendChild(el('span', null, String(lo)));
+        sc2.appendChild(el('span', null, 'national range'));
+        sc2.appendChild(el('span', null, String(hi)));
+        natBody.appendChild(sc2);
+        natBody.appendChild(el('div', 'chartkey', 'Each tick is one of ' + nat.openCount +
+          ' sampled locations where the season is open that week. The marked one is here.'));
+
+        var topSec = el('div', 'natbest');
+        topSec.appendChild(el('div', 'nb-h', 'Strongest country that week'));
+        nat.top.forEach(function (r, i) {
+          var tr = el('div', 'nb-row');
+          tr.appendChild(el('span', 'nb-rank', String(i + 1)));
+          tr.appendChild(el('span', 'nb-name', r.name));
+          var v = el('span', 'nb-score', String(r.score));
+          v.style.color = radarNS.rampCSS(r.score / 100, 1);
+          tr.appendChild(v);
+          topSec.appendChild(tr);
+        });
+        natBody.appendChild(topSec);
+        natBody.appendChild(el('p', 'note', 'Sampled on a 2.2 degree lattice, so this is a regional ' +
+          'comparison rather than a ranking of specific spots. Closed states are excluded from the ranking.'));
       }
+
+      function selectWeek(idx) {
+        plannerWeek = rows[idx].week;
+        renderNational(idx);
+      }
+
+      /* Open on whichever week was last chosen here, falling back to the
+         peak so the panel still leads with the best answer. */
+      var startIdx = windows.length ? windows[0].peakIdx : 0;
+      if (plannerWeek != null) {
+        for (var wi = 0; wi < rows.length; wi++) if (rows[wi].week === plannerWeek) startIdx = wi;
+      }
+      renderNational(startIdx);
 
       /* Ranked windows */
       if (windows.length) {

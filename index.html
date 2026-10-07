@@ -829,7 +829,15 @@
     gap: 2px;
     align-items: end;
   }
-  .pw { display: grid; gap: 3px; justify-items: center; min-width: 0; }
+  .pw {
+    display: grid; gap: 3px; justify-items: center; min-width: 0;
+    background: none; border: 0; padding: 2px 0 0; cursor: pointer;
+    border-radius: 4px; font: inherit; color: inherit;
+  }
+  .pw:hover .pwtrack { outline: 1px solid var(--line); }
+  .pw-sel { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .pw-sel .pwlab { color: var(--text); font-weight: 600; }
+  .nt-closed { background: var(--unknown); }
   .pwtrack {
     position: relative;
     width: 100%;
