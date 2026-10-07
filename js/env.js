@@ -355,12 +355,26 @@
      d > 0 is the cold airmass behind it. */
   var FRONTS = [
     { start: 10.0, speed: 2.05, strength: 1.0 },
-    { start: -0.5, speed: 1.75, strength: 0.72 }
+    { start: -0.5, speed: 1.75, strength: 0.72 },
+    { start: 22.0, speed: 1.90, strength: 0.64 }
   ];
+
+  /* Degrees of latitude a boundary travels before the next one forms
+     behind it. At these speeds that puts a frontal passage through any
+     given place every five to seven days, which is about what the real
+     synoptic pattern does. */
+  var FRONT_CYCLE = 36;
 
   function frontDist(f, lon, lat, t) {
     var travelled = f.start + f.speed * t;
-    var latLine = 54.5 - travelled + 0.30 * (lon + 100);
+    /* Recurring, not a single boundary sweeping past once and never
+       coming back. Unwrapped, travelled reached 126 degrees by day 60,
+       every front sat permanently off the map, and the synthetic weather
+       past about three weeks had no synoptic variability left in it at
+       all - which is most of what the Day baseline and the whole
+       seasonal planner are built on. */
+    var phase = ((travelled % FRONT_CYCLE) + FRONT_CYCLE) % FRONT_CYCLE;
+    var latLine = 54.5 - phase + 0.30 * (lon + 100);
     return lat - latLine;
   }
 
@@ -370,21 +384,57 @@
   function core(lon, lat, t, doy) {
     var seas = seasonalIndex(doy);
     var elev = habitat(lon, lat).elev;
-    var base = 60 + 27 * seas - (lat - 37) * (1.95 - 0.55 * seas) - elev / 1000 * 3.4;
-    var coastal = Math.max(gb((lon + 123.4) / 1.6, (lat - 44) / 8), gb((lon + 77.0) / 1.8, (lat - 36) / 9) * 0.7);
-    base = base * (1 - 0.3 * coastal) + (56 + 10 * seas) * 0.3 * coastal;
+
+    /* Base temperature from NOAA 1991-2020 normals where they reach,
+       with the hand-fitted curve kept only as a fallback. The fitted one
+       ran about 35 degrees cold in a northern winter - Devils Lake in
+       early January came out at -29 F against a true normal of 8 F -
+       which pinned the freeze index at 1.0 from early December and, once
+       the freeze lockout went in, flattened every late-season waterfowl
+       score in the north. */
+    var base, dayRange = null;
+    var cl = (global.OG && global.OG.climo)
+      ? global.OG.climo.at(lon, lat, global.OG.climo.weekOf(doy), elev) : null;
+    if (cl) {
+      base = cl.tmean;
+      dayRange = cl.tmax - cl.tmin;
+    } else {
+      base = 60 + 27 * seas - (lat - 37) * (1.95 - 0.55 * seas) - elev / 1000 * 3.4;
+      var coastal = Math.max(gb((lon + 123.4) / 1.6, (lat - 44) / 8), gb((lon + 77.0) / 1.8, (lat - 36) / 9) * 0.7);
+      base = base * (1 - 0.3 * coastal) + (56 + 10 * seas) * 0.3 * coastal;
+    }
 
     var tAnom = 0, pAnom = 0, wBell = 0, dMain = 0;
     for (var i = 0; i < FRONTS.length; i++) {
       var f = FRONTS[i], d = frontDist(f, lon, lat, t);
       if (i === 0) dMain = d;
       var behind = 0.5 + 0.5 * Math.tanh(d / 2.1);
-      tAnom += f.strength * (-17 * behind + 6 * bell(d + 2.0, 2.4));
-      pAnom += f.strength * (9 * Math.tanh(d / 3.4) - 10 * bell(d + 1.2, 2.2));
+      /* Centred on zero. This read -17 * behind, which is 0 ahead of the
+         boundary and -17 behind it, so its average over any stretch of
+         time was about -8 per front and the fronts stacked. A frontal
+         anomaly is weather moving through, not a standing cold bias on
+         top of the climate. */
+      /* Both anomalies are windowed by distance so a boundary on the
+         far side of the country contributes nothing. They used to use a
+         bare tanh, which saturates: a front 120 degrees away still
+         handed back its full value, so the "anomalies" were a standing
+         offset of about -15 F and +9 hPa rather than weather. */
+      var near = bell(d, 6.0);
+      tAnom += f.strength * near * (-17 * Math.tanh(d / 2.1) + 6 * bell(d + 2.0, 2.4));
+      pAnom += f.strength * near * (9 * Math.tanh(d / 3.4) - 10 * bell(d + 1.2, 2.2));
       wBell = Math.max(wBell, f.strength * bell(d + 0.4, 2.6));
     }
     var nz = fbm(lon * 0.42, lat * 0.42, t * 0.34 + 2.5);
-    var temp = base + tAnom + (nz - 0.5) * 11;
+
+    /* Shape of the day. Reporting one flat temperature for twenty-four
+       hours told every user that dawn feels like mid-afternoon, which in
+       an app built around the first and last hour of light is the wrong
+       thing to be wrong about. */
+    var diur = 0;
+    if (dayRange != null && global.OG.climo) {
+      diur = global.OG.climo.diurnal((t - Math.floor(t)) * 24) * dayRange * 0.5;
+    }
+    var temp = base + diur + tAnom + (nz - 0.5) * 11;
     var press = 1013 + pAnom + (fbm(lon * 0.3, lat * 0.3, t * 0.3 + 9) - 0.5) * 7;
     return { temp: temp, press: press, wBell: wBell, d: dMain, seas: seas, nz: nz, elev: elev };
   }
