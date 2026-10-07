@@ -509,10 +509,15 @@
     var shops = global.OG.flyshops
       ? global.OG.flyshops.near(sc.lon, sc.lat, sc.hab.water, 3) : [];
 
+    /* Established subsurface patterns for this specific water, seasonally
+       filtered. Not a shop report - the shops cover what is working now. */
+    var subs = global.OG.patterns
+      ? global.OG.patterns.forWater(sc.hab.water, sc.hab.waterCls, dateFor(0)) : null;
+
     return {
       headline: rec[0],
       recommendation: rec,
-      hatches: hatches, surface: surface, streamer: streamer, shops: shops,
+      hatches: hatches, surface: surface, streamer: streamer, shops: shops, subs: subs,
       setup: [
         { k: 'Water', v: wx.gauge
             ? [Math.round(wx.waterTemp) + ' degrees F' +
@@ -589,6 +594,73 @@
       out.push('Gradient here is steep enough to expect broken, oxygenated water rather than slow pools.');
     }
     return out;
+  }
+
+  /* What the ground actually is, from observed land cover rather than the
+     regional habitat model. */
+  function coverNotes(L, sc, sp) {
+    if (!L) return null;
+    var out = [];
+    var crops = L.share('crops'), wet = L.share('wetland'), water = L.share('water');
+    var forest = L.share('forest'), grass = L.share('grass') + L.share('pasture');
+    var shrub = L.share('shrub'), dev = L.share('developed');
+    var pct = function (v) { return Math.round(v * 100) + '%'; };
+
+    out.push('Land cover at the pin is ' + L.centre + '. Within ' + Math.round(L.ringM) +
+      ' m it is ' + L.mix.slice(0, 3).map(function (m) { return pct(m.share) + ' ' + m.group; }).join(', ') + '.');
+
+    if (sp.group === 'waterfowl') {
+      if (water + wet > 0.3 && crops > 0.1) {
+        out.push('Water and cropland together within the same half kilometre is the combination that ' +
+          'actually holds birds: a place to sit and a place to feed, without a long flight between them.');
+      } else if (water + wet > 0.3) {
+        out.push('Plenty of water here but little grain nearby, so expect this to be a loafing or roost ' +
+          'area rather than a feed. Hunt the roost sparingly or you will burn it.');
+      } else if (crops > 0.4) {
+        out.push('This is a field, not water. Good for a dry-field goose or mallard setup, but you will ' +
+          'need to know where the roost is before it is worth anything.');
+      } else if (water + wet < 0.08) {
+        out.push('Almost no water or wetland in this sample. Whatever the regional score says, check ' +
+          'there is actually water here before you drive to it.');
+      }
+    }
+
+    if (sp.id === 'whitetail' || sp.id === 'turkey') {
+      if (forest > 0.25 && (crops + grass) > 0.25) {
+        out.push('Timber meeting open ground is the edge both of these species live on. The seam itself ' +
+          'is the setup, not the middle of either side.');
+      } else if (forest > 0.75) {
+        out.push('Solid timber with little open ground nearby. Hunt interior food - mast, a logging ' +
+          'opening, a creek bottom - rather than looking for a field edge that is not here.');
+      }
+    }
+
+    if (sp.id === 'upland') {
+      if (grass > 0.3 && crops > 0.2) out.push('Grass next to grain is exactly the mix that holds birds. ' +
+        'Work the grass and push toward the crop edge.');
+      else if (crops > 0.7) out.push('Nearly all cultivated. Once it is harvested there is little cover ' +
+        'here; find the grass, the slough edge or the shelterbelt.');
+    }
+
+    if ((sp.id === 'muledeer' || sp.id === 'pronghorn') && shrub > 0.4) {
+      out.push('Sage and shrub dominate, which is the right country, and it means glassing beats walking.');
+    }
+
+    if (dev > 0.22) {
+      out.push('There is developed ground in this sample. Check access and setback rules before you ' +
+        'plan on hunting it.');
+    }
+    return out;
+  }
+
+  function coverSetup(L) {
+    if (!L) return null;
+    return {
+      k: 'Land cover',
+      v: [L.centre + ' at the pin'].concat(
+        L.mix.slice(0, 4).map(function (m) { return Math.round(m.share * 100) + '% ' + m.group; })
+      ).concat(['NLCD 2021, sampled over ' + Math.round(L.ringM) + ' m'])
+    };
   }
 
   function terrainSetup(T) {
@@ -691,6 +763,7 @@
 
   global.OG.guide = {
     terrainNotes: terrainNotes, terrainSetup: terrainSetup,
+    coverNotes: coverNotes, coverSetup: coverSetup,
     plan: plan, outlook: outlook, placeLabel: placeLabel,
     activityCurve: activityCurve, peakWindow: peakWindow, dateFor: dateFor,
     hatchForecast: hatchForecast

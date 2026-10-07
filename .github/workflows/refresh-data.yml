@@ -36,6 +36,10 @@ jobs:
         if: github.event_name != 'push'
         run: node ingest/ingest.mjs
 
+      - name: Pull SNODAS snow
+        if: github.event_name != 'push'
+        run: node ingest/snodas.mjs
+
       # The grid must be complete. A short file means a batch failed, and a
       # partial grid misaligns every index the app reads without erroring.
       - name: Sanity check
@@ -52,7 +56,7 @@ jobs:
         run: |
           git config user.name  'omniguide-bot'
           git config user.email 'omniguide-bot@users.noreply.github.com'
-          git add js/wx-grid.js js/gauges.js
+          git add js/wx-grid.js js/gauges.js js/snow.js
           git diff --staged --quiet || git commit -m "data: refresh forecast $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
           git push
 

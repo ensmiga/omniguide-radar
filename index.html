@@ -794,6 +794,12 @@
   .calcrow.calcsum { background: var(--surface); font-weight: 600; }
   .calcrow.calcsum .c-c { color: var(--accent); }
 
+  .flylist { display: grid; gap: 7px; }
+  .flyrow { padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
+  .fly-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .fly-name { font-family: var(--disp); font-size: 15px; font-weight: 600; }
+  .fly-size { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+  .fly-why { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
   .shoprow { padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
   .shop-link { font-family: var(--disp); font-size: 15px; font-weight: 600; color: var(--accent); text-decoration: none; }
   .shop-link:hover { text-decoration: underline; }
@@ -1103,10 +1109,14 @@
 <script src="js/models.js"></script>
 <script src="js/regs.js"></script>
 <script src="js/dist.js"></script>
+<script src="js/snow.js"></script>
+<script src="js/snowfield.js"></script>
 <script src="js/gauges.js"></script>
 <script src="js/gaugefield.js"></script>
 <script src="js/flyshops.js"></script>
+<script src="js/patterns.js"></script>
 <script src="js/terrain.js"></script>
+<script src="js/landcover.js"></script>
 <script src="js/guide.js"></script>
 <script src="js/normals.js"></script>
 <script src="js/planner.js"></script>

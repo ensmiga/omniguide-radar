@@ -345,6 +345,19 @@
     var pressTrend = c.P - a.P;                          // hPa per 3 hours
 
     var snowDepth = clamp01(a.SD / 0.8);                 // feet, 10 inches reads as full cover
+    var snowObserved = false, snowInches = a.SD * 12;
+
+    /* SNODAS assimilates observations, so for today it beats the forecast
+       model's own snow field. It does not predict, so only today. */
+    var SN = global.OG.snow;
+    if (SN && SN.available() && t < 1) {
+      var mm = SN.depthMm(lon, lat);
+      if (mm != null) {
+        snowInches = mm / 25.4;
+        snowDepth = clamp01(snowInches / 10);
+        snowObserved = true;
+      }
+    }
     var meanT = (tempF + tempPrev) / 2;
     var freeze = clamp01((30 - meanT) / 13) * (seasonalIndex(doy) < 0.15 ? 1 : 0.2);
     freeze = clamp01(freeze + snowDepth * 0.25);
@@ -386,7 +399,7 @@
       cloud: clamp01(a.CC / 100), precip: clamp01(a.PR / 0.08),
       snow: clamp01(a.SF / 0.4), snowDepth: snowDepth,
       freeze: freeze, waterTemp: waterTemp, flowIdx: flowIdx, flowReal: flowReal,
-      gauge: gaugeInfo,
+      gauge: gaugeInfo, snowObserved: snowObserved, snowInches: snowInches,
       frontal: frontal, elev: hb.elev, seas: seasonalIndex(doy), real: true,
       precipIn: a.PR, snowDepthFt: a.SD
     };

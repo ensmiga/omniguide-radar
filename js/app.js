@@ -404,18 +404,30 @@
     root.appendChild(recSec);
 
     if (global.OG.terrain) {
-      global.OG.terrain.analyse(lon, lat).then(function (T) {
+      Promise.all([
+        global.OG.terrain.analyse(lon, lat),
+        global.OG.landcover ? global.OG.landcover.analyse(lon, lat) : Promise.resolve(null)
+      ]).then(function (res) {
+        var T = res[0], L = res[1];
         if (!tSlot.isConnected) return;
         tSlot.innerHTML = '';
-        if (!T) {
-          tSlot.appendChild(el('p', 'note', 'Elevation data could not be reached, so the advice above ' +
-            'is based on the regional habitat model rather than the ground at this point.'));
+        if (!T && !L) {
+          tSlot.appendChild(el('p', 'note', 'Elevation and land cover could not be reached, so the ' +
+            'advice above is based on the regional habitat model rather than the ground at this point.'));
           return;
         }
-        var notes = guide.terrainNotes(T, sc, plan.species) || [];
-        notes.forEach(function (n) { tSlot.appendChild(el('p', null, n)); });
-        var extra = guide.terrainSetup(T);
-        if (extra) tSlot.appendChild(kvList([extra]));
+        (guide.terrainNotes(T, sc, plan.species) || []).forEach(function (n) {
+          tSlot.appendChild(el('p', null, n));
+        });
+        (guide.coverNotes(L, sc, plan.species) || []).forEach(function (n) {
+          tSlot.appendChild(el('p', null, n));
+        });
+        var rows = [];
+        var ts = guide.terrainSetup(T);
+        var cs = guide.coverSetup(L);
+        if (ts) rows.push(ts);
+        if (cs) rows.push(cs);
+        if (rows.length) tSlot.appendChild(kvList(rows));
       });
     }
 
@@ -446,6 +458,30 @@
         });
       hsec.appendChild(fr);
       root.appendChild(hsec);
+
+      /* Subsurface patterns for this water. Established flies, seasonally
+         filtered - deliberately distinct from "what is working today",
+         which is what the shop links are for. */
+      if (plan.body.subs && plan.body.subs.patterns.length) {
+        var subSec = section('Subsurface patterns that produce here');
+        var sl = el('div', 'flylist');
+        plan.body.subs.patterns.forEach(function (p) {
+          var row = el('div', 'flyrow');
+          var top = el('div', 'fly-top');
+          top.appendChild(el('span', 'fly-name', p.f));
+          top.appendChild(el('span', 'fly-size', p.s));
+          row.appendChild(top);
+          row.appendChild(el('div', 'fly-why', p.w));
+          sl.appendChild(row);
+        });
+        subSec.appendChild(sl);
+        subSec.appendChild(el('p', 'note', plan.body.subs.named
+          ? 'Established patterns for ' + plan.body.subs.water + ', filtered to this month. ' +
+            'These are what reliably works here, not a report of what came off yesterday.'
+          : 'No water-specific list for this reach, so these are the defaults for a ' +
+            (sc.hab.waterCls || 'freestone') + '. Check with a local shop.'));
+        root.appendChild(subSec);
+      }
 
       /* Local shops. Linked and credited, never copied - the report is
          theirs and so is the traffic. */
