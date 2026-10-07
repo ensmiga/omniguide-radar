@@ -469,16 +469,16 @@
      below the same basin in September. Regenerate with tools/calibrate.js
      after changing any species model. */
   var CAL = {
-    'ducks':        [10.4, 58.8],
-    'canada-goose': [10.2, 59.4],
-    'elk':          [24.3, 81.4],
-    'whitetail':    [19.2, 67.1],
-    'muledeer':     [21.5, 71.5],
-    'moose':        [18.7, 68.8],
-    'pronghorn':    [22.0, 55.7],
-    'turkey':       [28.5, 66.9],
-    'upland':       [21.9, 77.6],
-    'trout':        [28.6, 77.6]
+    'ducks':        [10.9, 52.7],
+    'canada-goose': [11.1, 53.3],
+    'elk':          [22.3, 67.7],
+    'whitetail':    [19.7, 65.8],
+    'muledeer':     [20.7, 61.9],
+    'moose':        [18.9, 67.1],
+    'pronghorn':    [22.9, 74.8],
+    'turkey':       [30.4, 62.7],
+    'upland':       [22.6, 79.0],
+    'trout':        [28.9, 76.8]
   };
   var CAL_LO = 8, CAL_HI = 94;   // the scores those two anchors map to
 
