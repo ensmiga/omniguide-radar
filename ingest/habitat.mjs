@@ -129,7 +129,11 @@ const TAXA = {
               'Alectoris chukar', 'Perdix perdix', 'Tympanuchus cupido'],
   waterfowl: ['Anas platyrhynchos', 'Anas acuta', 'Mareca americana', 'Spatula discors',
               'Aythya affinis', 'Aythya valisineria', 'Anas crecca', 'Mareca strepera',
-              'Branta canadensis', 'Anser caerulescens'],
+              'Branta canadensis', 'Anser caerulescens',
+              /* The bird the Bighorn check said was missing: 1056
+                 records there against 279 pintail, and the one you
+                 would actually decoy on a cold tailwater. */
+              'Bucephala clangula'],
   trout:     ['Oncorhynchus mykiss', 'Salmo trutta', 'Salvelinus fontinalis',
               'Oncorhynchus clarkii']
 };
@@ -685,13 +689,27 @@ async function main() {
       }
       s *= elevFactor(ev.meanFt[k], band);
       if (satK) s = 1 - Math.exp(-satK * s);
-      if (sp === 'trout') s *= cold[k];
+      /* Coldwater is applied to the finished value rather than to
+         the land-cover term, so a cold creek with almost no mapped
+         water still clears the floor. */
 
       /* Presence gate. Full weight once the species is as common here as
          it is anywhere; a long toe so a cell just outside the recorded
          range is reduced rather than erased. */
       const pres = clamp01(Math.pow(clamp01(share[k] / p97), 0.45));
-      vals[k] = Math.round(clamp01(s * (0.12 + 0.88 * pres)) * 255);
+      /* For most species the land cover is the evidence and the
+         occurrence record is the gate. For a fish in a small stream
+         it is the other way round: Penns Creek and the Battenkill
+         are 20 m wide, invisible to a 30 m land-cover raster
+         averaged over 11 km, and both came out blank on the first
+         build while the records say plainly that trout are there.
+         So trout leans on presence and treats water cover as a
+         bonus, which is the honest reading of what each source
+         actually knows. */
+      const v = sp === 'trout'
+        ? (0.35 + 0.65 * s) * pres * cold[k]
+        : s * (0.12 + 0.88 * pres);
+      vals[k] = Math.round(clamp01(v) * 255);
     }
     out[sp] = Buffer.from(vals).toString('base64');
     let above = 0;

@@ -261,6 +261,10 @@
       credit: 'Esri, Maxar, Earthstar Geographics',
       maxZoom: 18, premium: true
     },
+    waterways: {
+      name: 'Waterways', url: null, credit: 'Natural Earth, NLCD 2021',
+      maxZoom: 0, premium: false, water: true
+    },
     none: { name: 'No basemap', url: null, credit: null, maxZoom: 0, premium: false }
   };
 
@@ -603,7 +607,9 @@
 
     this.drawField(layer, spId, t, day, ent);
 
-    if (!tiles) this.drawHydro(win);
+    var waterMode = (this.app.state.basemap || 'relief') === 'waterways';
+    if (waterMode) this.drawWaterways(win);
+    else if (!tiles) this.drawHydro(win);
     if (this.view.zoom > 22) this.drawCounties(win);
     this.drawLand(null, theme.border, this.view.zoom > 25 ? 1.2 : 0.9);
 
@@ -624,6 +630,103 @@
 
   /* Rivers and lakes. For a waterfowl product the water is not decoration -
      it is the thing being hunted, so it draws over the heat, not under it. */
+  /* Fluorescent orange water on a dark ground. */
+  var WW_GROUND = 'rgba(11,13,16,0.90)';
+  var WW_AREA = [255, 122, 26];
+  var WW_LINE = '#FF7A1A';
+  var WW_GLOW = 'rgba(255,122,26,0.55)';
+
+  Radar.prototype.drawWaterways = function (win) {
+    var ctx = this.ctx, p = this._pt, z = this.view.zoom;
+
+    /* Knock the basemap and relief back so the water is the only
+       thing with any colour in it. */
+    ctx.save();
+    ctx.fillStyle = WW_GROUND;
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    /* Areal water from land cover. A centreline cannot tell you that
+       a bottom is a mile of braided channel and flooded timber, and
+       that is exactly the ground worth finding. */
+    var ow = global.OG.openwater;
+    if (ow && ow.cover) {
+      var step = z < 14 ? 0.1 : z < 30 ? 0.05 : 0.025;
+      var lon0 = Math.floor(win.lon0 / step) * step;
+      var lat0 = Math.floor(win.lat0 / step) * step;
+      for (var la = lat0; la <= win.lat1 + step; la += step) {
+        for (var lo = lon0; lo <= win.lon1 + step; lo += step) {
+          var c = ow.cover(lo + step / 2, la + step / 2);
+          if (!c) continue;
+          var v = c.water + 0.40 * c.wetland;
+          if (v < 0.02) continue;
+          /* Proportional from nothing, with no floor. A constant
+             base alpha put a wash of orange on every cell holding
+             so much as a farm pond, which is most of the country
+             east of the hundredth meridian - the whole eastern
+             half came out solid. */
+          var a = Math.min(0.82, Math.max(0, (v - 0.02) * 2.6));
+          if (a < 0.02) continue;
+          var w0 = geo.project(lo, la, [0, 0]);
+          this.toScreen(w0[0], w0[1], p);
+          var x0 = p[0], y0 = p[1];
+          var w1 = geo.project(lo + step, la + step, [0, 0]);
+          this.toScreen(w1[0], w1[1], p);
+          ctx.fillStyle = 'rgba(' + WW_AREA[0] + ',' + WW_AREA[1] + ',' + WW_AREA[2] + ',' + a.toFixed(3) + ')';
+          ctx.fillRect(Math.min(x0, p[0]) - 0.5, Math.min(y0, p[1]) - 0.5,
+                       Math.abs(p[0] - x0) + 1, Math.abs(p[1] - y0) + 1);
+        }
+      }
+    }
+
+    /* Lakes and rivers over the top, with a glow so a thin trunk
+       river still reads when the whole country is on screen. */
+    var maxRank = z < 13 ? 4 : z < 22 ? 6 : z < 42 ? 8 : z < 75 ? 10 : 99;
+    var lakes = geo.lakes, i, k, ring;
+    ctx.shadowColor = WW_GLOW;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = WW_LINE;
+    for (i = 0; i < lakes.length; i++) {
+      var lb = lakes[i].bbox;
+      if (lb[2] < win.lon0 || lb[0] > win.lon1 || lb[3] < win.lat0 || lb[1] > win.lat1) continue;
+      if (lakes[i].rank > maxRank + 2) continue;
+      ring = lakes[i].w;
+      ctx.beginPath();
+      this.toScreen(ring[0], ring[1], p);
+      ctx.moveTo(p[0], p[1]);
+      for (k = 2; k < ring.length; k += 2) {
+        this.toScreen(ring[k], ring[k + 1], p);
+        ctx.lineTo(p[0], p[1]);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    var rivers = geo.rivers;
+    ctx.strokeStyle = WW_LINE;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (var pass = 0; pass < 2; pass++) {
+      var lo2 = pass === 0 ? 0 : 6, hi2 = pass === 0 ? 5 : maxRank;
+      ctx.lineWidth = pass === 0 ? Math.max(1.6, z / 26) : Math.max(0.9, z / 46);
+      ctx.beginPath();
+      for (i = 0; i < rivers.length; i++) {
+        var rv = rivers[i];
+        if (rv.rank < lo2 || rv.rank > hi2) continue;
+        var b = rv.bbox;
+        if (b[2] < win.lon0 || b[0] > win.lon1 || b[3] < win.lat0 || b[1] > win.lat1) continue;
+        var pts = rv.w;
+        this.toScreen(pts[0], pts[1], p);
+        ctx.moveTo(p[0], p[1]);
+        for (k = 2; k < pts.length; k += 2) {
+          this.toScreen(pts[k], pts[k + 1], p);
+          ctx.lineTo(p[0], p[1]);
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
   Radar.prototype.drawHydro = function (win) {
     var ctx = this.ctx, p = this._pt, z = this.view.zoom, th = this.app.theme();
     var maxRank = z < 13 ? 4 : z < 22 ? 6 : z < 42 ? 8 : z < 75 ? 10 : 99;

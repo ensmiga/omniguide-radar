@@ -131,7 +131,8 @@
     'Aythya valisineria': { name: 'canvasback decoys', why: 'divers are a real share here' },
     'Anas crecca': { name: 'green-wing teal', why: 'common here' },
     'Mareca strepera': { name: 'gadwall', why: 'well represented here' },
-    'Branta canadensis': { name: 'honker floaters', why: 'geese use this water too' }
+    'Branta canadensis': { name: 'honker floaters', why: 'geese use this water too' },
+    'Bucephala clangula': { name: 'goldeneye decoys', why: 'divers hold on this water late' }
   };
 
   function secondSpecies(sc) {

@@ -2542,7 +2542,7 @@
     /* Basemap. Satellite is a Pro layer: imagery is what lets someone pick a
        slough or a field edge out by eye, so it is worth paying for. */
     var bmBtn = $('#btn-basemap');
-    var BM_CYCLE = ['relief', 'satellite', 'none'];
+    var BM_CYCLE = ['relief', 'satellite', 'waterways', 'none'];
     function bmLabel() {
       var k = App.state.basemap;
       return k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite' : 'No base';
@@ -2576,7 +2576,8 @@
        imagery needs to show through far more than a relief shade does. */
     App.autoOpacity = function () {
       if (App._opTouched) return;
-      var d = App.state.basemap === 'satellite' ? 38 : App.state.basemap === 'none' ? 85 : 62;
+      var d = App.state.basemap === 'satellite' ? 38 : App.state.basemap === 'none' ? 85
+        : App.state.basemap === 'waterways' ? 30 : 62;
       opIn.value = String(d);
       var snapped = parseInt(opIn.value, 10);   // the step may round it
       opVal.textContent = snapped + "%";
@@ -2592,7 +2593,8 @@
     layerRail.appendChild(el('div', 'layer-grp', 'Base map'));
     var bmBtns = {};
     BM_CYCLE.forEach(function (k) {
-      var b = el('button', 'layerbtn', k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite' : 'None');
+      var b = el('button', 'layerbtn', k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite'
+        : k === 'waterways' ? 'Waterways' : 'None');
       if (k === 'satellite') b.appendChild(el('span', 'pro-tag', 'Pro'));
       b.dataset.basemap = k;
       b.addEventListener('click', function () { setBasemap(k); });
