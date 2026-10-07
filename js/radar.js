@@ -841,7 +841,13 @@
      Each particle keeps a trail. Drawing a single frame-step per
      particle put 260 sub-pixel dashes on the canvas and read as
      nothing at all. */
-  var TRAIL = 20;
+  /* Trail length is a duration, not a count of frames: 30 samples at
+     125 ms is just under four seconds of travel. Slowing the drift down
+     shortens a fixed-duration trail, so the two have to be tuned
+     together - at a 34 second crossing this is about a tenth of the
+     screen, which reads as a streamline rather than a dash. */
+  var TRAIL = 30;
+  var TRAIL_DT = 0.125;
 
   /* Seconds since the last flow frame, clamped so a tab that was
      backgrounded does not teleport every particle on its first frame
@@ -852,6 +858,67 @@
     var dt = self._flowLast ? (now - self._flowLast) / 1000 : 0.016;
     self._flowLast = now;
     return dt > 0.12 ? 0.12 : dt;
+  }
+
+  /* A coarse, smoothed direction field over the visible window.
+
+     Rebuilt only when the view, the time or the species changes, so
+     this is a handful of samples every few seconds rather than per
+     particle per frame. Components, not angles: averaging 350 and 10
+     degrees as numbers gives 180, which points backwards. */
+  var FF_NX = 26, FF_NY = 18;
+
+  function buildFlowField(win, bearingAt) {
+    var nx = FF_NX, ny = FF_NY;
+    var u = new Float32Array(nx * ny), v = new Float32Array(nx * ny);
+    var dlon = (win.lon1 - win.lon0) / (nx - 1);
+    var dlat = (win.lat1 - win.lat0) / (ny - 1);
+    var i, j, k;
+    for (j = 0; j < ny; j++) {
+      for (i = 0; i < nx; i++) {
+        var b = bearingAt(win.lon0 + i * dlon, win.lat0 + j * dlat);
+        var r = (b + 180) * Math.PI / 180;         // travelling with it
+        k = j * nx + i;
+        u[k] = Math.sin(r); v[k] = Math.cos(r);
+      }
+    }
+    /* Two passes of a 3x3 mean. Enough to pull the synoptic shape out
+       of the noise without flattening a real frontal wind shift. */
+    for (var pass = 0; pass < 2; pass++) {
+      var nu = new Float32Array(nx * ny), nv = new Float32Array(nx * ny);
+      for (j = 0; j < ny; j++) {
+        for (i = 0; i < nx; i++) {
+          var su = 0, sv = 0, n = 0;
+          for (var dj = -1; dj <= 1; dj++) {
+            for (var di = -1; di <= 1; di++) {
+              var x = i + di, y = j + dj;
+              if (x < 0 || y < 0 || x >= nx || y >= ny) continue;
+              su += u[y * nx + x]; sv += v[y * nx + x]; n++;
+            }
+          }
+          nu[j * nx + i] = su / n; nv[j * nx + i] = sv / n;
+        }
+      }
+      u = nu; v = nv;
+    }
+    return { nx: nx, ny: ny, u: u, v: v,
+             lon0: win.lon0, lat0: win.lat0, dlon: dlon, dlat: dlat };
+  }
+
+  /* Bilinear, so a particle crossing a cell boundary does not kink. */
+  function sampleFlow(f, lon, lat, out) {
+    var fx = (lon - f.lon0) / f.dlon, fy = (lat - f.lat0) / f.dlat;
+    var x0 = Math.floor(fx), y0 = Math.floor(fy);
+    if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0;
+    if (x0 > f.nx - 2) x0 = f.nx - 2;
+    if (y0 > f.ny - 2) y0 = f.ny - 2;
+    var tx = fx - x0, ty = fy - y0;
+    if (tx < 0) tx = 0; if (tx > 1) tx = 1;
+    if (ty < 0) ty = 0; if (ty > 1) ty = 1;
+    var a = y0 * f.nx + x0, b = a + 1, c = a + f.nx, d = c + 1;
+    out[0] = (f.u[a] * (1 - tx) + f.u[b] * tx) * (1 - ty) + (f.u[c] * (1 - tx) + f.u[d] * tx) * ty;
+    out[1] = (f.v[a] * (1 - tx) + f.v[b] * tx) * (1 - ty) + (f.v[c] * (1 - tx) + f.v[d] * tx) * ty;
+    return out;
   }
 
   /* Ease a heading toward a target the short way round the circle. */
@@ -873,7 +940,7 @@
        particle takes about eighteen seconds to cross the screen at
        neutral speed. */
     var dt = flowDt(this);
-    var crossSec = 18;
+    var crossSec = 34;
     var baseDegPerSec = spanLon / crossSec;
 
     var cLon = (win.lon0 + win.lon1) / 2, cLat = (win.lat0 + win.lat1) / 2;
@@ -885,13 +952,28 @@
       }
     } catch (e) { migBearing = null; }
 
+    /* One smoothed field for every particle, rebuilt only when the
+       view, the hour or the species changes. */
+    var fkeyS = [win.lon0.toFixed(2), win.lat0.toFixed(2), win.lon1.toFixed(2),
+                 win.lat1.toFixed(2), t.toFixed(3), spId, migBearing].join('|');
+    if (this._ffKey !== fkeyS) {
+      this._ffKey = fkeyS;
+      this._ff = buildFlowField(win, function (lo, la) {
+        if (migBearing != null) return migBearing;
+        return env.conditions(lo, la, t, doy).windFrom;
+      });
+    }
+    var ff = this._ff;
+    if (!this._fuv) this._fuv = [0, 0];
+    var fuv = this._fuv;
+
     if (!this.mparticles) this.mparticles = [];
     var ps = this.mparticles;
     while (ps.length < 220) {
       ps.push({
         lon: win.lon0 + Math.random() * spanLon,
         lat: win.lat0 + Math.random() * (win.lat1 - win.lat0),
-        age: Math.random() * 11,
+        age: Math.random() * 16,
         hist: []
       });
     }
@@ -904,26 +986,19 @@
       var v = this.fieldAt(q.lon, q.lat, false);
       var alive = v === v && v > 0;
 
-      var fromDeg, mult;
-      if (migBearing != null) {
-        fromDeg = migBearing;
-        mult = 0.9;
-      } else {
-        /* Sampled on a quarter degree so a particle is not re-reading a
-           slightly different noise value every frame. */
-        var sl = Math.round(q.lon * 4) / 4, sa = Math.round(q.lat * 4) / 4;
-        var w = env.conditions(sl, sa, t, doy);
-        fromDeg = w.windFrom;
-        mult = 0.5 + Math.min(1.1, w.windSpd / 22);
-      }
-      var dirTo = (fromDeg + 180) * Math.PI / 180;
+      /* Heading straight off the smoothed field, so neighbouring
+         particles agree and the whole thing reads as one flow. */
+      sampleFlow(ff, q.lon, q.lat, fuv);
+      var dirTo = Math.atan2(fuv[0], fuv[1]);
 
-      /* Turn through the new heading rather than snapping to it. The
-         wind field has roughly forty degrees of noise in it, and
-         reading it raw every frame is what made the paths jitter. */
+      /* Length of the smoothed vector says how much the local
+         directions agreed: near 1 where the flow is organised, near 0
+         where it was cancelling itself out. Slow down in the mush
+         rather than darting about in it. */
+      var coh = Math.sqrt(fuv[0] * fuv[0] + fuv[1] * fuv[1]);
       if (q.hdg == null) q.hdg = dirTo;
-      q.hdg = easeHeading(q.hdg, dirTo, dt * 0.9);
-      var step = baseDegPerSec * mult * dt;
+      q.hdg = easeHeading(q.hdg, dirTo, dt * 1.4);
+      var step = baseDegPerSec * (0.35 + 0.85 * coh) * dt;
 
       /* History on a clock rather than per frame. Recording one point a
          frame ties the trail length to the frame rate and to the speed,
@@ -931,7 +1006,7 @@
          stub. At one sample every 70 ms a 20 point trail is about one
          and a half seconds of travel whatever the frame rate. */
       q.acc = (q.acc || 0) + dt;
-      if (q.acc >= 0.07) {
+      if (q.acc >= TRAIL_DT) {
         q.acc = 0;
         q.hist.push(q.lon, q.lat);
         if (q.hist.length > TRAIL * 2) q.hist.splice(0, q.hist.length - TRAIL * 2);
@@ -941,7 +1016,7 @@
       q.lon += step * Math.sin(q.hdg) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
       q.age += dt;
 
-      if (q.age > 11 || q.lat < win.lat0 || q.lat > win.lat1 ||
+      if (q.age > 16 || q.lat < win.lat0 || q.lat > win.lat1 ||
           q.lon < win.lon0 || q.lon > win.lon1) {
         q.lon = win.lon0 + Math.random() * spanLon;
         q.lat = win.lat0 + Math.random() * (win.lat1 - win.lat0);
@@ -953,8 +1028,8 @@
       if (!alive || q.hist.length < 4) continue;
 
       var str = Math.min(1, Math.max(0, (v - 8) / 45));
-      var fade = Math.sin(Math.min(1, q.age / 11) * Math.PI);
-      ctx.strokeStyle = 'rgba(240,140,30,' + (0.30 + 0.55 * fade * str).toFixed(3) + ')';
+      var fade = Math.sin(Math.min(1, q.age / 16) * Math.PI);
+      ctx.strokeStyle = 'rgba(240,140,30,' + (0.34 + 0.52 * fade * str).toFixed(3) + ')';
       ctx.lineWidth = 1.3 + 2.0 * str;
       ctx.beginPath();
       var w0 = geo.project(q.hist[0], q.hist[1], [0, 0]);
@@ -1336,7 +1411,7 @@
     var dt = flowDt(this);
     /* Slower than the movement flow. Migration is a seasonal process
        and a frantic one reads as weather. */
-    var baseDegPerSec = spanLon / 26;
+    var baseDegPerSec = spanLon / 42;
 
     if (!this.particles) this.particles = [];
     var ps = this.particles;
@@ -1363,10 +1438,10 @@
       var step = baseDegPerSec * (0.55 + Math.min(1.0, inten / 45)) * dt;
 
       q.acc = (q.acc || 0) + dt;
-      if (q.acc >= 0.07) {
+      if (q.acc >= TRAIL_DT) {
         q.acc = 0;
         q.hist.push(q.lon, q.lat);
-        if (q.hist.length > 48) q.hist.splice(0, q.hist.length - 48);
+        if (q.hist.length > 60) q.hist.splice(0, q.hist.length - 60);
       }
 
       q.lat += step * Math.cos(q.hdg);
