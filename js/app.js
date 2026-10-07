@@ -187,6 +187,7 @@
 
   var LAYERS = [
     { id: 'opportunity', name: 'Opportunity', desc: 'Overall OmniGuide Opportunity Score' },
+    { id: 'day', name: 'Day rating', desc: 'How today ranks against the rest of the season in each place' },
     { id: 'movement', name: 'Movement', desc: 'Expected local animal activity' },
     { id: 'migration', name: 'Migration', desc: 'Expected migratory movement' },
     { id: 'newbird', name: 'New birds', desc: 'Probability fresh birds are arriving' },
@@ -398,8 +399,10 @@
       spotRow.appendChild(sdot);
       spotRow.appendChild(el('span', 'spot-n', 'Spot ' + sc.opportunity));
       spotRow.appendChild(el('span', 'spot-b', band(sc.opportunity)));
+      /* "better than N%" rather than "top N%", which reads as praise even
+         when the cell is in the bottom third. */
       spotRow.appendChild(el('span', 'spot-x', np
-        ? 'top ' + Math.max(1, Math.round(100 * (1 - np.pct))) + '% of the country for ' +
+        ? 'better than ' + Math.round(100 * np.pct) + '% of the country for ' +
           plan.species.name.toLowerCase() + ' today — this is the number the map colours'
         : 'how this place ranks nationally today'));
       root.appendChild(spotRow);
@@ -2450,7 +2453,9 @@
           vn.textContent = wxl ? (wxl.digits ? v.toFixed(wxl.digits) : Math.round(v)) : Math.round(v);
           vn.style.color = wxl ? '' : radarNS.rampCSS(v / 100, 1);
           hov.querySelector('.hv-lab').textContent = wxl ? wxl.name + ' ' + wxl.unit
-            : App.state.layer === 'legal' ? 'Season' : band(Math.round(v));
+            : App.state.layer === 'legal' ? 'Season'
+            : App.state.layer === 'day' ? band(Math.round(v)) + ' day here'
+            : band(Math.round(v));
         }
       });
     });

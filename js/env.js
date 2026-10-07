@@ -269,12 +269,38 @@
     var pronghorn = clamp01(g.pronghorn * 0.95 * (0.5 + 0.6 * openness) +
                             (detail - 0.5) * 0.12);
 
+    /* REAL HABITAT OVERRIDE.
+
+       Everything above this point is invented - Gaussian blobs over fractal
+       noise, which is why White River, Colorado used to read 19 out of 100
+       for elk. Where the baked raster covers the point (NLCD land cover and
+       elevation for quality, GBIF occurrence share for presence, 11 km) its
+       value wins outright. The synthetic surface stays as the fallback for
+       points off the grid and for the case where the raster has not loaded,
+       because a missing file should not read as "no animals here".
+
+       Trout is not in the raster: it is a water property, not a land-cover
+       one, and it keeps the hydrology-driven surface above. */
+    var hg = global.OG && global.OG.habgrid;
+    var realSrc = {};
+    if (hg && hg.ready) {
+      var r;
+      if ((r = hg.at('waterfowl', lon, lat)) != null) { wf = r; realSrc.waterfowl = true; }
+      if ((r = hg.at('elk', lon, lat)) != null) { elk = r; realSrc.elk = true; }
+      if ((r = hg.at('whitetail', lon, lat)) != null) { whitetail = r; realSrc.whitetail = true; }
+      if ((r = hg.at('muledeer', lon, lat)) != null) { muledeer = r; realSrc.muledeer = true; }
+      if ((r = hg.at('moose', lon, lat)) != null) { moose = r; realSrc.moose = true; }
+      if ((r = hg.at('turkey', lon, lat)) != null) { turkey = r; realSrc.turkey = true; }
+      if ((r = hg.at('upland', lon, lat)) != null) { upland = r; realSrc.upland = true; }
+      if ((r = hg.at('pronghorn', lon, lat)) != null) { pronghorn = r; realSrc.pronghorn = true; }
+    }
+
     var out = {
       elev: elev, waterfowl: wf, trout: trout, elk: elk,
       whitetail: whitetail, muledeer: muledeer, moose: moose,
       turkey: turkey, upland: upland, pronghorn: pronghorn,
       cls: cls, region: region, water: tw, waterCls: tcls,
-      openness: openness
+      openness: openness, realHab: realSrc
     };
     if (habCache.size > 60000) habCache.clear();
     habCache.set(key, out);

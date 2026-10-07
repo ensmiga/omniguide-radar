@@ -1185,6 +1185,11 @@
 <script src="js/wx-grid.js"></script>
 <script src="js/geo.js"></script>
 <script src="js/wx.js"></script>
+<!-- The baked habitat raster and its reader load before env.js, which
+     consults them inside habitat() and falls back to its own synthetic
+     surface if either is missing. -->
+<script src="js/habitat-grid.js"></script>
+<script src="js/habgrid.js"></script>
 <script src="js/env.js"></script>
 <script src="js/models.js"></script>
 <script src="js/regs.js"></script>

@@ -744,6 +744,102 @@
     };
   }
 
+  /* The Day score as a national map layer.
+
+     dayScore above samples a point's whole season, which is right for one
+     pin and far too expensive for a field - a screen lattice would be most
+     of a million scoreAt calls. This computes it on a 1 degree lattice from
+     at most 14 baseline days and lets the renderer interpolate, which is
+     honest for this quantity: Day is driven by weather anomalies, and
+     weather anomalies are synoptic. It is a 100 km picture of where today
+     is unusually good, not a statement about a particular ridge. */
+
+  var dayFieldCache = {}, seasonByState = {};
+
+  /* Season days cached per state rather than per point. Zone splits are
+     ignored here - at 1 degree the lattice is coarser than the zones. */
+  function stateSeasonDays(lon, lat, spId) {
+    var si = geo.stateIndexAt(lon, lat);
+    if (si < 0) return null;
+    var key = si + ':' + spId;
+    if (seasonByState[key] !== undefined) return seasonByState[key];
+    var regs = global.OG.regs, open = [], any = false;
+    var d = new Date(); d.setHours(12, 0, 0, 0);
+    for (var k = -182; k <= 182; k += 6) {
+      var dt = new Date(d.getTime()); dt.setDate(dt.getDate() + k);
+      var c = regs.check(lon, lat, dt, spId);
+      if (c.status === 'UNKNOWN') continue;
+      any = true;
+      if (c.status === 'OPEN' || c.status === 'LIMITED') open.push(k);
+    }
+    var res;
+    if (!any || open.length < 5) {
+      res = [];
+      for (var j = -168; j <= 168; j += 28) res.push(j);
+    } else if (open.length > 14) {
+      /* Thin to 14 evenly spaced days across the season. */
+      res = [];
+      for (var q = 0; q < 14; q++) res.push(open[Math.floor(q * (open.length - 1) / 13)]);
+    } else res = open;
+    seasonByState[key] = res;
+    return res;
+  }
+
+  function dayField(spId, t) {
+    var tq = Math.round(t * 4) / 4;
+    var key = spId + ':' + tq;
+    if (dayFieldCache[key]) return dayFieldCache[key];
+
+    var LON0 = -125, LAT0 = 24, DD = 1, NX = 60, NY = 27;
+    var vals = new Float32Array(NX * NY);
+    for (var i = 0; i < vals.length; i++) vals[i] = NaN;
+
+    for (var iy = 0; iy < NY; iy++) {
+      for (var ix = 0; ix < NX; ix++) {
+        var lon = LON0 + ix * DD, lat = LAT0 + iy * DD;
+        if (geo.stateIndexAt(lon, lat) < 0) continue;
+        var here = scoreAt(lon, lat, tq, env.doyFor(tq), spId);
+        if (!here.inRange) continue;
+        var days = stateSeasonDays(lon, lat, spId);
+        if (!days || !days.length) continue;
+        var frac = tq - Math.floor(tq), below = 0, equal = 0, n = 0;
+        for (var q = 0; q < days.length; q++) {
+          var tt = days[q] + frac;
+          var sc = scoreAt(lon, lat, tt, env.doyFor(tt), spId);
+          if (!sc.inRange) continue;
+          n++;
+          if (sc.opportunity < here.opportunity) below++;
+          else if (sc.opportunity === here.opportunity) equal++;
+        }
+        if (!n) continue;
+        vals[iy * NX + ix] = clamp(1 + 98 * ((below + equal / 2) / n), 1, 99);
+      }
+    }
+
+    var field = {
+      at: function (lon, lat) {
+        var fx = (lon - LON0) / DD, fy = (lat - LAT0) / DD;
+        var x0 = Math.floor(fx), y0 = Math.floor(fy);
+        if (x0 < 0 || y0 < 0 || x0 + 1 >= NX || y0 + 1 >= NY) return NaN;
+        var tx = fx - x0, ty = fy - y0;
+        var a = vals[y0 * NX + x0], b = vals[y0 * NX + x0 + 1];
+        var c = vals[(y0 + 1) * NX + x0], d = vals[(y0 + 1) * NX + x0 + 1];
+        /* Any missing corner means the lattice is straddling an edge of the
+           range; fall back to the nearest value that exists rather than
+           painting a hole or interpolating against a NaN. */
+        var pool = [a, b, c, d].filter(function (v) { return v === v; });
+        if (!pool.length) return NaN;
+        if (pool.length < 4) return pool.reduce(function (p, v) { return p + v; }, 0) / pool.length;
+        return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+      }
+    };
+    /* One species-time at a time is all the map ever shows. */
+    var keys = Object.keys(dayFieldCache);
+    if (keys.length > 6) delete dayFieldCache[keys[0]];
+    dayFieldCache[key] = field;
+    return field;
+  }
+
   /* Where this score sits among every in-range cell in the country right now.
      Coarse on purpose - this is a one-line "top 6% in the country" claim, not
      a ranking, and it has to be cheap enough to run on every panel open. */
@@ -772,7 +868,7 @@
 
   global.OG.models = {
     SPECIES: SPECIES, byId: function (id) { return BY_ID[id]; },
-    scoreAt: scoreAt, dayScore: dayScore, nationalPct: nationalPct,
+    scoreAt: scoreAt, dayScore: dayScore, dayField: dayField, nationalPct: nationalPct,
     hourlyActivity: hourlyActivity,
     huntingPressure: huntingPressure, migration: migration
   };

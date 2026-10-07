@@ -448,6 +448,15 @@
         out = -1;                                     // locked: drawn as a flat preview
       } else if (layer === 'legal') {
         out = STATUS_ORDER[legalAt(lon, lat, spId, day)];
+      } else if (layer === 'day') {
+        /* Sampled from the coarse Day lattice rather than scored per cell -
+           see dayField in models.js for why 1 degree is the honest
+           resolution for this quantity. */
+        if (!regs.hasSeasonRecord(st.abbr, spId)) out = NaN;
+        else {
+          var dv = models.dayField(spId, t).at(lon, lat);
+          out = dv === dv ? dv : NaN;
+        }
       } else {
         var sc = models.scoreAt(lon, lat, t, env.doyFor(t), spId);
         if (!sc.inRange || !regs.hasSeasonRecord(st.abbr, spId)) out = NaN;
