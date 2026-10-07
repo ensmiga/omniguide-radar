@@ -912,74 +912,153 @@
          anything typed: a town, a county, a named river or raw coordinates.
          The datalist offers the presets without blocking free text. */
       var pick = el('div', 'frow');
+      /* A real dropdown rather than a datalist. A datalist filters its
+         options against whatever is already in the input, so with the
+         current location prefilled it matched nothing and opened empty.
+         This also lets the list look like the rest of the app. */
+      var combo = el('div', 'combo');
       var locIn = el('input');
       locIn.type = 'text';
       locIn.id = 'plan-loc';
-      locIn.setAttribute('list', 'plan-presets');
+      locIn.autocomplete = 'off';
       locIn.placeholder = 'Town, county, river, or 45.33, -107.95';
       locIn.value = target.name;
 
-      var dl = el('datalist');
-      dl.id = 'plan-presets';
-      if (st.selection) {
-        var oSel = el('option');
-        oSel.value = 'Current map selection';
-        dl.appendChild(oSel);
-      }
+      var caret = el('button', 'combo-caret');
+      caret.type = 'button';
+      caret.setAttribute('aria-label', 'Show saved and suggested locations');
+      caret.textContent = '▾';
+
+      var list = el('div', 'combo-list');
+      list.hidden = true;
+      var locMsg = el('div', 'loc-msg');
+
+      var entries = [];
+      if (st.selection) entries.push({ group: 'Map', label: 'Current map selection', kind: 'sel' });
       st.spots.forEach(function (s) {
-        var o = el('option');
-        o.value = s.name;
-        dl.appendChild(o);
+        entries.push({ group: 'Saved spots', label: s.name, kind: 'spot', spot: s });
       });
-      /* A few named complexes as a nudge toward what the field accepts. */
-      env.WF_REGIONS.slice(0, 8).concat(env.TROUT_WATERS.slice(0, 6)).forEach(function (r) {
-        var o = el('option');
-        o.value = r.n;
-        dl.appendChild(o);
+      env.WF_REGIONS.forEach(function (r) {
+        entries.push({ group: 'Waterfowl country', label: r.n, kind: 'place', lon: r.lon, lat: r.lat });
+      });
+      env.TROUT_WATERS.forEach(function (r) {
+        entries.push({ group: 'Trout water', label: r.n, kind: 'place', lon: r.lon, lat: r.lat });
       });
 
-      var locMsg = el('div', 'loc-msg');
+      var rowsEls = [], active = -1;
+
+      function choose(e) {
+        closeList();
+        plannerWeek = null;
+        if (e.kind === 'sel') { plannerWhere = null; renderPlannerPanel(); return; }
+        if (e.kind === 'spot') {
+          plannerWhere = { lon: e.spot.lon, lat: e.spot.lat, name: e.spot.name };
+        } else {
+          plannerWhere = { lon: e.lon, lat: e.lat, name: e.label };
+        }
+        renderPlannerPanel();
+      }
+
+      function buildList(filter) {
+        list.innerHTML = '';
+        rowsEls = [];
+        active = -1;
+        var f = (filter || '').trim().toLowerCase();
+        var lastGroup = null, shown = 0;
+        entries.forEach(function (e) {
+          if (f && e.label.toLowerCase().indexOf(f) < 0) return;
+          if (e.group !== lastGroup) {
+            list.appendChild(el('div', 'combo-grp', e.group));
+            lastGroup = e.group;
+          }
+          var b = el('button', 'combo-item', e.label);
+          b.type = 'button';
+          /* mousedown, because blur would close the list before a click. */
+          b.addEventListener('mousedown', function (ev) { ev.preventDefault(); choose(e); });
+          list.appendChild(b);
+          rowsEls.push(b);
+          shown++;
+        });
+        if (!shown) {
+          list.appendChild(el('div', 'combo-empty',
+            f ? 'No preset matches. Press Enter to search for it.' : 'Nothing saved yet.'));
+        }
+      }
+
+      function openList(filter) {
+        buildList(filter);
+        list.hidden = false;
+        caret.classList.add('on');
+      }
+      function closeList() {
+        list.hidden = true;
+        caret.classList.remove('on');
+      }
+      function setActive(i) {
+        if (active >= 0 && rowsEls[active]) rowsEls[active].classList.remove('on');
+        active = i;
+        if (active >= 0 && rowsEls[active]) {
+          rowsEls[active].classList.add('on');
+          rowsEls[active].scrollIntoView({ block: 'nearest' });
+        }
+      }
+
+      caret.addEventListener('mousedown', function (ev) {
+        ev.preventDefault();
+        if (list.hidden) { openList(''); locIn.focus(); } else closeList();
+      });
+      locIn.addEventListener('focus', function () { openList(''); locIn.select(); });
+      locIn.addEventListener('input', function () {
+        locMsg.textContent = '';
+        openList(locIn.value);
+      });
+      locIn.addEventListener('blur', function () { setTimeout(closeList, 120); });
 
       function applyLocation() {
         var v = locIn.value.trim();
         if (!v) return;
-
-        if (v.toLowerCase() === 'current map selection') {
-          if (!st.selection) { locMsg.textContent = 'No pin on the map yet.'; return; }
-          plannerWhere = null;
-          plannerWeek = null;
-          renderPlannerPanel();
-          return;
-        }
-        var saved = st.spots.filter(function (s) {
-          return s.name.toLowerCase() === v.toLowerCase();
+        var match = entries.filter(function (e) {
+          return e.label.toLowerCase() === v.toLowerCase();
         })[0];
-        if (saved) {
-          plannerWeek = null;
-          plannerWhere = { lon: saved.lon, lat: saved.lat, name: saved.name };
-          renderPlannerPanel();
-          return;
-        }
+        if (match) { choose(match); return; }
+
         var hit = resolvePlace(v);
         if (!hit) { locMsg.textContent = 'Could not find "' + v + '".'; return; }
         if (geo.stateIndexAt(hit.lon, hit.lat) < 0) {
           locMsg.textContent = '"' + hit.name + '" is outside the modelled region.';
           return;
         }
+        closeList();
         plannerWeek = null;
         plannerWhere = { lon: hit.lon, lat: hit.lat, name: hit.name };
         renderPlannerPanel();
       }
 
-      locIn.addEventListener('change', applyLocation);
       locIn.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); applyLocation(); }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (list.hidden) openList(locIn.value);
+          if (!rowsEls.length) return;
+          setActive(e.key === 'ArrowDown'
+            ? (active + 1) % rowsEls.length
+            : (active <= 0 ? rowsEls.length - 1 : active - 1));
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (!list.hidden && active >= 0 && rowsEls[active]) rowsEls[active].dispatchEvent(
+            new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+          else applyLocation();
+        } else if (e.key === 'Escape') {
+          closeList();
+        }
       });
+
+      combo.appendChild(locIn);
+      combo.appendChild(caret);
+      combo.appendChild(list);
 
       var fL = el('label', 'field');
       fL.appendChild(el('span', null, 'Location'));
-      fL.appendChild(locIn);
-      fL.appendChild(dl);
+      fL.appendChild(combo);
       fL.appendChild(locMsg);
 
       var spSel = el('select');
