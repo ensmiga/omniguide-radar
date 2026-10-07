@@ -100,18 +100,34 @@
 
   var wraw = global.US_WATER || null;
   var WG = wraw ? wraw.grid : null;
-  var wplane = undefined;
+  var wplane = undefined, wetplane = undefined;
+
+  function decode(name) {
+    try {
+      var bin = global.atob(wraw[name]);
+      var a = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      return a;
+    } catch (e) { return null; }
+  }
+
+  /* Raw land-cover fractions at a point. The habitat engine wants these
+     directly: for waterfowl, how much marsh and open water is actually
+     here is a far better question than how high up it is. */
+  function cover(lon, lat) {
+    if (!WG) return null;
+    if (wplane === undefined) wplane = decode('water');
+    if (wetplane === undefined) wetplane = decode('wetland');
+    if (!wplane || !wetplane) return null;
+    var ix = Math.floor((lon - WG.lon0) / WG.d), iy = Math.floor((lat - WG.lat0) / WG.d);
+    if (ix < 0 || iy < 0 || ix >= WG.nlon || iy >= WG.nlat) return null;
+    var k = iy * WG.nlon + ix;
+    return { water: wplane[k] / 255, wetland: wetplane[k] / 255 };
+  }
 
   function waterFrac(lon, lat) {
     if (!WG) return null;
-    if (wplane === undefined) {
-      try {
-        var bin = global.atob(wraw.water);
-        var a = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-        wplane = a;
-      } catch (e) { wplane = null; }
-    }
+    if (wplane === undefined) wplane = decode('water');
     if (!wplane) return null;
     var ix = Math.floor((lon - WG.lon0) / WG.d), iy = Math.floor((lat - WG.lat0) / WG.d);
     if (ix < 0 || iy < 0 || ix >= WG.nlon || iy >= WG.nlat) return null;
@@ -190,7 +206,7 @@
 
   global.OG = global.OG || {};
   global.OG.openwater = {
-    at: at,
+    at: at, cover: cover,
     /* Whether the strongest nearby evidence was a named tailwater, for
        the wording in the plan panel. Valid immediately after at(). */
     lastWasTailwater: function () { return !!lastTail; },

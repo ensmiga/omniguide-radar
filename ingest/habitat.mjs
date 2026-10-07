@@ -73,16 +73,27 @@ const SUIT = {
 };
 
 /* Elevation preference in feet: [zero below, full above, full below, zero
-   above]. Deliberately wide - this is a sanity bound, not the model. */
+   above]. A sanity bound, not the model.
+
+   These were first written against the old invented elevation surface,
+   which smoothed the high country down by a thousand feet and more. Once
+   real elevation went in they started biting far too early and punched
+   holes in exactly the best country: every cell in the Sawatch, the
+   Mosquito Range and the San Juans above 10500 ft read zero elk habitat
+   and dropped out of range entirely. Those are among the highest elk
+   densities on the continent. Elk, mule deer and dusky grouse all use
+   ground to treeline and above it in early season, so the upper taper
+   now sits where the animals actually stop rather than where a round
+   number felt about right. */
 const ELEV = {
-  elk:       [2000, 4500, 10500, 12500],
-  muledeer:  [500, 2500, 9500, 11500],
-  whitetail: [-100, 0, 6000, 9000],
-  moose:     [0, 500, 10000, 11500],
-  pronghorn: [1000, 3500, 8500, 10000],
-  turkey:    [-100, 0, 7500, 9500],
-  upland:    [-100, 0, 7000, 9000],
-  waterfowl: [-100, 0, 5000, 8000]
+  elk:       [1500, 4000, 11800, 13500],
+  muledeer:  [300, 2000, 11000, 13000],
+  whitetail: [-100, 0, 7500, 10000],
+  moose:     [0, 400, 11000, 12500],
+  pronghorn: [800, 3000, 10000, 11500],
+  turkey:    [-100, 0, 9500, 11000],
+  upland:    [-100, 0, 10500, 12000],
+  waterfowl: [-100, 0, 9500, 11800]
 };
 
 /* GBIF backbone names. Upland and waterfowl are groups, so they take

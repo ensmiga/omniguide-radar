@@ -244,7 +244,24 @@
       if (w > best) { best = w; if (w > 0.12) { cls = r.cls; region = r.n; } }
     }
     wf += (detail - 0.5) * 0.22;
-    wf *= clamp01(1.25 - elev / 7000);                   // ducks are not an alpine resource
+
+    /* Where there is actually marsh and open water, from NLCD. This
+       replaces an elevation damping that read 1.25 - elev/7000 and so
+       zeroed everything above 8750 ft. That rule took out Monte Vista
+       NWR in the San Luis Valley, North Park and Jackson Hole - all
+       high, all famous for ducks - because elevation cannot tell a
+       mountain marsh from a mountain. Cover can. */
+    var cov = (global.OG && global.OG.openwater && global.OG.openwater.cover)
+      ? global.OG.openwater.cover(lon, lat) : null;
+    if (cov) {
+      var marsh = clamp01(cov.wetland / 0.22);
+      var openw = clamp01(cov.water / 0.14);
+      wf = clamp01(0.45 * wf + 0.75 * clamp01(0.75 * marsh + 0.55 * openw));
+    }
+
+    /* A real alpine limit, well above the valleys. Rock and ice above
+       treeline hold nothing, and this is where that is true. */
+    wf *= clamp01((11800 - elev) / 2500);
     wf = clamp01(wf);
 
     var trout = 0, tw = null, tbest = 0, tcls = null;
@@ -258,7 +275,12 @@
     trout += clamp01((45 - lat) / 10) * 0 + (detail - 0.5) * 0.10;
     trout = clamp01(trout);
 
-    var elk = clamp01((elev - 4200) / 3200) * clamp01((10500 - elev) / 3000);
+    /* Upper limit raised from 10500 ft, which with real elevation in
+       place was zeroing the Sawatch, the Mosquito Range and the San
+       Juans - cells reading 10500 to 11600 ft that carry some of the
+       highest elk densities on the continent. Elk hold to treeline and
+       feed in alpine basins above it well into the early seasons. */
+    var elk = clamp01((elev - 4200) / 3200) * clamp01((13200 - elev) / 2800);
     elk *= 0.55 + 0.6 * corridor + 0.3 * (detail - 0.5);
     elk = clamp01(elk * 1.35);
 
