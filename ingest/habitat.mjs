@@ -315,19 +315,40 @@ async function taxonKey(name) {
    is a presence surface, not a census. The per-species normalisation
    below means a taxon that hits the cap is not penalised against one that
    does not. */
+function occurrenceURL(key, off, limit) {
+  return 'https://api.gbif.org/v1/occurrence/search?taxonKey=' + key +
+    '&country=US&hasCoordinate=true&hasGeospatialIssue=false' +
+    '&year=2015,2025&limit=' + limit + '&offset=' + off;
+}
+
 async function occurrences(key, grid, chron, taxonGrid) {
   const LIMIT = 300, MAXOFF = 30000, PAR = 8;
-  let off = 0, got = 0, end = false;
+  let off = 0, got = 0, end = false, lost = 0;
   while (!end && off < MAXOFF) {
     const batch = [];
     for (let i = 0; i < PAR && off + i * LIMIT < MAXOFF; i++) batch.push(off + i * LIMIT);
     off += PAR * LIMIT;
-    const pages = await Promise.all(batch.map((o) => getJSON(
-      'https://api.gbif.org/v1/occurrence/search?taxonKey=' + key +
-      '&country=US&hasCoordinate=true&hasGeospatialIssue=false' +
-      '&year=2015,2025&limit=' + LIMIT + '&offset=' + o).catch(() => null)));
+
+    let pages = await Promise.all(batch.map((o) =>
+      getJSON(occurrenceURL(key, o, LIMIT)).catch(() => null)));
+
+    /* Second pass over just the offsets that came back empty-handed.
+       getJSON has already retried each of these four times with
+       backoff, so this is a fifth through eighth attempt on a page
+       that is probably being throttled rather than one that does
+       not exist. Serial, to stop hammering a service that is
+       already struggling. */
+    for (let i = 0; i < pages.length; i++) {
+      if (pages[i] !== null) continue;
+      await sleep(1200);
+      pages[i] = await getJSON(occurrenceURL(key, batch[i], LIMIT)).catch(() => null);
+      if (pages[i] === null) lost++;
+    }
     for (const p of pages) {
-      if (!p || !p.results) { end = true; continue; }
+      /* A page we could not get is a hole in the sample, not the
+         bottom of it. Keep going; the loop still stops at MAXOFF. */
+      if (p === null) continue;
+      if (!p.results) { end = true; continue; }
       if (p.results.length === 0 || p.endOfRecords) end = true;
       for (const r of p.results) {
         const ix = Math.floor((r.decimalLongitude - LON0) / D);
@@ -349,7 +370,7 @@ async function occurrences(key, grid, chron, taxonGrid) {
       }
     }
   }
-  return got;
+  return { got: got, lost: lost };
 }
 
 /* ---------- coldwater ----------
@@ -617,9 +638,11 @@ async function main() {
       perTaxon[name] = new Float32Array(NCELL);
       const key = await taxonKey(name);
       if (!chronology[name]) chronology[name] = new Float64Array(CHRON_BANDS * 12);
-      const got = await occurrences(key, occ[sp], chronology[name], perTaxon[name]);
+      const res = await occurrences(key, occ[sp], chronology[name], perTaxon[name]);
+      const got = res.got;
       total += got;
-      process.stderr.write('  ' + sp + ' / ' + name + ': ' + got + '\n');
+      process.stderr.write('  ' + sp + ' / ' + name + ': ' + got +
+        (res.lost ? '   WARNING ' + res.lost + ' pages lost to timeouts' : '') + '\n');
     }
     if (total < 500) throw new Error(sp + ' returned only ' + total + ' records - refusing to ship it');
     if (COMPOSITION.indexOf(sp) >= 0) composition[sp] = perTaxon;
