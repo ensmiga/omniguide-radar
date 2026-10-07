@@ -262,7 +262,7 @@
       maxZoom: 18, premium: true
     },
     waterways: {
-      name: 'Waterways', url: null, credit: 'Natural Earth, NLCD 2021',
+      name: 'Duck water', url: null, credit: 'NLCD 2021 land cover, Natural Earth',
       maxZoom: 0, premium: false, water: true
     },
     none: { name: 'No basemap', url: null, credit: null, maxZoom: 0, premium: false }
@@ -645,10 +645,31 @@
     ctx.fillStyle = WW_GROUND;
     ctx.fillRect(0, 0, this.w, this.h);
 
+    /* Real cover at 30 m where the view is tight enough to ask for it.
+       The coarse grid below is an 11 km average, which is the wrong
+       unit entirely for a thing you hunt an acre of. */
+    var dw = global.OG.duckwater;
+    var fine = null;
+    if (dw) {
+      var self = this;
+      fine = dw.overlay([win.lon0, win.lat0, win.lon1, win.lat1], function () {
+        self.app.dirty = true;
+      });
+    }
+    if (fine) {
+      var a0 = geo.project(win.lon0, win.lat1, [0, 0]);
+      var a1 = geo.project(win.lon1, win.lat0, [0, 0]);
+      this.toScreen(a0[0], a0[1], p);
+      var fx = p[0], fy = p[1];
+      this.toScreen(a1[0], a1[1], p);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(fine, fx, fy, p[0] - fx, p[1] - fy);
+    }
+
     /* Areal water from land cover. A centreline cannot tell you that
        a bottom is a mile of braided channel and flooded timber, and
        that is exactly the ground worth finding. */
-    var ow = global.OG.openwater;
+    var ow = fine ? null : global.OG.openwater;
     if (ow && ow.cover) {
       var step = z < 14 ? 0.1 : z < 30 ? 0.05 : 0.025;
       var lon0 = Math.floor(win.lon0 / step) * step;

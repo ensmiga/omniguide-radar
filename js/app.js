@@ -2594,7 +2594,7 @@
     var bmBtns = {};
     BM_CYCLE.forEach(function (k) {
       var b = el('button', 'layerbtn', k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite'
-        : k === 'waterways' ? 'Waterways' : 'None');
+        : k === 'waterways' ? 'Duck water' : 'None');
       if (k === 'satellite') b.appendChild(el('span', 'pro-tag', 'Pro'));
       b.dataset.basemap = k;
       b.addEventListener('click', function () { setBasemap(k); });
