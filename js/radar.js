@@ -1087,19 +1087,24 @@
       this.toScreen(w[0], w[1], p);
       if (p[0] < -40 || p[1] < -40 || p[0] > this.w + 40 || p[1] > this.h + 40) continue;
       var sc = app.spotScore(s, day);
+      /* A saved spot can be out of range for whatever species is selected -
+         a Montana duck marsh asked about whitetail. opportunity is null
+         then, and canvas was happily painting the string "null" in the
+         badge. It gets a dash and a flat fill instead. */
+      var has = sc.opp != null && sc.opp === sc.opp;
       var r = 15;
       ctx.beginPath();
       ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
-      ctx.fillStyle = rampCSS(sc.opp / 100, 0.95);
+      ctx.fillStyle = has ? rampCSS(sc.opp / 100, 0.95) : 'rgba(96,106,101,0.82)';
       ctx.fill();
       ctx.lineWidth = 2;
       ctx.strokeStyle = 'rgba(12,18,16,0.85)';
       ctx.stroke();
-      ctx.fillStyle = sc.opp > 62 ? '#101715' : '#F2F7F3';
+      ctx.fillStyle = (has && sc.opp > 62) ? '#101715' : '#F2F7F3';
       ctx.font = '700 12px "IBM Plex Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(sc.opp, p[0], p[1] + 0.5);
+      ctx.fillText(has ? String(sc.opp) : '--', p[0], p[1] + 0.5);
       if (this.view.zoom > 20) {
         ctx.font = '600 11px "Saira Condensed", sans-serif';
         ctx.fillStyle = this.app.theme().label;
