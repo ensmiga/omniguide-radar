@@ -807,4 +807,4 @@ async function main() {
   process.stderr.write('wrote js/habitat-grid.js (' + (js.length / 1024).toFixed(0) + ' KB)\n');
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+export { deadline, getJSON, occurrences, taxonKey, NCELL, CHRON_BANDS };
