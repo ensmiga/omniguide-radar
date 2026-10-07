@@ -671,36 +671,52 @@
       ctx.drawImage(fine, fx, fy, p[0] - fx, p[1] - fy);
     }
 
+    /* Areal water from land cover, drawn into a small buffer and then
+       scaled up with smoothing. Painted as rectangles it read as a grid
+       of tiles, which is an artefact of the 0.1 degree grid rather than
+       anything about the water. This path only runs when the view is too
+       wide to request real land cover. */
     /* Areal water from land cover. A centreline cannot tell you that
        a bottom is a mile of braided channel and flooded timber, and
        that is exactly the ground worth finding. */
     var ow = fine ? null : global.OG.openwater;
     if (ow && ow.cover) {
-      var step = z < 14 ? 0.1 : z < 30 ? 0.05 : 0.025;
-      var lon0 = Math.floor(win.lon0 / step) * step;
-      var lat0 = Math.floor(win.lat0 / step) * step;
-      for (var la = lat0; la <= win.lat1 + step; la += step) {
-        for (var lo = lon0; lo <= win.lon1 + step; lo += step) {
-          var c = ow.cover(lo + step / 2, la + step / 2);
-          if (!c) continue;
-          var v = c.water + 0.40 * c.wetland;
-          if (v < 0.02) continue;
-          /* Proportional from nothing, with no floor. A constant
-             base alpha put a wash of orange on every cell holding
-             so much as a farm pond, which is most of the country
-             east of the hundredth meridian - the whole eastern
-             half came out solid. */
-          var a = Math.min(0.88, Math.max(0, (v - 0.02) * 3.1));
-          if (a < 0.02) continue;
-          var w0 = geo.project(lo, la, [0, 0]);
-          this.toScreen(w0[0], w0[1], p);
-          var x0 = p[0], y0 = p[1];
-          var w1 = geo.project(lo + step, la + step, [0, 0]);
-          this.toScreen(w1[0], w1[1], p);
-          ctx.fillStyle = 'rgba(' + WW_AREA[0] + ',' + WW_AREA[1] + ',' + WW_AREA[2] + ',' + a.toFixed(3) + ')';
-          ctx.fillRect(Math.min(x0, p[0]) - 0.5, Math.min(y0, p[1]) - 0.5,
-                       Math.abs(p[0] - x0) + 1, Math.abs(p[1] - y0) + 1);
+      /* Into a small buffer first, then scaled up with smoothing. Drawn
+         as one rectangle per cell it read as a grid of tiles, which is
+         an artefact of the 0.1 degree grid and not a fact about the
+         water. */
+      var step = 0.05;
+      var nx = Math.max(2, Math.ceil((win.lon1 - win.lon0) / step));
+      var ny = Math.max(2, Math.ceil((win.lat1 - win.lat0) / step));
+      if (nx * ny < 400000) {
+        var buf = document.createElement('canvas');
+        buf.width = nx; buf.height = ny;
+        var bx = buf.getContext('2d');
+        var bd = bx.createImageData(nx, ny);
+        var bp = bd.data;
+        for (var iy = 0; iy < ny; iy++) {
+          var clat = win.lat1 - (iy + 0.5) * step;      // image runs north to south
+          for (var ix = 0; ix < nx; ix++) {
+            var clon = win.lon0 + (ix + 0.5) * step;
+            var cc = ow.cover(clon, clat);
+            if (!cc) continue;
+            var vv = cc.water + 0.40 * cc.wetland;
+            var aa = Math.min(0.88, Math.max(0, (vv - 0.02) * 3.1));
+            if (aa < 0.02) continue;
+            var o = (iy * nx + ix) * 4;
+            bp[o] = WW_AREA[0]; bp[o + 1] = WW_AREA[1]; bp[o + 2] = WW_AREA[2];
+            bp[o + 3] = Math.round(aa * 255);
+          }
         }
+        bx.putImageData(bd, 0, 0);
+        var c0 = geo.project(win.lon0, win.lat1, [0, 0]);
+        var c1 = geo.project(win.lon1, win.lat0, [0, 0]);
+        this.toScreen(c0[0], c0[1], p);
+        var gx = p[0], gy = p[1];
+        this.toScreen(c1[0], c1[1], p);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(buf, gx, gy, p[0] - gx, p[1] - gy);
       }
     }
 
