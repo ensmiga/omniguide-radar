@@ -841,7 +841,26 @@
      Each particle keeps a trail. Drawing a single frame-step per
      particle put 260 sub-pixel dashes on the canvas and read as
      nothing at all. */
-  var TRAIL = 14;
+  var TRAIL = 20;
+
+  /* Seconds since the last flow frame, clamped so a tab that was
+     backgrounded does not teleport every particle on its first frame
+     back. Motion is per second now, not per frame, so the drift looks
+     the same at 30 fps and at 144. */
+  function flowDt(self) {
+    var now = (global.performance && performance.now) ? performance.now() : Date.now();
+    var dt = self._flowLast ? (now - self._flowLast) / 1000 : 0.016;
+    self._flowLast = now;
+    return dt > 0.12 ? 0.12 : dt;
+  }
+
+  /* Ease a heading toward a target the short way round the circle. */
+  function easeHeading(cur, target, k) {
+    var d = target - cur;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return cur + d * (k > 1 ? 1 : k);
+  }
 
   Radar.prototype.drawMovementFlow = function (res) {
     var ctx = this.ctx, p = this._pt, app = this.app;
@@ -850,9 +869,12 @@
     var doy = env.doyFor(t);
     var spanLon = win.lon1 - win.lon0;
 
-    /* Step scaled to the view, so a trail is a similar length on screen
-       whether you are looking at one county or the whole country. */
-    var unit = spanLon / 160;
+    /* Scaled to the view so the drift reads the same at any zoom: a
+       particle takes about eighteen seconds to cross the screen at
+       neutral speed. */
+    var dt = flowDt(this);
+    var crossSec = 18;
+    var baseDegPerSec = spanLon / crossSec;
 
     var cLon = (win.lon0 + win.lon1) / 2, cLat = (win.lat0 + win.lat1) / 2;
     var migBearing = null;
@@ -869,7 +891,7 @@
       ps.push({
         lon: win.lon0 + Math.random() * spanLon,
         lat: win.lat0 + Math.random() * (win.lat1 - win.lat0),
-        age: Math.random() * 90,
+        age: Math.random() * 11,
         hist: []
       });
     }
@@ -885,34 +907,53 @@
       var fromDeg, mult;
       if (migBearing != null) {
         fromDeg = migBearing;
-        mult = 1.0;
+        mult = 0.9;
       } else {
-        var w = env.conditions(q.lon, q.lat, t, doy);
+        /* Sampled on a quarter degree so a particle is not re-reading a
+           slightly different noise value every frame. */
+        var sl = Math.round(q.lon * 4) / 4, sa = Math.round(q.lat * 4) / 4;
+        var w = env.conditions(sl, sa, t, doy);
         fromDeg = w.windFrom;
-        mult = 0.45 + Math.min(1.4, w.windSpd / 18);
+        mult = 0.5 + Math.min(1.1, w.windSpd / 22);
       }
       var dirTo = (fromDeg + 180) * Math.PI / 180;
-      var step = unit * mult;
 
-      q.hist.push(q.lon, q.lat);
-      if (q.hist.length > TRAIL * 2) q.hist.splice(0, q.hist.length - TRAIL * 2);
+      /* Turn through the new heading rather than snapping to it. The
+         wind field has roughly forty degrees of noise in it, and
+         reading it raw every frame is what made the paths jitter. */
+      if (q.hdg == null) q.hdg = dirTo;
+      q.hdg = easeHeading(q.hdg, dirTo, dt * 0.9);
+      var step = baseDegPerSec * mult * dt;
 
-      q.lat += step * Math.cos(dirTo);
-      q.lon += step * Math.sin(dirTo) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
-      q.age += 1;
+      /* History on a clock rather than per frame. Recording one point a
+         frame ties the trail length to the frame rate and to the speed,
+         so slowing the drift down silently shortened every trail to a
+         stub. At one sample every 70 ms a 20 point trail is about one
+         and a half seconds of travel whatever the frame rate. */
+      q.acc = (q.acc || 0) + dt;
+      if (q.acc >= 0.07) {
+        q.acc = 0;
+        q.hist.push(q.lon, q.lat);
+        if (q.hist.length > TRAIL * 2) q.hist.splice(0, q.hist.length - TRAIL * 2);
+      }
 
-      if (q.age > 120 || q.lat < win.lat0 || q.lat > win.lat1 ||
+      q.lat += step * Math.cos(q.hdg);
+      q.lon += step * Math.sin(q.hdg) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
+      q.age += dt;
+
+      if (q.age > 11 || q.lat < win.lat0 || q.lat > win.lat1 ||
           q.lon < win.lon0 || q.lon > win.lon1) {
         q.lon = win.lon0 + Math.random() * spanLon;
         q.lat = win.lat0 + Math.random() * (win.lat1 - win.lat0);
         q.age = 0;
         q.hist.length = 0;
+        q.hdg = null;
         continue;
       }
       if (!alive || q.hist.length < 4) continue;
 
       var str = Math.min(1, Math.max(0, (v - 8) / 45));
-      var fade = Math.sin(Math.min(1, q.age / 120) * Math.PI);
+      var fade = Math.sin(Math.min(1, q.age / 11) * Math.PI);
       ctx.strokeStyle = 'rgba(240,140,30,' + (0.30 + 0.55 * fade * str).toFixed(3) + ')';
       ctx.lineWidth = 1.3 + 2.0 * str;
       ctx.beginPath();
@@ -1292,7 +1333,10 @@
     var ctx = this.ctx, p = this._pt;
     var win = this.visibleLonLat();
     var spanLon = win.lon1 - win.lon0;
-    var unit = spanLon / 150;
+    var dt = flowDt(this);
+    /* Slower than the movement flow. Migration is a seasonal process
+       and a frantic one reads as weather. */
+    var baseDegPerSec = spanLon / 26;
 
     if (!this.particles) this.particles = [];
     var ps = this.particles;
@@ -1300,7 +1344,7 @@
       ps.push({
         lon: win.lon0 + Math.random() * spanLon,
         lat: win.lat0 + Math.random() * (win.lat1 - win.lat0),
-        age: Math.random() * 90,
+        age: Math.random() * 14,
         hist: []
       });
     }
@@ -1314,20 +1358,26 @@
       if (inten !== inten) inten = 0;
 
       var br = (geo.UPFLYWAY[geo.flyway(q.lon)] + 180) * Math.PI / 180;
-      var step = unit * (0.5 + (inten / 100) * 1.3);
+      if (q.hdg == null) q.hdg = br;
+      q.hdg = easeHeading(q.hdg, br, dt * 1.2);
+      var step = baseDegPerSec * (0.55 + Math.min(1.0, inten / 45)) * dt;
 
-      q.hist.push(q.lon, q.lat);
-      if (q.hist.length > 28) q.hist.splice(0, q.hist.length - 28);
+      q.acc = (q.acc || 0) + dt;
+      if (q.acc >= 0.07) {
+        q.acc = 0;
+        q.hist.push(q.lon, q.lat);
+        if (q.hist.length > 48) q.hist.splice(0, q.hist.length - 48);
+      }
 
-      q.lat += step * Math.cos(br);
-      q.lon += step * Math.sin(br) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
-      q.age += 1;
+      q.lat += step * Math.cos(q.hdg);
+      q.lon += step * Math.sin(q.hdg) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
+      q.age += dt;
 
-      if (q.age > 130 || q.lat < win.lat0 || q.lat > win.lat1 ||
+      if (q.age > 14 || q.lat < win.lat0 || q.lat > win.lat1 ||
           q.lon < win.lon0 || q.lon > win.lon1) {
         q.lon = win.lon0 + Math.random() * spanLon;
         q.lat = win.lat0 + Math.random() * (win.lat1 - win.lat0);
-        q.age = 0; q.hist.length = 0;
+        q.age = 0; q.hist.length = 0; q.hdg = null;
         continue;
       }
       /* Measured on 7 October: migration intensity runs a median of 1.7
@@ -1337,7 +1387,7 @@
          let the weight say how much. */
       if (inten < 1.5 || q.hist.length < 4) continue;
 
-      var fade = Math.sin(Math.min(1, q.age / 130) * Math.PI);
+      var fade = Math.sin(Math.min(1, q.age / 14) * Math.PI);
       var str = Math.min(1, inten / 22);
       ctx.strokeStyle = 'rgba(255,246,222,' + (0.26 + 0.60 * fade * str).toFixed(3) + ')';
       ctx.lineWidth = 1.2 + 1.8 * str;
