@@ -430,6 +430,36 @@
   var BY_ID = {};
   SPECIES.forEach(function (s) { BY_ID[s.id] = s; });
 
+  /* ---------- Score calibration ----------
+     The weighted sum never spans 0-100: its components almost never peak
+     together, so the raw number sat in a narrow, species-specific band well
+     below the top of the scale. Measured before this table existed, the best
+     duck cell in the country on the best day of the year read 63, geese 60,
+     pronghorn 52 - meaning "Good" was unreachable for a duck hunter anywhere,
+     ever, and in early October every duck cell in the lower 48 read "Poor".
+     The bands were describing the model's quirks rather than the hunting.
+
+     These anchors are the 2nd and 99.5th percentile of the raw weighted score
+     for each species, sampled over the lower 48 on a 1.8 degree lattice every
+     5 days through a full year, in-range cells only (n = 1.3k-17k per
+     species). Deliberately measured across the whole year rather than per
+     day, so season still moves the number: a July elk basin still scores far
+     below the same basin in September. Regenerate with tools/calibrate.js
+     after changing any species model. */
+  var CAL = {
+    'ducks':        [10.3, 48.5],
+    'canada-goose': [10.7, 52.2],
+    'elk':          [23.4, 73.4],
+    'whitetail':    [19.2, 59.0],
+    'muledeer':     [21.1, 67.5],
+    'moose':        [18.8, 55.9],
+    'pronghorn':    [21.8, 49.5],
+    'turkey':       [29.2, 63.5],
+    'upland':       [21.9, 80.3],
+    'trout':        [28.9, 74.7]
+  };
+  var CAL_LO = 8, CAL_HI = 94;   // the scores those two anchors map to
+
   /* ---------- Conditions sub-score shown as the Weather component ---------- */
 
   function weatherScore(wx, sp) {
@@ -519,9 +549,13 @@
     var pressDrop = weighted * sens * press;
     var afterPress = weighted - pressDrop;
 
-    /* Spread the distribution so the map reads as a forecast rather than a
-       cloud of mid-fifties. */
-    var opp = clamp(Math.round(50 + (afterPress - 51) * 1.42), 1, 99);
+    /* Map the raw weighted score onto the published 1-99 scale through this
+       species' own measured range, so "Exceptional" means near the best this
+       species ever offers anywhere in the country, and a band label means the
+       same thing to a duck hunter as it does to an elk hunter. */
+    var cal = CAL[sp.id] || [15, 70];
+    var opp = clamp(Math.round(CAL_LO + (CAL_HI - CAL_LO) *
+      ((afterPress - cal[0]) / (cal[1] - cal[0]))), 1, 99);
 
     return {
       opportunity: opp,
@@ -539,7 +573,7 @@
       breakdown: {
         parts: parts, totalWeight: total, weighted: weighted,
         pressureIdx: press, pressureSens: sens, pressureDrop: pressDrop,
-        afterPressure: afterPress, spread: 1.42, pivot: 51, final: opp,
+        afterPressure: afterPress, calLo: cal[0], calHi: cal[1], final: opp,
         habModel: habModel * 100, distIdx: dIdx, distWeight: dw, habAdjusted: habV * 100
       }
     };

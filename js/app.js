@@ -589,12 +589,14 @@
     tbl.appendChild(calcRow('Weighted mean', '', '', bd.weighted.toFixed(1), 'calcsum'));
     tbl.appendChild(calcRow('Hunter pressure', Math.round(bd.pressureIdx * 100),
       '−' + (bd.pressureSens * 100).toFixed(0) + '% max', '−' + bd.pressureDrop.toFixed(1)));
-    tbl.appendChild(calcRow('Spread ×' + bd.spread + ' about ' + bd.pivot, '', '',
+    tbl.appendChild(calcRow('Calibrated against ' + plan.species.name.toLowerCase() +
+      ' (' + bd.calLo.toFixed(1) + '–' + bd.calHi.toFixed(1) + ' → 8–94)', '', '',
       bd.afterPressure.toFixed(1) + ' → ' + bd.final, 'calcsum'));
     mSec.appendChild(tbl);
     mSec.appendChild(el('p', 'note', 'Weights are specific to ' + plan.species.name.toLowerCase() +
-      '. The spread step stretches the distribution so the map is readable; it changes contrast, ' +
-      'not ranking.'));
+      '. The last step rescales the weighted mean through the range this species actually produces ' +
+      'nationwide across a full year, so 90 means near the best ' + plan.species.name.toLowerCase() +
+      ' conditions found anywhere rather than an arbitrary number. It changes the scale, not the ranking.'));
     mSec.appendChild(el('p', 'note', 'Not in this number: land access, whether the habitat is in good ' +
       'condition this year, last season’s production, stocking or harvest history, or anything ' +
       'about the previous winter. Those matter, several of them more than today’s weather.'));
