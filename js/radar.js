@@ -878,9 +878,12 @@
       var x0 = p[0], y0 = p[1];
       this.toScreen(w1[0], w1[1], p);
       var fade = Math.sin(Math.min(1, q.age / 150) * Math.PI);
-      var str = Math.min(1, Math.max(0, (v - 20) / 60));
-      ctx.strokeStyle = 'rgba(246,176,64,' + (0.14 + 0.5 * fade * str).toFixed(3) + ')';
-      ctx.lineWidth = 0.8 + 1.5 * str;
+      /* Movement scores sit in the 20s and 30s over most of the country,
+         so a curve starting at 20 and spanning 60 drew nearly everything
+         at the floor alpha and the whole layer read as empty. */
+      var str = Math.min(1, Math.max(0, (v - 8) / 45));
+      ctx.strokeStyle = 'rgba(246,176,64,' + (0.22 + 0.58 * fade * str).toFixed(3) + ')';
+      ctx.lineWidth = 1.0 + 1.9 * str;
       ctx.beginPath();
       ctx.moveTo(x0, y0);
       ctx.lineTo(p[0], p[1]);
@@ -1275,13 +1278,17 @@
         q.age = 0;
         continue;
       }
-      if (inten < 32) continue;
+      /* 32 meant nothing was ever drawn outside the three peak weeks:
+         duck migration runs 3 to 22 over most of the country in early
+         October, so the layer looked broken rather than quiet. Draw from
+         much lower and let opacity and width carry the strength. */
+      if (inten < 12) continue;
       var w0 = geo.project(plon, plat, [0, 0]), w1 = geo.project(q.lon, q.lat, [0, 0]);
       this.toScreen(w0[0], w0[1], p);
       var x0 = p[0], y0 = p[1];
       this.toScreen(w1[0], w1[1], p);
       var fade = Math.sin(Math.min(1, q.age / 150) * Math.PI);
-      ctx.strokeStyle = 'rgba(246,238,214,' + (0.16 + (inten / 100) * 0.55) * fade + ')';
+      ctx.strokeStyle = 'rgba(246,238,214,' + (0.10 + (inten / 100) * 0.62) * fade + ')';
       ctx.lineWidth = 1 + (inten / 100) * 1.6;
       ctx.beginPath();
       ctx.moveTo(x0, y0);

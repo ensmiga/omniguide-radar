@@ -207,6 +207,9 @@
 
   /* ---------- Layers ---------- */
 
+  /* Redrawn continuously, because something on them is animating. */
+  var FLOW_LAYERS = { migration: 1, movement: 1, wind: 1, gusts: 1 };
+
   var LAYERS = [
     { id: 'opportunity', name: 'Opportunity', desc: 'Overall OmniGuide Opportunity Score' },
     { id: 'movement', name: 'Movement', desc: 'Expected local animal activity' },
@@ -2807,7 +2810,11 @@
           syncControls();
         }
       }
-      if (App.dirty || App.state.layer === 'migration') {
+      /* Layers with moving particles have to redraw every frame or the
+         flow is a single frozen smear. Only migration was listed, so the
+         wind streamlines and the movement lines were drawn once and then
+         sat there - which reads as nothing being drawn at all. */
+      if (App.dirty || FLOW_LAYERS[App.state.layer]) {
         radar.draw();
         App.dirty = false;
       }
