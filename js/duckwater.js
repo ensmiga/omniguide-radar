@@ -55,7 +55,10 @@
   /* And what it becomes when it sits against water. */
   var NEAR_WATER = { 82: 0.60, 81: 0.30, 71: 0.22 };
 
-  var MAX_SPAN_DEG = 6;        // wider than this and the request is pointless
+  /* A ten degree view - Montana across to the Dakotas - is exactly the
+     "where should I go this weekend" zoom, and at 6 it fell back to the
+     coarse grid there and drew blocks. MRLC serves this size fine. */
+  var MAX_SPAN_DEG = 16;
   var MAX_PX = 900;
 
   var cache = new Map();       // key -> {canvas, bbox} | 'pending' | 'failed'

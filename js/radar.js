@@ -830,78 +830,102 @@
 
      Deliberately slower and thinner than the wind streamlines, and a
      different colour, so the two are not mistaken for each other. */
+  /* Which way the movement is running, drawn as trails.
+
+     Two different answers depending on what is happening. When a
+     migratory species is inside its migration window the meaningful
+     direction is the flyway - new birds arrive from up it. The rest of
+     the time it is the wind, which is the dominant term in every
+     movement curve in the model.
+
+     Each particle keeps a trail. Drawing a single frame-step per
+     particle put 260 sub-pixel dashes on the canvas and read as
+     nothing at all. */
+  var TRAIL = 14;
+
   Radar.prototype.drawMovementFlow = function (res) {
     var ctx = this.ctx, p = this._pt, app = this.app;
     var win = this.visibleLonLat();
     var t = app.state.t, spId = app.state.species;
     var doy = env.doyFor(t);
+    var spanLon = win.lon1 - win.lon0;
 
-    /* Decide once per frame at the centre of the view rather than per
-       particle: whether birds are migrating here is a regional fact. */
+    /* Step scaled to the view, so a trail is a similar length on screen
+       whether you are looking at one county or the whole country. */
+    var unit = spanLon / 160;
+
     var cLon = (win.lon0 + win.lon1) / 2, cLat = (win.lat0 + win.lat1) / 2;
     var migBearing = null;
     try {
       var sc = models.scoreAt(cLon, cLat, t, doy, spId);
-      if (sc.inRange && sc.mig && sc.mig.applies && sc.migration > 28) {
+      if (sc.inRange && sc.mig && sc.mig.applies && sc.migration > 20) {
         migBearing = geo.UPFLYWAY[geo.flyway(cLon)];
       }
     } catch (e) { migBearing = null; }
 
     if (!this.mparticles) this.mparticles = [];
     var ps = this.mparticles;
-    while (ps.length < 260) {
+    while (ps.length < 220) {
       ps.push({
-        lon: win.lon0 + Math.random() * (win.lon1 - win.lon0),
+        lon: win.lon0 + Math.random() * spanLon,
         lat: win.lat0 + Math.random() * (win.lat1 - win.lat0),
-        age: Math.random() * 110
+        age: Math.random() * 90,
+        hist: []
       });
     }
 
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (var i = 0; i < ps.length; i++) {
       var q = ps[i];
+      if (!q.hist) q.hist = [];
       var v = this.fieldAt(q.lon, q.lat, false);
       var alive = v === v && v > 0;
 
-      var fromDeg, speed;
+      var fromDeg, mult;
       if (migBearing != null) {
         fromDeg = migBearing;
-        speed = 0.026;
+        mult = 1.0;
       } else {
         var w = env.conditions(q.lon, q.lat, t, doy);
         fromDeg = w.windFrom;
-        speed = 0.004 + (w.windSpd / 40) * 0.030;
+        mult = 0.45 + Math.min(1.4, w.windSpd / 18);
       }
       var dirTo = (fromDeg + 180) * Math.PI / 180;
+      var step = unit * mult;
 
-      var plon = q.lon, plat = q.lat;
-      q.lat += speed * Math.cos(dirTo);
-      q.lon += speed * Math.sin(dirTo) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
+      q.hist.push(q.lon, q.lat);
+      if (q.hist.length > TRAIL * 2) q.hist.splice(0, q.hist.length - TRAIL * 2);
+
+      q.lat += step * Math.cos(dirTo);
+      q.lon += step * Math.sin(dirTo) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
       q.age += 1;
-      if (q.age > 150 || q.lat < win.lat0 || q.lat > win.lat1 ||
+
+      if (q.age > 120 || q.lat < win.lat0 || q.lat > win.lat1 ||
           q.lon < win.lon0 || q.lon > win.lon1) {
-        q.lon = win.lon0 + Math.random() * (win.lon1 - win.lon0);
+        q.lon = win.lon0 + Math.random() * spanLon;
         q.lat = win.lat0 + Math.random() * (win.lat1 - win.lat0);
         q.age = 0;
+        q.hist.length = 0;
         continue;
       }
-      /* Only draw over ground that has a movement score. A streamline
-         crossing blank country implies activity that is not there. */
-      if (!alive) continue;
+      if (!alive || q.hist.length < 4) continue;
 
-      var w0 = geo.project(plon, plat, [0, 0]), w1 = geo.project(q.lon, q.lat, [0, 0]);
-      this.toScreen(w0[0], w0[1], p);
-      var x0 = p[0], y0 = p[1];
-      this.toScreen(w1[0], w1[1], p);
-      var fade = Math.sin(Math.min(1, q.age / 150) * Math.PI);
-      /* Movement scores sit in the 20s and 30s over most of the country,
-         so a curve starting at 20 and spanning 60 drew nearly everything
-         at the floor alpha and the whole layer read as empty. */
       var str = Math.min(1, Math.max(0, (v - 8) / 45));
-      ctx.strokeStyle = 'rgba(246,176,64,' + (0.22 + 0.58 * fade * str).toFixed(3) + ')';
-      ctx.lineWidth = 1.0 + 1.9 * str;
+      var fade = Math.sin(Math.min(1, q.age / 120) * Math.PI);
+      ctx.strokeStyle = 'rgba(240,140,30,' + (0.30 + 0.55 * fade * str).toFixed(3) + ')';
+      ctx.lineWidth = 1.3 + 2.0 * str;
       ctx.beginPath();
-      ctx.moveTo(x0, y0);
+      var w0 = geo.project(q.hist[0], q.hist[1], [0, 0]);
+      this.toScreen(w0[0], w0[1], p);
+      ctx.moveTo(p[0], p[1]);
+      for (var k = 2; k < q.hist.length; k += 2) {
+        var wk = geo.project(q.hist[k], q.hist[k + 1], [0, 0]);
+        this.toScreen(wk[0], wk[1], p);
+        ctx.lineTo(p[0], p[1]);
+      }
+      var wn = geo.project(q.lon, q.lat, [0, 0]);
+      this.toScreen(wn[0], wn[1], p);
       ctx.lineTo(p[0], p[1]);
       ctx.stroke();
     }
@@ -1262,52 +1286,72 @@
   };
 
   /* Particle field showing expected direction of movement, not tracked birds. */
+  /* Migration, drawn as trails along the flyway for the same reason -
+     a single frame-step is sub-pixel at any useful zoom. */
   Radar.prototype.drawMigration = function (res) {
-    var ctx = this.ctx, p = this._pt, self = this;
-    if (this.particles.length < 320) {
-      var win = this.visibleLonLat();
-      while (this.particles.length < 320) {
-        this.particles.push({
-          lon: win.lon0 + Math.random() * (win.lon1 - win.lon0),
-          lat: win.lat0 + Math.random() * (win.lat1 - win.lat0),
-          age: Math.random() * 90
-        });
-      }
+    var ctx = this.ctx, p = this._pt;
+    var win = this.visibleLonLat();
+    var spanLon = win.lon1 - win.lon0;
+    var unit = spanLon / 150;
+
+    if (!this.particles) this.particles = [];
+    var ps = this.particles;
+    while (ps.length < 260) {
+      ps.push({
+        lon: win.lon0 + Math.random() * spanLon,
+        lat: win.lat0 + Math.random() * (win.lat1 - win.lat0),
+        age: Math.random() * 90,
+        hist: []
+      });
     }
-    var win2 = this.visibleLonLat();
+
     ctx.lineCap = 'round';
-    for (var i = 0; i < this.particles.length; i++) {
-      var q = this.particles[i];
-      var ci = geo.cellIndexAt(res, q.lon, q.lat);
-      var inten = this.fieldAt(q.lon, q.lat, false); if (inten !== inten) inten = 0;
-      if (inten === undefined) inten = 0;
-      var fw = geo.flyway(q.lon);
-      var br = (geo.UPFLYWAY[fw] + 180) * Math.PI / 180;
-      var sp = 0.004 + (inten / 100) * 0.055;
-      var plon = q.lon, plat = q.lat;
-      q.lat += sp * Math.cos(br);
-      q.lon += sp * Math.sin(br) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
+    ctx.lineJoin = 'round';
+    for (var i = 0; i < ps.length; i++) {
+      var q = ps[i];
+      if (!q.hist) q.hist = [];
+      var inten = this.fieldAt(q.lon, q.lat, false);
+      if (inten !== inten) inten = 0;
+
+      var br = (geo.UPFLYWAY[geo.flyway(q.lon)] + 180) * Math.PI / 180;
+      var step = unit * (0.5 + (inten / 100) * 1.3);
+
+      q.hist.push(q.lon, q.lat);
+      if (q.hist.length > 28) q.hist.splice(0, q.hist.length - 28);
+
+      q.lat += step * Math.cos(br);
+      q.lon += step * Math.sin(br) / Math.max(0.4, Math.cos(q.lat * Math.PI / 180));
       q.age += 1;
-      if (q.age > 150 || q.lat < win2.lat0 || q.lat > win2.lat1 || q.lon < win2.lon0 || q.lon > win2.lon1) {
-        q.lon = win2.lon0 + Math.random() * (win2.lon1 - win2.lon0);
-        q.lat = win2.lat0 + Math.random() * (win2.lat1 - win2.lat0);
-        q.age = 0;
+
+      if (q.age > 130 || q.lat < win.lat0 || q.lat > win.lat1 ||
+          q.lon < win.lon0 || q.lon > win.lon1) {
+        q.lon = win.lon0 + Math.random() * spanLon;
+        q.lat = win.lat0 + Math.random() * (win.lat1 - win.lat0);
+        q.age = 0; q.hist.length = 0;
         continue;
       }
-      /* 32 meant nothing was ever drawn outside the three peak weeks:
-         duck migration runs 3 to 22 over most of the country in early
-         October, so the layer looked broken rather than quiet. Draw from
-         much lower and let opacity and width carry the strength. */
-      if (inten < 12) continue;
-      var w0 = geo.project(plon, plat, [0, 0]), w1 = geo.project(q.lon, q.lat, [0, 0]);
-      this.toScreen(w0[0], w0[1], p);
-      var x0 = p[0], y0 = p[1];
-      this.toScreen(w1[0], w1[1], p);
-      var fade = Math.sin(Math.min(1, q.age / 150) * Math.PI);
-      ctx.strokeStyle = 'rgba(246,238,214,' + (0.10 + (inten / 100) * 0.62) * fade + ')';
-      ctx.lineWidth = 1 + (inten / 100) * 1.6;
+      /* Measured on 7 October: migration intensity runs a median of 1.7
+         with a p90 of 6 and a maximum of 12 across the visible country,
+         so a cutoff of 10 drew two cells out of 136 and the layer read
+         as broken rather than as early October. Draw any real signal and
+         let the weight say how much. */
+      if (inten < 1.5 || q.hist.length < 4) continue;
+
+      var fade = Math.sin(Math.min(1, q.age / 130) * Math.PI);
+      var str = Math.min(1, inten / 22);
+      ctx.strokeStyle = 'rgba(255,246,222,' + (0.26 + 0.60 * fade * str).toFixed(3) + ')';
+      ctx.lineWidth = 1.2 + 1.8 * str;
       ctx.beginPath();
-      ctx.moveTo(x0, y0);
+      var w0 = geo.project(q.hist[0], q.hist[1], [0, 0]);
+      this.toScreen(w0[0], w0[1], p);
+      ctx.moveTo(p[0], p[1]);
+      for (var k = 2; k < q.hist.length; k += 2) {
+        var wk = geo.project(q.hist[k], q.hist[k + 1], [0, 0]);
+        this.toScreen(wk[0], wk[1], p);
+        ctx.lineTo(p[0], p[1]);
+      }
+      var wn = geo.project(q.lon, q.lat, [0, 0]);
+      this.toScreen(wn[0], wn[1], p);
       ctx.lineTo(p[0], p[1]);
       ctx.stroke();
     }
