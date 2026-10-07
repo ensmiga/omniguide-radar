@@ -232,10 +232,20 @@
     display: flex;
     align-items: flex-start;
     z-index: 6;
-    /* The dock owns the left edge, top to bottom. It scrolls internally
-       when the list is taller than the map. */
-    max-height: calc(100% - 24px);
+    /* A definite height, not a max-height.
+
+       This was max-height, which leaves the dock's own height auto - and
+       a percentage max-height on the list inside it then has nothing to
+       resolve against, so the list grew past the bottom of the map and
+       never produced a scrollbar. On a short window that put the base
+       map choices, Satellite among them, underneath the timeline bar
+       with no way to reach them. */
+    height: calc(100% - 24px);
+    /* The box is full height even when the list is short, so it must not
+       swallow clicks meant for the map behind it. */
+    pointer-events: none;
   }
+  #layerdock > * { pointer-events: auto; }
   #layertab {
     flex: none;
     width: 30px;
@@ -273,6 +283,7 @@
     backdrop-filter: blur(10px);
     box-shadow: var(--shadow);
     overflow-y: auto;
+    overscroll-behavior: contain;      /* do not hand the scroll to the map */
     max-height: 100%;
     min-height: 0;
   }
