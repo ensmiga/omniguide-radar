@@ -82,7 +82,25 @@
     [-115.1, 36.2, 2.3], [-108.5, 45.8, 0.12], [-111.0, 45.7, 0.12], [-116.2, 43.6, 0.78]
   ];
 
+  /* Hunting pressure.
+
+     Measured from NLCD developed land where the plane is present -
+     weighted by development intensity and spread over about an
+     hour of driving, because what matters is how many people can
+     reach this ground before shooting light, not whether this
+     particular cell is built up. The metro blobs below are the
+     fallback: a dozen hand-placed Gaussians with hand-set weights
+     and a noise field, which knew about twelve cities. */
   function huntingPressure(lon, lat) {
+    var hgP = global.OG.habgrid;
+    if (hgP && hgP.pressureReady) {
+      var rp = hgP.pressureAt(lon, lat);
+      if (rp != null) return rp;
+    }
+    return huntingPressureDrawn(lon, lat);
+  }
+
+  function huntingPressureDrawn(lon, lat) {
     var p = 0;
     for (var i = 0; i < METROS.length; i++) {
       var dx = (lon - METROS[i][0]) * Math.cos(lat * D2R), dy = lat - METROS[i][1];
@@ -122,8 +140,33 @@
 
     /* Chronology: the same calendar week means different things at different
        latitudes, so the species peak slides south through the season. */
-    var peak = sp.migPeak + (46 - lat) * 2.1;
-    var chron = Math.exp(-Math.pow((doy - peak) / sp.migWidth, 2));
+    /* Migration timing, measured where the records allow it.
+
+       This was sp.migPeak plus a flat 2.1 days per degree of
+       latitude - one guessed peak day and one guessed lag, applied
+       identically to every migratory species. The chronology plane
+       carries occurrence counts by latitude band and month, taken
+       as a share of all recorded game species in the same band so
+       that the seasonality of birdwatchers cancels out.
+
+       Only trusted where the species is actually seasonal here:
+       a circular concentration below 0.15 means it is recorded
+       all year round in this band, and a peak fitted to that is
+       noise. The hand-set numbers still cover those cells. */
+    var peak = sp.migPeak + (46 - lat) * 2.1, migWidth = sp.migWidth;
+    var hgC = global.OG.habgrid;
+    var chronSrc = null;
+    if (hgC && hgC.chronReady && sp.chronTaxa) {
+      var cro = hgC.chronology(sp.chronTaxa, lat);
+      if (cro && cro.concentration > 0.15) {
+        peak = cro.peakDoy; migWidth = cro.widthDays; chronSrc = cro;
+      }
+    }
+    /* Wrapped, so a peak in the first week of January is not read
+       as eleven months away from a late-December date. */
+    var dd = Math.abs(doy - peak);
+    if (dd > 182.625) dd = 365.25 - dd;
+    var chron = Math.exp(-Math.pow(dd / migWidth, 2));
 
     var raw = 0.33 * freezeDelta + 0.25 * tailwind + 0.23 * drop + 0.19 * snow;
     var intensity = 100 * clamp01(raw * (0.30 + 0.70 * chron) * 1.18);
@@ -170,6 +213,9 @@
   var SPECIES = [
     {
       id: 'ducks', name: 'Ducks', group: 'waterfowl', pursuit: 'hunt',
+      chronTaxa: ['Anas platyrhynchos', 'Anas acuta', 'Mareca americana',
+                  'Spatula discors', 'Aythya affinis', 'Aythya valisineria',
+                  'Anas crecca', 'Mareca strepera'],
       migratory: true, migPeak: 310, migWidth: 44, habKey: 'waterfowl',
       freezeLock: true,
       pressureSens: 0.13,
@@ -212,6 +258,7 @@
     },
     {
       id: 'canada-goose', name: 'Canada goose', group: 'waterfowl', pursuit: 'hunt',
+      chronTaxa: ['Branta canadensis', 'Anser caerulescens'],
       distKey: 'goose',
       migratory: true, migPeak: 322, migWidth: 40, habKey: 'waterfowl',
       freezeLock: true,

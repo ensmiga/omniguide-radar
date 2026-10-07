@@ -117,6 +117,38 @@
     upland: 'Any reliable open water with shallow feeding edges'
   };
 
+  /* The second species in the spread, from the composition plane:
+     occurrence share by taxon, so the advice follows the birds and
+     changes when the records do. Returns null where there is no
+     composition data, and the spread stays mallards only rather
+     than naming something on a guess. */
+  var DECOY_NAMES = {
+    'Anas platyrhynchos': { name: 'mallards', why: 'the local staple' },
+    'Anas acuta': { name: 'pintails', why: 'high visibility on the outside' },
+    'Mareca americana': { name: 'wigeon', why: 'well represented here' },
+    'Spatula discors': { name: 'teal', why: 'common here early' },
+    'Aythya affinis': { name: 'bluebill decoys', why: 'divers are a real share here' },
+    'Aythya valisineria': { name: 'canvasback decoys', why: 'divers are a real share here' },
+    'Anas crecca': { name: 'green-wing teal', why: 'common here' },
+    'Mareca strepera': { name: 'gadwall', why: 'well represented here' },
+    'Branta canadensis': { name: 'honker floaters', why: 'geese use this water too' }
+  };
+
+  function secondSpecies(sc) {
+    var hg = global.OG.habgrid;
+    if (!hg || !hg.compReady) return null;
+    var comp = hg.composition('waterfowl', sc.lon, sc.lat);
+    if (!comp) return null;
+    /* Skip the top entry - that is the core of the spread already -
+       and take the next one that is worth carrying decoys for. */
+    for (var i = 1; i < comp.length; i++) {
+      if (comp[i].share < 0.08) break;
+      var d = DECOY_NAMES[comp[i].taxon];
+      if (d) return d;
+    }
+    return null;
+  }
+
   function spreadPlan(sc) {
     var hab = sc.hab, wx = sc.wx, spId = sc.species.id;
     var base = ({ timber: 12, river: 18, pothole: 24, marsh: 22, coastal: 32, rice: 36,
@@ -132,8 +164,21 @@
       lines.push(Math.round(base * 0.8) + '-' + Math.round(base * 1.2) + ' full-body or shell goose decoys');
       lines.push('Break the spread into family groups of 4-7 with real gaps between them');
     } else {
-      lines.push(Math.round(base * 0.8) + '-' + Math.round(base * 1.2) + ' mallards as the core of the spread');
-      if (sc.mig.chron > 0.45 && hab.waterfowl > 0.4) lines.push('4-8 pintails on the outside edge for visibility');
+      /* The core species is whatever is most recorded here, which
+         is mallards nearly everywhere and is not everywhere. */
+      var core = coreSpecies(sc);
+      lines.push(Math.round(base * 0.8) + '-' + Math.round(base * 1.2) + ' ' + core + ' as the core of the spread');
+      /* Name the birds that are actually recorded here, rather than
+         the same two species everywhere. This line used to read
+         "4-8 pintails" wherever the migration window was open and
+         the habitat was decent - near the Bighorn the records run
+         5514 mallard and 1056 goldeneye against 279 pintail, so it
+         was naming the rarest duck in the drainage and leaving out
+         the one you would actually decoy. */
+      var second = secondSpecies(sc);
+      if (second && sc.mig.chron > 0.35) {
+        lines.push('4-8 ' + second.name + ' on the outside edge - ' + second.why);
+      }
       if (hab.cls === 'rice' || hab.cls === 'coastal') lines.push('A half dozen wigeon or gadwall along the shallow edge');
       if (hab.cls === 'reservoir' || (hab.cls === 'coastal' && wx.windSpd > 15))
         lines.push('A long line of ' + Math.round(base * 0.9) + ' diver decoys off the point if you are on big water');
@@ -141,6 +186,18 @@
       if (wx.windSpd > 18) lines.push('Skip spinning wing decoys; the water is already working for you');
     }
     return { count: base, lines: lines };
+  }
+
+  function coreSpecies(sc) {
+    var hg = global.OG.habgrid;
+    if (hg && hg.compReady) {
+      var comp = hg.composition('waterfowl', sc.lon, sc.lat);
+      if (comp && comp.length && comp[0].share > 0.2) {
+        var d = DECOY_NAMES[comp[0].taxon];
+        if (d) return d.name;
+      }
+    }
+    return 'mallards';
   }
 
   function callingPlan(sc) {

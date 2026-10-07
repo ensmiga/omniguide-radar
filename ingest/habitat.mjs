@@ -33,7 +33,7 @@
 
    Writes js/habitat-grid.js. */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodePNG, paletteIndex, terrariumMetres } from './png.mjs';
@@ -69,8 +69,26 @@ const SUIT = {
   pronghorn: { 71: 1.00, 52: 0.86, 81: 0.50, 82: 0.36, 31: 0.30, 21: 0.10 },
   turkey:    { 41: 1.00, 43: 0.95, 42: 0.70, 81: 0.62, 82: 0.56, 52: 0.42, 90: 0.55, 21: 0.30 },
   upland:    { 82: 0.88, 71: 0.90, 81: 0.80, 52: 0.70, 41: 0.30, 90: 0.30, 21: 0.15 },
-  waterfowl: { 95: 1.00, 90: 0.86, 11: 0.80, 82: 0.70, 81: 0.45, 71: 0.30, 12: 0.05 }
+  waterfowl: { 95: 1.00, 90: 0.86, 11: 0.80, 82: 0.70, 81: 0.45, 71: 0.30, 12: 0.05 },
+  /* A fish only cares about one class. Everything else here is the
+     riparian margin that tells you a stream runs through the cell even
+     when the stream itself is narrower than a pixel. */
+  trout:     { 11: 1.00, 90: 0.30, 95: 0.22 }
 };
+
+/* Cover presence beats cover fraction for some species, and an
+   area-weighted mean cannot express that. A cottonwood bottom 200 m wide
+   on a prairie river is about 2% of an 11 km cell, so the mean reads it
+   as shortgrass and the eastern Wyoming and eastern Colorado whitetail
+   corridors blanked out. A trout stream is worse - a 20 m creek is a
+   rounding error by area and the whole fishery.
+
+   These saturate the suitability instead: s -> 1 - exp(-k*s), so a small
+   amount of the right cover counts for a lot and more of it adds less.
+   False positives are held off by the occurrence gate rather than by
+   keeping the suitability artificially low - the Utah west desert has
+   woody cover too, and no whitetail recorded in it. */
+const SATURATE = { whitetail: 7, turkey: 5, waterfowl: 4, trout: 30 };
 
 /* Elevation preference in feet: [zero below, full above, full below, zero
    above]. A sanity bound, not the model.
@@ -93,7 +111,8 @@ const ELEV = {
   pronghorn: [800, 3000, 10000, 11500],
   turkey:    [-100, 0, 9500, 11000],
   upland:    [-100, 0, 10500, 12000],
-  waterfowl: [-100, 0, 9500, 11800]
+  waterfowl: [-100, 0, 9500, 11800],
+  trout:     null
 };
 
 /* GBIF backbone names. Upland and waterfowl are groups, so they take
@@ -110,17 +129,41 @@ const TAXA = {
               'Alectoris chukar', 'Perdix perdix', 'Tympanuchus cupido'],
   waterfowl: ['Anas platyrhynchos', 'Anas acuta', 'Mareca americana', 'Spatula discors',
               'Aythya affinis', 'Aythya valisineria', 'Anas crecca', 'Mareca strepera',
-              'Branta canadensis', 'Anser caerulescens']
+              'Branta canadensis', 'Anser caerulescens'],
+  trout:     ['Oncorhynchus mykiss', 'Salmo trutta', 'Salvelinus fontinalis',
+              'Oncorhynchus clarkii']
 };
 
 const SPECIES = Object.keys(SUIT);
 
+/* Migration timing is accumulated by latitude band, because a
+   species does not peak on the same date in Saskatchewan and
+   Louisiana - that lag was a single hardcoded 2.1 days per degree,
+   applied identically to every migratory species. */
+const CHRON_BAND_DEG = 2;
+const CHRON_BANDS = Math.ceil((NLAT * D) / CHRON_BAND_DEG);
+
+/* Groups whose per-taxon split is worth keeping. The decoy spread
+   used to name pintails anywhere the migration window was open and
+   the habitat was decent; on the Bighorn, GBIF has 5514 mallard and
+   1056 goldeneye records against 279 pintail. */
+const COMPOSITION = ['waterfowl', 'upland'];
+
+/* Composition is a smooth regional quantity, so it ships on a
+   coarser grid than habitat and costs almost nothing. */
+const COMP_D = 0.5;
+const COMP_NLON = Math.ceil(NLON * D / COMP_D);
+const COMP_NLAT = Math.ceil(NLAT * D / COMP_D);
+
+/* Every request gets a deadline. Without one a stalled GBIF connection
+   hangs the whole build silently - memory flat, no output, no error -
+   and the retry loop above never gets a chance to do its job. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function getBuf(url, tries = 4) {
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'OmniGuide/ingest' } });
+      const r = await fetch(url, { headers: { 'User-Agent': 'OmniGuide/ingest' }, signal: AbortSignal.timeout(45000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return Buffer.from(await r.arrayBuffer());
     } catch (e) {
@@ -133,7 +176,7 @@ async function getBuf(url, tries = 4) {
 async function getJSON(url, tries = 4) {
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'OmniGuide/ingest' } });
+      const r = await fetch(url, { headers: { 'User-Agent': 'OmniGuide/ingest' }, signal: AbortSignal.timeout(45000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return await r.json();
     } catch (e) {
@@ -272,7 +315,7 @@ async function taxonKey(name) {
    is a presence surface, not a census. The per-species normalisation
    below means a taxon that hits the cap is not penalised against one that
    does not. */
-async function occurrences(key, grid) {
+async function occurrences(key, grid, chron, taxonGrid) {
   const LIMIT = 300, MAXOFF = 30000, PAR = 8;
   let off = 0, got = 0, end = false;
   while (!end && off < MAXOFF) {
@@ -290,16 +333,224 @@ async function occurrences(key, grid) {
         const ix = Math.floor((r.decimalLongitude - LON0) / D);
         const iy = Math.floor((r.decimalLatitude - LAT0) / D);
         if (ix < 0 || ix >= NLON || iy < 0 || iy >= NLAT) continue;
-        grid[cellIdx(ix, iy)]++; got++;
+        const ci = cellIdx(ix, iy);
+        grid[ci]++; got++;
+        if (taxonGrid) taxonGrid[ci]++;
+        /* Migration timing, by latitude band. When a species is
+           where is a fact in the record - the month is on every
+           occurrence - and it was being guessed with a peak day and
+           a width per species plus a flat 2.1 days per degree of
+           latitude. */
+        if (chron && typeof r.month === 'number' && r.month >= 1 && r.month <= 12) {
+          const band = Math.max(0, Math.min(CHRON_BANDS - 1,
+            Math.floor((r.decimalLatitude - LAT0) / CHRON_BAND_DEG)));
+          chron[band * 12 + (r.month - 1)]++;
+        }
       }
     }
   }
   return got;
 }
 
+/* ---------- coldwater ----------
+
+   Trout are bounded by temperature before anything else. Summer air
+   temperature from the NOAA normals already in the repo stands in for
+   stream temperature, lapse-corrected to the cell: Grayling reads 66 F
+   in July and holds brook trout, Phoenix reads 92 and does not.
+
+   It is the wrong answer for a tailwater - Little Rock reads 83 F while
+   the White River below Bull Shoals runs cold all summer because it is
+   drawn from the bottom of a reservoir. That case is handled at runtime
+   instead, from gauge water temperature and USGS tailwater site naming
+   in openwater.js, which refresh with the rest of the live data. What is
+   baked here is the climate, not the release schedule. */
+
+function loadNormals() {
+  const win = {};
+  const code = readFileSync(resolve(HERE, '..', 'js', 'normals.js'), 'utf8');
+  new Function('window', code)(win);
+  return win.US_NORMALS || null;
+}
+
+function coldwaterGrid(meanFt) {
+  const N = loadNormals();
+  const out = new Float32Array(NCELL);
+  if (!N) { out.fill(0.5); return out; }
+  const MISSING = -9999, LAPSE = 0.00357;
+
+  /* July mean per station, once. */
+  const julyF = new Float32Array(N.n);
+  for (let i = 0; i < N.n; i++) {
+    let sum = 0, c = 0;
+    for (let w = 27; w <= 31; w++) {
+      const o = i * 52 + w;
+      if (N.TX[o] === MISSING || N.TN[o] === MISSING) continue;
+      sum += (N.TX[o] + N.TN[o]) / 20; c++;
+    }
+    julyF[i] = c ? sum / c : NaN;
+  }
+
+  for (let iy = 0; iy < NLAT; iy++) {
+    const lat = LAT0 + (iy + 0.5) * D;
+    const cosLat = Math.cos(lat * Math.PI / 180);
+    for (let ix = 0; ix < NLON; ix++) {
+      const lon = LON0 + (ix + 0.5) * D;
+      const k = cellIdx(ix, iy);
+      /* Three nearest stations, inverse distance. */
+      let b0 = [1e9, -1], b1 = [1e9, -1], b2 = [1e9, -1];
+      for (let i = 0; i < N.n; i++) {
+        if (!isFinite(julyF[i])) continue;
+        const dx = (N.lon[i] - lon) * cosLat, dy = N.lat[i] - lat;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < b0[0]) { b2 = b1; b1 = b0; b0 = [d2, i]; }
+        else if (d2 < b1[0]) { b2 = b1; b1 = [d2, i]; }
+        else if (d2 < b2[0]) { b2 = [d2, i]; }
+      }
+      let num = 0, den = 0;
+      for (const b of [b0, b1, b2]) {
+        if (b[1] < 0) continue;
+        const w = 1 / (b[0] + 0.02);
+        const lapse = (N.elev[b[1]] - (isFinite(meanFt[k]) ? meanFt[k] : N.elev[b[1]])) * LAPSE;
+        num += (julyF[b[1]] + lapse) * w; den += w;
+      }
+      if (!den) { out[k] = 0.5; continue; }
+      const t = num / den;
+      /* Full below 68 F, nothing above 80 F.
+
+         Calibrated against real fisheries, not against water temperature
+         directly: a stream runs well below the July air mean because of
+         groundwater, shade and because the mean includes hot afternoons.
+         A first cut at 58-72 F scored Penns Creek 0.03 and the Madison
+         0.34, which would have wiped out trout almost everywhere outside
+         the high Rockies. At 68-80 the Madison and the Au Sable come out
+         full, Penns Creek 0.70, the Battenkill 0.88, and Phoenix and
+         Houston still zero. */
+      out[k] = Math.max(0, Math.min(1, (80 - t) / 12));
+    }
+  }
+  return out;
+}
+
+/* ---------- hunting pressure ----------
+
+   Pressure was a list of hand-placed metro blobs with hand-set
+   weights and a noise field on top. NLCD already says where the
+   people are, at 30 m, and it is the same download the habitat
+   surfaces come from.
+
+   Developed classes are weighted by intensity, because an acre of
+   high-intensity development holds far more people than an acre of
+   large-lot housing, and then spread over roughly an hour's drive:
+   what matters to a hunter is not whether this cell is built up but
+   how many people can reach it before shooting light. */
+
+const DEVELOPED = { 21: 0.15, 22: 0.45, 23: 0.80, 24: 1.00 };
+
+function pressureGrid(counts, total) {
+  const dev = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!total[k]) continue;
+    let v = 0;
+    for (const cls of Object.keys(DEVELOPED)) {
+      const arr = counts.get(+cls);
+      if (arr) v += DEVELOPED[cls] * (arr[k] / total[k]);
+    }
+    dev[k] = v;
+  }
+  /* About 70 km, which is the distance a lot of people will drive
+     before work on a Saturday. */
+  const spread = smooth(dev, 6);
+  const out = new Float32Array(NCELL);
+  /* Normalise against the 99th percentile rather than the maximum,
+     so one dense city core does not flatten everywhere else. */
+  const nz = Array.from(spread).filter((v) => v > 0).sort((a, b) => a - b);
+  const p99 = nz.length ? nz[Math.floor(nz.length * 0.99)] : 1;
+  for (let k = 0; k < NCELL; k++) {
+    out[k] = Math.max(0, Math.min(1, Math.pow(spread[k] / (p99 || 1), 0.6)));
+  }
+  return out;
+}
+
+/* ---------- tailwaters ----------
+
+   The coldwater index above is climate, and climate says no to some
+   of the best trout water in the country. The White River below Bull
+   Shoals scores 0.00 on July air temperature and runs 57 F in
+   October, because it is drawn from the bottom of a reservoir. The
+   Norfork reads 53 F, Taneycomo 55 F. A trout map built on air
+   temperature alone blanks the Ozarks and the Tennessee Valley.
+
+   USGS names its sites descriptively, so "WHITE RIVER BELOW BULL
+   SHOALS DAM" and "TAILRACE" are in the record. Naming is a
+   structural fact about the river rather than a reading, which
+   matters here: keying off live water temperature instead would mark
+   every river in Minnesota as trout water in January.
+
+   Folded into the coldwater grid BEFORE the occurrence gate, not
+   applied on top of the finished surface, so a cold tailwater with no
+   trout ever recorded in it still comes out empty. */
+
+function tailwaterGrid() {
+  const out = new Float32Array(NCELL);
+  let raw = null;
+  try {
+    const win = {};
+    new Function('window', readFileSync(resolve(HERE, '..', 'js', 'gauges.js'), 'utf8'))(win);
+    raw = win.US_GAUGES;
+  } catch (e) { /* no gauge file - the climate index stands alone */ }
+  if (!raw || !raw.sites) return out;
+
+  const TW = /\b(TAILRACE|TAILWATER|POWERHOUSE|PWRHSE)\b|\b(BL|BLW|BELOW|DS)\b[^,]{0,40}\bDAM\b/i;
+  const REACH_KM = 28;
+  let n = 0;
+
+  for (const site of raw.sites) {
+    const lat = site[2], lon = site[3], tempC = site[4], cfs = site[5];
+    if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+    if (!TW.test(site[1] || '')) continue;
+
+    /* Many "below dam" sites in the network are trickles behind farm
+       ponds. Require real flow, or a temperature cold enough to be a
+       bottom release. */
+    const bigFlow = typeof cfs === 'number' && cfs >= 150;
+    const coldRead = typeof tempC === 'number' && tempC <= 17;   // 63 F
+    if (!bigFlow && !coldRead) continue;
+    n++;
+
+    const strength = coldRead ? 1.0 : 0.8;
+    const kmPerLon = 111.32 * Math.cos(lat * Math.PI / 180);
+    const dLat = REACH_KM / 111.32, dLon = REACH_KM / kmPerLon;
+    const iy0 = Math.max(0, Math.floor((lat - dLat - LAT0) / D));
+    const iy1 = Math.min(NLAT - 1, Math.ceil((lat + dLat - LAT0) / D));
+    const ix0 = Math.max(0, Math.floor((lon - dLon - LON0) / D));
+    const ix1 = Math.min(NLON - 1, Math.ceil((lon + dLon - LON0) / D));
+    for (let iy = iy0; iy <= iy1; iy++) {
+      const cy = LAT0 + (iy + 0.5) * D;
+      for (let ix = ix0; ix <= ix1; ix++) {
+        const cx = LON0 + (ix + 0.5) * D;
+        const ex = (cx - lon) * kmPerLon, ey = (cy - lat) * 111.32;
+        const d = Math.sqrt(ex * ex + ey * ey);
+        if (d > REACH_KM) continue;
+        const v = strength * (1 - d / REACH_KM);
+        const k = cellIdx(ix, iy);
+        if (v > out[k]) out[k] = v;
+      }
+    }
+  }
+  process.stderr.write('  ' + n + ' qualifying tailwater gauges' + String.fromCharCode(10));
+  return out;
+}
+
 /* ---------- combine ---------- */
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+function quantise(f32) {
+  const b = new Uint8Array(f32.length);
+  for (let i = 0; i < f32.length; i++) b[i] = Math.round(clamp01(f32[i]) * 255);
+  return b;
+}
 
 function elevFactor(ft, band) {
   if (!band || !isFinite(ft)) return 1;
@@ -346,18 +597,32 @@ async function main() {
   process.stderr.write('elevation...\n');
   const ev = await elevation();
 
+  process.stderr.write('pressure...\n');
+  const press = pressureGrid(lc.counts, lc.total);
+
+  process.stderr.write('coldwater...\n');
+  const cold = coldwaterGrid(ev.meanFt);
+  const tw = tailwaterGrid();
+  /* A cold release beats whatever the climate would have predicted. */
+  for (let k = 0; k < NCELL; k++) if (tw[k] > cold[k]) cold[k] = tw[k];
+
   process.stderr.write('occurrences...\n');
   const occ = {}, effort = new Float32Array(NCELL);
+  const chronology = {}, composition = {};
   for (const sp of SPECIES) {
     occ[sp] = new Float32Array(NCELL);
     let total = 0;
+    const perTaxon = {};
     for (const name of TAXA[sp]) {
+      perTaxon[name] = new Float32Array(NCELL);
       const key = await taxonKey(name);
-      const got = await occurrences(key, occ[sp]);
+      if (!chronology[name]) chronology[name] = new Float64Array(CHRON_BANDS * 12);
+      const got = await occurrences(key, occ[sp], chronology[name], perTaxon[name]);
       total += got;
       process.stderr.write('  ' + sp + ' / ' + name + ': ' + got + '\n');
     }
     if (total < 500) throw new Error(sp + ' returned only ' + total + ' records - refusing to ship it');
+    if (COMPOSITION.indexOf(sp) >= 0) composition[sp] = perTaxon;
     /* Normalise to a unit total before it joins the effort sum. Without
        this, a species whose download hit the record cap contributes fewer
        counts than one that did not, and its share - the whole point of the
@@ -385,7 +650,7 @@ async function main() {
     const nz = Array.from(share).filter((v) => v > 0).sort((a, b) => a - b);
     const p97 = nz.length ? nz[Math.floor(nz.length * 0.97)] : 1;
 
-    const band = ELEV[sp], suit = SUIT[sp];
+    const band = ELEV[sp], suit = SUIT[sp], satK = SATURATE[sp] || 0;
     const suitPairs = Object.keys(suit).map((c) => [+c, suit[c]]);
     const vals = new Uint8Array(NCELL);
     for (let k = 0; k < NCELL; k++) {
@@ -396,6 +661,8 @@ async function main() {
         if (arr) s += suitPairs[q][1] * (arr[k] / lc.total[k]);
       }
       s *= elevFactor(ev.meanFt[k], band);
+      if (satK) s = 1 - Math.exp(-satK * s);
+      if (sp === 'trout') s *= cold[k];
 
       /* Presence gate. Full weight once the species is as common here as
          it is anywhere; a long toe so a cell just outside the recorded
@@ -410,13 +677,72 @@ async function main() {
   }
   process.stderr.write('  ' + report.join('\n  ') + '\n');
 
+  /* Chronology: raw counts per band per month, rounded. Kept as
+     counts rather than a fitted curve so the runtime can decide how
+     much to trust a thin band. */
+  const chronOut = {};
+  for (const sp of Object.keys(chronology)) {
+    chronOut[sp] = Array.from(chronology[sp]).map((v) => Math.round(v));
+  }
+
+  /* Composition: each taxon as a share of its group, on the coarse
+     grid, one byte per cell. */
+  const compOut = {};
+  for (const grp of Object.keys(composition)) {
+    const taxa = Object.keys(composition[grp]);
+    const coarse = {}, totals = new Float64Array(COMP_NLON * COMP_NLAT);
+    for (const tx of taxa) {
+      const c = new Float64Array(COMP_NLON * COMP_NLAT);
+      const src = composition[grp][tx];
+      for (let iy = 0; iy < NLAT; iy++) {
+        const cy = Math.floor((iy * D) / COMP_D);
+        for (let ix = 0; ix < NLON; ix++) {
+          const cx = Math.floor((ix * D) / COMP_D);
+          const v = src[iy * NLON + ix];
+          if (!v) continue;
+          c[cy * COMP_NLON + cx] += v;
+          totals[cy * COMP_NLON + cx] += v;
+        }
+      }
+      coarse[tx] = c;
+    }
+    const grpOut = {};
+    for (const tx of taxa) {
+      const b = new Uint8Array(COMP_NLON * COMP_NLAT);
+      for (let k = 0; k < b.length; k++) {
+        b[k] = totals[k] > 0 ? Math.round(255 * coarse[tx][k] / totals[k]) : 0;
+      }
+      grpOut[tx] = Buffer.from(b).toString('base64');
+    }
+    compOut[grp] = grpOut;
+  }
+
   const js = 'window.US_HABITAT=' + JSON.stringify({
     source: 'NLCD 2021 land cover (MRLC), AWS terrarium elevation, GBIF occurrence records 2015-2025',
     note: 'Land cover and elevation set habitat quality; GBIF occurrence share gates presence. ' +
           'Modelled suitability, not a census and not an abundance estimate.',
     built: new Date().toISOString().slice(0, 10),
     grid: { lon0: LON0, lat0: LAT0, d: D, nlon: NLON, nlat: NLAT },
-    sp: out
+    sp: out,
+
+    /* Hunting pressure from developed land cover, replacing a list
+       of hand-weighted metro blobs. */
+    pressure: Buffer.from(quantise(press)).toString('base64'),
+
+    /* Occurrence counts by latitude band and calendar month, per
+       taxon. Keyed by taxon rather than by group, because ducks and
+       these rather than from a hardcoded peak day and width. */
+    chronology: {
+      bandDeg: CHRON_BAND_DEG, bands: CHRON_BANDS, lat0: LAT0,
+      sp: chronOut
+    },
+
+    /* Share of each taxon within its group, so advice can name the
+       birds that are actually there. */
+    composition: {
+      grid: { lon0: LON0, lat0: LAT0, d: COMP_D, nlon: COMP_NLON, nlat: COMP_NLAT },
+      sp: compOut
+    }
   }) + ';\n';
   mkdirSync(OUT, { recursive: true });
   writeFileSync(resolve(OUT, 'habitat-grid.js'), js);
