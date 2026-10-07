@@ -631,10 +631,10 @@
   /* Rivers and lakes. For a waterfowl product the water is not decoration -
      it is the thing being hunted, so it draws over the heat, not under it. */
   /* Fluorescent orange water on a dark ground. */
-  var WW_GROUND = 'rgba(11,13,16,0.90)';
+  var WW_GROUND = 'rgba(252,251,249,0.96)';
   var WW_AREA = [255, 122, 26];
-  var WW_LINE = '#FF7A1A';
-  var WW_GLOW = 'rgba(255,122,26,0.55)';
+  var WW_LINE = '#F25C05';
+  var WW_GLOW = 'rgba(214,74,0,0.35)';
 
   Radar.prototype.drawWaterways = function (win) {
     var ctx = this.ctx, p = this._pt, z = this.view.zoom;
@@ -685,7 +685,7 @@
              so much as a farm pond, which is most of the country
              east of the hundredth meridian - the whole eastern
              half came out solid. */
-          var a = Math.min(0.82, Math.max(0, (v - 0.02) * 2.6));
+          var a = Math.min(0.88, Math.max(0, (v - 0.02) * 3.1));
           if (a < 0.02) continue;
           var w0 = geo.project(lo, la, [0, 0]);
           this.toScreen(w0[0], w0[1], p);
@@ -704,7 +704,7 @@
     var maxRank = z < 13 ? 4 : z < 22 ? 6 : z < 42 ? 8 : z < 75 ? 10 : 99;
     var lakes = geo.lakes, i, k, ring;
     ctx.shadowColor = WW_GLOW;
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 4;
     ctx.fillStyle = WW_LINE;
     for (i = 0; i < lakes.length; i++) {
       var lb = lakes[i].bbox;

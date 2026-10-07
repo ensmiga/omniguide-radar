@@ -54,7 +54,13 @@
   App.state.ent.species = validSpecies(App.state.ent.species);
 
   App.theme = function () {
-    if (this._theme) return this._theme;
+    /* Duck water paints its own white ground, so the map ink has to
+       flip with it or a dark-theme user gets light labels on paper.
+       Cached per ground rather than once, which the single _theme
+       slot could not express. */
+    var ground = (this.state && this.state.basemap === 'waterways') ? 'ww' : 'map';
+    if (this._theme && this._themeGround === ground) return this._theme;
+    this._themeGround = ground;
     var cs = getComputedStyle(document.documentElement);
     this._theme = {
       mapBg: cs.getPropertyValue('--map-bg').trim(),
@@ -71,6 +77,21 @@
       micro: cs.getPropertyValue('--micro').trim(),
       label: cs.getPropertyValue('--text').trim()
     };
+    if (ground === 'ww') {
+      /* Ink for paper. Deliberately not the light theme's values -
+         this ground is lighter than either theme's map. */
+      this._theme.mapBg = '#FCFBF9';
+      this._theme.land = '#FCFBF9';
+      this._theme.border = 'rgba(40,46,52,0.42)';
+      this._theme.county = 'rgba(40,46,52,0.16)';
+      this._theme.halo = 'rgba(255,255,255,0.92)';
+      this._theme.stateLabel = 'rgba(32,38,44,0.30)';
+      this._theme.countyLabel = 'rgba(40,46,52,0.55)';
+      this._theme.cityLabel = 'rgba(24,28,33,0.88)';
+      this._theme.graticule = 'rgba(40,46,52,0.10)';
+      this._theme.micro = 'rgba(40,46,52,0.45)';
+      this._theme.label = '#1A1F24';
+    }
     return this._theme;
   };
 
@@ -2577,7 +2598,7 @@
     App.autoOpacity = function () {
       if (App._opTouched) return;
       var d = App.state.basemap === 'satellite' ? 38 : App.state.basemap === 'none' ? 85
-        : App.state.basemap === 'waterways' ? 30 : 62;
+        : App.state.basemap === 'waterways' ? 58 : 62;
       opIn.value = String(d);
       var snapped = parseInt(opIn.value, 10);   // the step may round it
       opVal.textContent = snapped + "%";
@@ -2628,6 +2649,7 @@
       }
       App.state.basemap = next;
       save('og.basemap', next);
+      App._theme = null;             // ground changed, so the ink has to be rebuilt
       if (App.autoOpacity) App.autoOpacity();
       App.dirty = true;
       syncBasemap();
