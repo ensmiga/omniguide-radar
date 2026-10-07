@@ -232,7 +232,9 @@
     display: flex;
     align-items: flex-start;
     z-index: 6;
-    max-height: calc(100% - 24px);
+    /* Leave the bottom-left clear for the legend: the dock used to grow
+       over it and hide the colour scale. */
+    max-height: calc(100% - 170px);
   }
   #layertab {
     flex: none;
@@ -271,7 +273,8 @@
     backdrop-filter: blur(10px);
     box-shadow: var(--shadow);
     overflow-y: auto;
-    max-height: calc(100vh - 220px);
+    max-height: 100%;
+    min-height: 0;
   }
   #layerdock:not(.open) #layers { display: none; }
 
@@ -332,16 +335,21 @@
   .layerbtn.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
   .layerbtn:disabled { opacity: 0.32; cursor: not-allowed; }
 
+  /* Flush to the same edge as the layer dock, so the two read as one left
+     rail rather than two boxes that happen to be near each other. The
+     legend explains whichever layer the dock has selected. */
   #legend {
     position: absolute;
-    left: 12px; bottom: 12px;
-    width: 196px;
-    padding: 9px 11px 10px;
-    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    left: 0; bottom: 12px;
+    width: 225px;
+    padding: 9px 13px 10px;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-left: 0;
+    border-radius: 0 10px 10px 0;
     backdrop-filter: blur(8px);
     box-shadow: var(--shadow);
+    z-index: 5;
   }
   .lg-title {
     font-family: var(--disp);
@@ -1004,7 +1012,7 @@
     }
     .layer-sep { height: 18px; width: 1px; margin: 0 5px; }
     .layer-grp { padding: 0 4px 0 0; }
-    #legend { width: calc(100% - 16px); left: 8px; bottom: 8px; }
+    #legend { width: calc(100% - 16px); left: 8px; bottom: 8px; border-left: 1px solid var(--line); border-radius: 10px; }
     #hint { display: none; }
     #panel { width: 100%; top: auto; height: 88%; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; }
     .metrics { grid-template-columns: repeat(2, 1fr); }
