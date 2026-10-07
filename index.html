@@ -232,9 +232,9 @@
     display: flex;
     align-items: flex-start;
     z-index: 6;
-    /* Leave the bottom-left clear for the legend: the dock used to grow
-       over it and hide the colour scale. */
-    max-height: calc(100% - 170px);
+    /* The dock owns the left edge, top to bottom. It scrolls internally
+       when the list is taller than the map. */
+    max-height: calc(100% - 24px);
   }
   #layertab {
     flex: none;
@@ -281,8 +281,9 @@
   /* Zoom buttons, because a trackpad is not the only input. */
   #zoomctl {
     position: absolute;
-    right: 12px; top: 50%;
-    transform: translateY(-50%);
+    /* Anchored above the legend rather than centred, so a short window
+       cannot stack them on top of each other. */
+    right: 12px; bottom: 170px;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -338,15 +339,17 @@
   /* Flush to the same edge as the layer dock, so the two read as one left
      rail rather than two boxes that happen to be near each other. The
      legend explains whichever layer the dock has selected. */
+  /* Legend lives on the right so the layer dock can own the full left
+     edge. They were competing for the same corner. */
   #legend {
     position: absolute;
-    left: 0; bottom: 12px;
-    width: 225px;
+    right: 0; bottom: 12px;
+    width: 215px;
     padding: 9px 13px 10px;
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     border: 1px solid var(--line);
-    border-left: 0;
-    border-radius: 0 10px 10px 0;
+    border-right: 0;
+    border-radius: 10px 0 0 10px;
     backdrop-filter: blur(8px);
     box-shadow: var(--shadow);
     z-index: 5;
@@ -1038,7 +1041,7 @@
     }
     .layer-sep { height: 18px; width: 1px; margin: 0 5px; }
     .layer-grp { padding: 0 4px 0 0; }
-    #legend { width: calc(100% - 16px); left: 8px; bottom: 8px; border-left: 1px solid var(--line); border-radius: 10px; }
+    #legend { width: calc(100% - 16px); left: 8px; right: auto; bottom: 8px; border-right: 1px solid var(--line); border-radius: 10px; }
     #hint { display: none; }
     #panel { width: 100%; top: auto; height: 88%; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; }
     .metrics { grid-template-columns: repeat(2, 1fr); }

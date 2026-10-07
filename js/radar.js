@@ -932,6 +932,15 @@
   /* The legend goes full width at phone sizes, so map chrome lifts above it. */
   Radar.prototype.bottomPad = function () { return this.w < 720 ? 104 : 16; };
 
+  /* How far in from the right the canvas-drawn chrome has to start so it
+     clears the legend. Measured from the live element rather than
+     hard-coded, because the legend's width changes with the layer. */
+  Radar.prototype.rightInset = function () {
+    if (this.w < 720) return 16;            // legend is full width down there
+    var lg = document.getElementById('legend');
+    return lg ? lg.offsetWidth + 24 : 24;
+  };
+
   Radar.prototype.drawScaleBar = function () {
     var ctx = this.ctx, th = this.app.theme();
     var a = this.lonLatAt(this.w - 150, this.h - 30);
@@ -952,7 +961,7 @@
     var px = pick / milesPer100px * 100;
     var label = pick < 1 ? Math.round(pick * 5280) + ' ft' : pick + ' mi';
 
-    var x1 = this.w - 16, x0 = x1 - px, y = this.h - this.bottomPad();
+    var x1 = this.w - this.rightInset(), x0 = x1 - px, y = this.h - this.bottomPad();
     ctx.save();
     ctx.strokeStyle = th.halo;
     ctx.lineWidth = 3.5;
@@ -994,7 +1003,7 @@
     ctx.font = '600 11.5px "Saira Condensed", sans-serif';
     ctx.letterSpacing = '1.5px';
     var w = ctx.measureText(text).width;
-    var x = this.w - 16 - w, y = this.h - this.bottomPad() - 22;
+    var x = this.w - this.rightInset() - w, y = this.h - this.bottomPad() - 22;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.lineWidth = 3.5;
