@@ -147,6 +147,26 @@
            v >= 30 ? 'Tough' : 'Poor';
   }
 
+  /* One line of plain advice under the Day score: go, or wait, and how long
+     the wait is. Deliberately vague past six weeks, which is well beyond any
+     real forecast - past the ten-day window this is climatology, and it
+     should not read like a promise about a Tuesday in December. */
+  function dayVerdict(ds) {
+    /* nextBetter is the first day ahead that out-scores today, so today is
+       the best day here until then. Null means nothing ahead beats it. */
+    if (!ds.nextBetter) {
+      return ds.daysClear >= 45
+        ? 'Best day here for at least six weeks'
+        : 'The best of what is left of the season here';
+    }
+    var d = ds.daysClear;
+    if (d <= 1) return 'Tomorrow looks better here';
+    if (d <= 10) return fmtDay(guide.dateFor(ds.nextBetter.t)) + ' looks better here';
+    if (d <= 20) return 'Best day here for the next ' + d + ' days';
+    if (d <= 45) return 'Best day here for about ' + Math.round(d / 7) + ' weeks';
+    return 'Best day here for over a month';
+  }
+
   function fmtDay(d) {
     var days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     var mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -335,20 +355,59 @@
       : 'Scored at these exact coordinates'));
     root.appendChild(head);
 
-    /* Score block */
+    /* Score block.
+
+       The headline is the Day score - today against the other days you could
+       legally hunt THIS spot - because that is the question someone standing
+       in their own spot is asking. The Spot score underneath is the national
+       ranking and the thing the map colours. They answer different questions
+       and routinely disagree: in October, Devils Lake reads Spot 86 and Day
+       25, which is correct on both counts. Great water, wrong week. */
     var legalOk = plan.legal.status === 'OPEN' || plan.legal.status === 'LIMITED';
+    var ds = models.dayScore(sc.lon, sc.lat, st.species, st.t);
+    var headline = ds ? ds.score : sc.opportunity;
+
     var sb = el('div', 'scoreblock');
     var big = el('div', 'bigscore');
-    big.style.color = radarNS.rampCSS(sc.opportunity / 100, 1);
-    big.appendChild(el('span', 'bs-num', String(sc.opportunity)));
+    big.style.color = radarNS.rampCSS(headline / 100, 1);
+    big.appendChild(el('span', 'bs-num', String(headline)));
     big.appendChild(el('span', 'bs-den', '/100'));
     sb.appendChild(big);
     var sbr = el('div', 'sb-right');
-    sbr.appendChild(el('div', 'bs-band', band(sc.opportunity)));
-    sbr.appendChild(el('div', 'bs-lab', legalOk ? 'OmniGuide Opportunity Score'
-                                                : 'Biological activity only. This is not a statement that hunting is permitted.'));
+    sbr.appendChild(el('div', 'bs-band', band(headline)));
+    if (ds) {
+      sbr.appendChild(el('div', 'bs-lab', 'Day score · today against ' +
+        (ds.baseline === 'season'
+          ? 'the ' + ds.nDays + ' days you could hunt here this season'
+          : 'the rest of the year here, because no season record covers this spot')));
+      sbr.appendChild(el('div', 'bs-when', dayVerdict(ds)));
+    } else {
+      sbr.appendChild(el('div', 'bs-lab', legalOk ? 'OmniGuide Opportunity Score'
+                                                  : 'Biological activity only. This is not a statement that hunting is permitted.'));
+    }
     sb.appendChild(sbr);
     root.appendChild(sb);
+
+    if (ds) {
+      /* The national ranking keeps its own line so neither number is left
+         standing in for the other. */
+      var np = models.nationalPct(st.species, st.t, sc.opportunity);
+      var spotRow = el('div', 'spotrow');
+      var sdot = el('span', 'spot-dot');
+      sdot.style.background = radarNS.rampCSS(sc.opportunity / 100, 1);
+      spotRow.appendChild(sdot);
+      spotRow.appendChild(el('span', 'spot-n', 'Spot ' + sc.opportunity));
+      spotRow.appendChild(el('span', 'spot-b', band(sc.opportunity)));
+      spotRow.appendChild(el('span', 'spot-x', np
+        ? 'top ' + Math.max(1, Math.round(100 * (1 - np.pct))) + '% of the country for ' +
+          plan.species.name.toLowerCase() + ' today — this is the number the map colours'
+        : 'how this place ranks nationally today'));
+      root.appendChild(spotRow);
+    }
+    if (!legalOk && ds) {
+      root.appendChild(el('p', 'note', 'The Day score describes animal activity only. ' +
+        'It is not a statement that hunting is permitted here today.'));
+    }
 
     if (!legalOk) {
       var warn = el('div', 'gate gate-' + plan.legal.status.toLowerCase());

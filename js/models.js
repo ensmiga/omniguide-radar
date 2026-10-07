@@ -643,9 +643,137 @@
     return clamp01(a);
   }
 
+  /* ---------- Two questions, two measures ----------
+
+     scoreAt answers "how does this place-and-time rank against the rest of
+     the country", because that is what the map has to show: colours are only
+     meaningful if every cell is on the same scale on the same day.
+
+     That is not the question a hunter standing in their own spot is asking.
+     Measured before these functions existed, the best elk cell in Montana
+     never scored below 69 in any week of the year and the ducks at Devils
+     Lake never below 72 - both read "Decent" or better in July. The number
+     was mostly reporting the zip code with weather as a wobble on top, so it
+     could not say "today is the day" or "stay home".
+
+     dayScore answers the other question: how does today rank against the
+     other days you could legally hunt this exact spot. A middling Ohio farm
+     on the best cold front of the rut should read near the top of its own
+     season even though it will never out-rank Buffalo County nationally.
+
+     Both come from the same scoreAt. Neither replaces the other, and the UI
+     labels which is which - two differently-normalised numbers under one
+     heading is how the panel and the map disagreed once before. */
+
+  var dayCache = {}, natCache = {};
+
+  /* Days of the year this species may be hunted at this point, from the
+     Legal Gate. Those season dates are unverified placeholders (see the
+     header of regs.js), so this inherits their accuracy: it decides which
+     days form the comparison set, nothing more. When no record exists the
+     caller is told the baseline fell back to the calendar. */
+  function seasonDays(lon, lat, spId) {
+    var regs = global.OG.regs;
+    var base = env.doyFor(0);
+    var open = [], any = false;
+    var d = new Date(); d.setHours(12, 0, 0, 0);
+    for (var k = -182; k <= 182; k += 2) {
+      var dt = new Date(d.getTime()); dt.setDate(dt.getDate() + k);
+      var c = regs.check(lon, lat, dt, spId);
+      if (c.status === 'UNKNOWN') continue;
+      any = true;
+      if (c.status === 'OPEN' || c.status === 'LIMITED') open.push(k);
+    }
+    /* Too few open days to rank against - a two-week elk window sampled
+       every other day is seven points, which cannot support a percentile. */
+    if (!any || open.length < 8) {
+      var all = [];
+      for (var j = -182; j <= 182; j += 4) all.push(j);
+      return { days: all, baseline: 'year' };
+    }
+    return { days: open, baseline: 'season' };
+  }
+
+  /* Today against this spot's own season. Samples at the same time of day as
+     the scrubber so a dawn reading is ranked against other dawns. */
+  function dayScore(lon, lat, spId, t) {
+    var frac = t - Math.floor(t);
+    var key = lon.toFixed(2) + ',' + lat.toFixed(2) + ':' + spId + ':' + frac.toFixed(3);
+    var c = dayCache[key];
+    if (!c) {
+      var sd = seasonDays(lon, lat, spId);
+      var rows = [];
+      for (var i = 0; i < sd.days.length; i++) {
+        var tt = sd.days[i] + frac;
+        var sc = scoreAt(lon, lat, tt, env.doyFor(tt), spId);
+        if (sc.inRange) rows.push({ t: tt, v: sc.opportunity });
+      }
+      if (!rows.length) return null;
+      var sorted = rows.map(function (r) { return r.v; }).sort(function (a, b) { return a - b; });
+      c = dayCache[key] = { rows: rows, sorted: sorted, baseline: sd.baseline };
+    }
+
+    var here = scoreAt(lon, lat, t, env.doyFor(t), spId);
+    if (!here.inRange) return null;
+
+    /* Midpoint rank, so a run of identical scores sits in the middle of the
+       band it occupies rather than at the top of it. */
+    var below = 0, equal = 0;
+    for (var m = 0; m < c.sorted.length; m++) {
+      if (c.sorted[m] < here.opportunity) below++;
+      else if (c.sorted[m] === here.opportunity) equal++;
+    }
+    var pct = (below + equal / 2) / c.sorted.length;
+
+    /* How many of the coming days at this spot beat today, so the panel can
+       say "best day for three weeks" or "wait for Thursday". */
+    var ahead = c.rows.filter(function (r) { return r.t > t && r.t <= t + 45; });
+    var nextBetter = null;
+    for (var q = 0; q < ahead.length; q++) {
+      if (ahead[q].v > here.opportunity) { nextBetter = ahead[q]; break; }
+    }
+
+    return {
+      score: clamp(Math.round(1 + 98 * pct), 1, 99),
+      pct: pct,
+      spot: here.opportunity,
+      baseline: c.baseline,
+      nDays: c.sorted.length,
+      nextBetter: nextBetter,
+      daysClear: nextBetter ? Math.round(nextBetter.t - t) : (ahead.length ? 45 : 0)
+    };
+  }
+
+  /* Where this score sits among every in-range cell in the country right now.
+     Coarse on purpose - this is a one-line "top 6% in the country" claim, not
+     a ranking, and it has to be cheap enough to run on every panel open. */
+  function nationalPct(spId, t, score) {
+    var tq = Math.round(t * 8) / 8;
+    var key = spId + ':' + tq;
+    var vals = natCache[key];
+    if (!vals) {
+      vals = [];
+      var doy = env.doyFor(tq);
+      for (var lat = 25.5; lat <= 49; lat += 1.1) {
+        for (var lon = -124; lon <= -67; lon += 1.1) {
+          if (geo.stateIndexAt(lon, lat) < 0) continue;
+          var sc = scoreAt(lon, lat, tq, doy, spId);
+          if (sc.inRange) vals.push(sc.opportunity);
+        }
+      }
+      vals.sort(function (a, b) { return a - b; });
+      natCache[key] = vals;
+    }
+    if (!vals.length) return null;
+    var below = 0;
+    for (var i = 0; i < vals.length; i++) if (vals[i] < score) below++;
+    return { pct: below / vals.length, n: vals.length };
+  }
+
   global.OG.models = {
     SPECIES: SPECIES, byId: function (id) { return BY_ID[id]; },
-    scoreAt: scoreAt, hourlyActivity: hourlyActivity,
+    scoreAt: scoreAt, dayScore: dayScore, nationalPct: nationalPct,
+    hourlyActivity: hourlyActivity,
     huntingPressure: huntingPressure, migration: migration
   };
 })(window);
