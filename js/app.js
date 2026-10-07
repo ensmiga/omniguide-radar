@@ -133,11 +133,18 @@
   /* The one place a score turns into a word. Thresholds line up with the
      per-species calibration in models.js: the anchors there put the top of
      what a species ever offers nationwide at 94, so Primo is genuinely rare
-     and the middle of the scale carries the ordinary days. */
+     and the middle of the scale carries the ordinary days.
+
+     One vocabulary, all absolute. An earlier cut mixed quality words with
+     comparatives (Above average / Average / Below average), which left no way
+     to tell from the words alone that Decent outranks Above average, and
+     invited the question "average of what?" - a fair question, since the
+     calibration is against the whole country across a whole year, not against
+     this place in this season. */
   function band(v) {
     return v >= 90 ? 'Primo' : v >= 80 ? 'Exceptional' : v >= 70 ? 'Good' :
-           v >= 60 ? 'Decent' : v >= 50 ? 'Above average' : v >= 40 ? 'Average' :
-           v >= 30 ? 'Below average' : 'Poor';
+           v >= 60 ? 'Decent' : v >= 50 ? 'Fair' : v >= 40 ? 'Slow' :
+           v >= 30 ? 'Tough' : 'Poor';
   }
 
   function fmtDay(d) {
