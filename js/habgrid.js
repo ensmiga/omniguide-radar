@@ -54,10 +54,66 @@
     return (top * (1 - ty) + bot * ty) / 255;
   }
 
+  /* ---------- elevation ----------
+
+     Same grid, separate file, because elevation is wanted by callers that
+     do not care about habitat - the lapse correction applied to every
+     forecast readout, most of all. env.js used eleven hand-drawn Gaussian
+     mountain ranges before this, which made a wrong elevation into a wrong
+     temperature everywhere. */
+
+  var eraw = global.US_ELEV || null;
+  var EG = eraw ? eraw.grid : null;
+  var ePlanes = {};
+
+  function b64(name) {
+    if (!eraw || !eraw[name]) return null;
+    var p = ePlanes[name];
+    if (p !== undefined) return p;
+    try {
+      var bin = global.atob(eraw[name]);
+      var a = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      p = a;
+    } catch (e) { p = null; }
+    ePlanes[name] = p;
+    return p;
+  }
+
+  /* Bilinear over covered cells only. Interpolating a coastal cell against
+     an all-zero ocean cell would drag the shoreline below sea level. */
+  function elevSample(name, lon, lat) {
+    if (!EG) return null;
+    var a = b64(name), cov = b64('covered');
+    if (!a || !cov) return null;
+
+    var fx = (lon - EG.lon0) / EG.d - 0.5;
+    var fy = (lat - EG.lat0) / EG.d - 0.5;
+    var x0 = Math.floor(fx), y0 = Math.floor(fy);
+    if (x0 < 0 || y0 < 0 || x0 + 1 >= EG.nlon || y0 + 1 >= EG.nlat) return null;
+    var tx = fx - x0, ty = fy - y0;
+
+    var idx = [y0 * EG.nlon + x0, y0 * EG.nlon + x0 + 1,
+               (y0 + 1) * EG.nlon + x0, (y0 + 1) * EG.nlon + x0 + 1];
+    var wt = [(1 - tx) * (1 - ty), tx * (1 - ty), (1 - tx) * ty, tx * ty];
+    var s = 0, w = 0;
+    for (var i = 0; i < 4; i++) {
+      if (!cov[idx[i]]) continue;
+      s += a[idx[i]] * wt[i]; w += wt[i];
+    }
+    if (w < 0.001) return null;
+    return (s / w) * eraw.stepFt;
+  }
+
   global.OG = global.OG || {};
   global.OG.habgrid = {
     at: at,
     ready: !!G,
-    meta: raw ? { source: raw.source, note: raw.note, built: raw.built, d: raw.grid.d } : null
+    meta: raw ? { source: raw.source, note: raw.note, built: raw.built, d: raw.grid.d } : null,
+
+    elevReady: !!EG,
+    elevFt: function (lon, lat) { return elevSample('mean', lon, lat); },
+    reliefFt: function (lon, lat) { return elevSample('relief', lon, lat); },
+    elevMeta: eraw ? { source: eraw.source, note: eraw.note, built: eraw.built } : null
   };
 })(window);

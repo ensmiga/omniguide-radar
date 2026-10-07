@@ -62,7 +62,22 @@
 
   /* ---------- Terrain ---------- */
 
+  /* Real elevation where the baked raster covers the point; the drawn
+     surface below is the fallback. This matters beyond contours - the
+     lapse correction on every forecast readout runs off this number, so
+     an invented mountain was an invented temperature. */
   function elevFt(lon, lat) {
+    var hg = global.OG && global.OG.habgrid;
+    if (hg && hg.elevReady) {
+      var real = hg.elevFt(lon, lat);
+      if (real != null) return real;
+    }
+    return elevDrawn(lon, lat);
+  }
+
+  /* The pre-raster surface: eleven Gaussian ranges and some noise. Kept
+     only so points off the grid still get a plausible number. */
+  function elevDrawn(lon, lat) {
     var e = 0;
     e += 9200 * gb((lon + 106.3) / 3.1, (lat - 40.6) / 4.9);   // Southern + Central Rockies
     e += 7000 * gb((lon + 113.2) / 2.7, (lat - 45.2) / 3.9);   // Northern Rockies
