@@ -130,9 +130,14 @@
   function frag() { return document.createDocumentFragment(); }
   function $(sel) { return document.querySelector(sel); }
 
+  /* The one place a score turns into a word. Thresholds line up with the
+     per-species calibration in models.js: the anchors there put the top of
+     what a species ever offers nationwide at 94, so Primo is genuinely rare
+     and the middle of the scale carries the ordinary days. */
   function band(v) {
-    return v >= 90 ? 'Exceptional' : v >= 80 ? 'Very good' : v >= 70 ? 'Good' :
-           v >= 60 ? 'Fair' : v >= 50 ? 'Marginal' : 'Poor';
+    return v >= 90 ? 'Primo' : v >= 80 ? 'Exceptional' : v >= 70 ? 'Good' :
+           v >= 60 ? 'Decent' : v >= 50 ? 'Above average' : v >= 40 ? 'Average' :
+           v >= 30 ? 'Below average' : 'Poor';
   }
 
   function fmtDay(d) {

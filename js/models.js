@@ -550,7 +550,7 @@
     var afterPress = weighted - pressDrop;
 
     /* Map the raw weighted score onto the published 1-99 scale through this
-       species' own measured range, so "Exceptional" means near the best this
+       species' own measured range, so "Primo" means near the best this
        species ever offers anywhere in the country, and a band label means the
        same thing to a duck hunter as it does to an elk hunter. */
     var cal = CAL[sp.id] || [15, 70];

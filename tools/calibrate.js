@@ -3,7 +3,7 @@
    The scoring model's weighted mean never spans 0-100 - its components rarely
    peak at the same time - and each species sits in its own narrow band. CAL
    rescales each species through the range it actually produces, so the word
-   "Exceptional" means the same thing for ducks as for elk.
+   "Primo" means the same thing for ducks as for elk.
 
    This has to run in the browser, because the model needs env.js, geo.js and
    the fetched forecast/habitat data. Open the site, wait for it to finish
