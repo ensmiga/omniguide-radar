@@ -907,33 +907,76 @@
         return root;
       }
 
-      /* Where */
+      /* Where. One field that takes a saved spot, the current map pin, or
+         anything typed: a town, a county, a named river or raw coordinates.
+         The datalist offers the presets without blocking free text. */
       var pick = el('div', 'frow');
-      var locSel = el('select');
-      locSel.id = 'plan-loc';
-      st.spots.forEach(function (s) {
-        var o = el('option', null, s.name);
-        o.value = s.id;
-        if (target.name === s.name) o.selected = true;
-        locSel.appendChild(o);
-      });
+      var locIn = el('input');
+      locIn.type = 'text';
+      locIn.id = 'plan-loc';
+      locIn.setAttribute('list', 'plan-presets');
+      locIn.placeholder = 'Town, county, river, or 45.33, -107.95';
+      locIn.value = target.name;
+
+      var dl = el('datalist');
+      dl.id = 'plan-presets';
       if (st.selection) {
-        var o2 = el('option', null, 'Current map selection');
-        o2.value = '__sel';
-        if (!plannerWhere) o2.selected = true;
-        locSel.appendChild(o2);
+        var oSel = el('option');
+        oSel.value = 'Current map selection';
+        dl.appendChild(oSel);
       }
-      locSel.addEventListener('change', function () {
-        if (locSel.value === '__sel') plannerWhere = null;
-        else {
-          var s = st.spots.filter(function (x) { return x.id === locSel.value; })[0];
-          if (s) plannerWhere = { lon: s.lon, lat: s.lat, name: s.name };
-        }
-        renderPlannerPanel();
+      st.spots.forEach(function (s) {
+        var o = el('option');
+        o.value = s.name;
+        dl.appendChild(o);
       });
+      /* A few named complexes as a nudge toward what the field accepts. */
+      env.WF_REGIONS.slice(0, 8).concat(env.TROUT_WATERS.slice(0, 6)).forEach(function (r) {
+        var o = el('option');
+        o.value = r.n;
+        dl.appendChild(o);
+      });
+
+      var locMsg = el('div', 'loc-msg');
+
+      function applyLocation() {
+        var v = locIn.value.trim();
+        if (!v) return;
+
+        if (v.toLowerCase() === 'current map selection') {
+          if (!st.selection) { locMsg.textContent = 'No pin on the map yet.'; return; }
+          plannerWhere = null;
+          renderPlannerPanel();
+          return;
+        }
+        var saved = st.spots.filter(function (s) {
+          return s.name.toLowerCase() === v.toLowerCase();
+        })[0];
+        if (saved) {
+          plannerWhere = { lon: saved.lon, lat: saved.lat, name: saved.name };
+          renderPlannerPanel();
+          return;
+        }
+        var hit = resolvePlace(v);
+        if (!hit) { locMsg.textContent = 'Could not find "' + v + '".'; return; }
+        if (geo.stateIndexAt(hit.lon, hit.lat) < 0) {
+          locMsg.textContent = '"' + hit.name + '" is outside the modelled region.';
+          return;
+        }
+        plannerWhere = { lon: hit.lon, lat: hit.lat, name: hit.name };
+        renderPlannerPanel();
+      }
+
+      locIn.addEventListener('change', applyLocation);
+      locIn.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyLocation(); }
+      });
+
       var fL = el('label', 'field');
       fL.appendChild(el('span', null, 'Location'));
-      fL.appendChild(locSel);
+      fL.appendChild(locIn);
+      fL.appendChild(dl);
+      fL.appendChild(locMsg);
 
       var spSel = el('select');
       spSel.id = 'plan-species';
@@ -970,6 +1013,9 @@
       head.appendChild(el('div', 'ph-title', target.name));
       head.appendChild(el('div', 'ph-sub', 'Seasonal index, next 20 weeks, ' +
         App.speciesName(st.species).toLowerCase()));
+      head.appendChild(el('div', 'ph-cell',
+        Math.abs(target.lat).toFixed(3) + '° ' + (target.lat >= 0 ? 'N' : 'S') + ', ' +
+        Math.abs(target.lon).toFixed(3) + '° ' + (target.lon >= 0 ? 'E' : 'W')));
       root.appendChild(head);
 
       if (windows.length) {
@@ -1653,6 +1699,86 @@
     return { lat: lat, lon: lon };
   }
 
+  /* ---------- Place resolution ----------
+
+     One resolver behind both the map search and the planner's location
+     field, so "Park County, MT" means the same thing in both places. */
+
+  function resolvePlace(raw) {
+    if (!raw) return null;
+    var q = raw.trim();
+    if (!q) return null;
+
+    var pt = parseCoords(q);
+    if (pt) {
+      /* An unsigned longitude almost always means west in this context. */
+      if (geo.stateIndexAt(pt.lon, pt.lat) < 0 && geo.stateIndexAt(-pt.lon, pt.lat) >= 0) pt.lon = -pt.lon;
+      return {
+        kind: 'coords', lon: pt.lon, lat: pt.lat,
+        name: Math.abs(pt.lat).toFixed(4) + '° ' + (pt.lat >= 0 ? 'N' : 'S') + ', ' +
+              Math.abs(pt.lon).toFixed(4) + '° ' + (pt.lon >= 0 ? 'E' : 'W'),
+        zoom: 0.22
+      };
+    }
+
+    var lower = q.toLowerCase();
+    var parts = lower.split(',');
+    var head = parts[0].trim();
+    var tail = parts[1] ? parts[1].trim().toUpperCase() : null;
+
+    /* Towns, most prominent match first. */
+    var cities = geo.cities, exact = null, prefix = null;
+    for (var c = 0; c < cities.length; c++) {
+      var ct = cities[c];
+      if (tail && ct.st !== tail) continue;
+      var ln = ct.name.toLowerCase();
+      if (ln === head) { exact = ct; break; }
+      if (!prefix && ln.indexOf(head) === 0) prefix = ct;
+    }
+    var city = exact || prefix;
+    if (city) {
+      return { kind: 'town', lon: city.lon, lat: city.lat, name: city.name + ', ' + city.st, zoom: 0.5 };
+    }
+
+    /* Named habitat complexes and trout water. */
+    var all = env.WF_REGIONS.concat(env.TROUT_WATERS);
+    for (var k = 0; k < all.length; k++) {
+      if (all[k].n.toLowerCase().indexOf(head) >= 0) {
+        return { kind: 'region', lon: all[k].lon, lat: all[k].lat, name: all[k].n,
+                 zoom: Math.max(all[k].rx, all[k].ry) * 1.8 };
+      }
+    }
+
+    /* Counties. Accepts "Park County, MT", "Park, MT" and bare "Park". */
+    var cname = head.replace(/\s+(county|parish|borough)$/, '');
+    var cHit = null;
+    for (var cy = 0; cy < geo.counties.length; cy++) {
+      var co = geo.counties[cy];
+      if (tail && co.stateAbbr !== tail) continue;
+      if (co.name.toLowerCase() !== cname) continue;
+      cHit = co;
+      break;
+    }
+    if (cHit) {
+      var b = cHit.bbox;
+      return {
+        kind: 'county', lon: (b[0] + b[2]) / 2, lat: (b[1] + b[3]) / 2,
+        name: cHit.name + ' County, ' + cHit.stateAbbr,
+        zoom: Math.max(b[2] - b[0], b[3] - b[1]) * 0.8
+      };
+    }
+
+    /* States, centred on the label point so it lands inside the shape. */
+    for (var s = 0; s < geo.states.length; s++) {
+      var stt = geo.states[s];
+      if (stt.name.toLowerCase().indexOf(head) === 0 || stt.abbr.toLowerCase() === head) {
+        var ll = geo.unproject(stt.label[0], stt.label[1], [0, 0]);
+        return { kind: 'state', lon: ll[0], lat: ll[1], name: stt.name, abbr: stt.abbr, zoom: null };
+      }
+    }
+    return null;
+  }
+
   /* ---------- Controls ---------- */
 
   var speciesSel, layerRail, scrub, playBtn, dayChips, timeLabel, pursuitChip, tlBands;
@@ -2237,69 +2363,19 @@
     search.addEventListener('change', function () {
       var raw = search.value.trim();
       if (!raw) return;
-
-      /* Coordinates win: a pin someone pasted is always an exact request. */
-      var pt = parseCoords(raw);
-      if (pt) {
-        if (geo.stateIndexAt(pt.lon, pt.lat) < 0 && geo.stateIndexAt(-pt.lon, pt.lat) >= 0) {
-          pt.lon = -pt.lon;          // western hemisphere assumed when unsigned
-        }
-        goTo(pt.lon, pt.lat, 0.22, true);
+      var hit = resolvePlace(raw);
+      if (!hit) {
+        search.value = '';
+        search.placeholder = 'No match for "' + raw + '"';
         return;
       }
-
-      var q = raw.toLowerCase();
-
-      /* Towns, most prominent match first. "Craig, MT" narrows by state. */
-      var parts = q.split(',');
-      var nameQ = parts[0].trim(), stQ = parts[1] ? parts[1].trim().toUpperCase() : null;
-      var cities = geo.cities, exact = null, prefix = null;
-      for (var c = 0; c < cities.length; c++) {
-        var ct = cities[c];
-        if (stQ && ct.st !== stQ) continue;
-        var ln = ct.name.toLowerCase();
-        if (ln === nameQ) { exact = ct; break; }
-        if (!prefix && ln.indexOf(nameQ) === 0) prefix = ct;
+      if (hit.kind === 'state') {
+        radar.zoomToState(hit.abbr);
+        App.dirty = true;
+        scheduleBands();
+        return;
       }
-      var city = exact || prefix;
-      if (city) { goTo(city.lon, city.lat, 0.55, false); return; }
-
-      var all = env.WF_REGIONS.concat(env.TROUT_WATERS);
-      for (var k = 0; k < all.length; k++) {
-        if (all[k].n.toLowerCase().indexOf(q) >= 0) {
-          radar.zoomToBounds(all[k].lon - all[k].rx * 1.8, all[k].lat - all[k].ry * 1.8,
-                             all[k].lon + all[k].rx * 1.8, all[k].lat + all[k].ry * 1.8);
-          App.dirty = true;
-          scheduleBands();
-          return;
-        }
-      }
-
-      for (var s = 0; s < geo.states.length; s++) {
-        if (geo.states[s].name.toLowerCase().indexOf(q) === 0 || geo.states[s].abbr.toLowerCase() === q) {
-          radar.zoomToState(geo.states[s].abbr);
-          App.dirty = true;
-          scheduleBands();
-          return;
-        }
-      }
-
-      /* County names are the last thing tried, since many repeat across states. */
-      for (var cy = 0; cy < geo.counties.length; cy++) {
-        var co = geo.counties[cy];
-        if (stQ && co.stateAbbr !== stQ) continue;
-        if (co.name.toLowerCase() === nameQ) {
-          var b = co.bbox;
-          radar.zoomToBounds(b[0], b[1], b[2], b[3]);
-          App.dirty = true;
-          scheduleBands();
-          return;
-        }
-      }
-
-      search.setCustomValidity('');
-      search.placeholder = 'No match for "' + raw + '"';
-      search.value = '';
+      goTo(hit.lon, hit.lat, hit.zoom || 0.4, hit.kind === 'coords');
     });
 
     wireMap(canvas, radar);
