@@ -335,14 +335,46 @@ async function taxonKey(name) {
    is a presence surface, not a census. The per-species normalisation
    below means a taxon that hits the cap is not penalised against one that
    does not. */
+/* LICENCE FILTER.
+
+   GBIF records carry a licence per record, chosen by whoever logged
+   the sighting. The default on iNaturalist is non-commercial, and
+   this product has a paid tier, so the non-commercial records cannot
+   be used to build it however good they are.
+
+   The cost is lopsided and worth knowing. Birds come from eBird and
+   are openly licensed - mallard keeps 98% of its records, turkey 95%
+   - so waterfowl, turkey and upland lose essentially nothing.
+   Mammals come from iNaturalist: elk keeps 16%, whitetail 13%, moose
+   17%. Measured on elk, that is 1148 distinct 11 km cells down to
+   860, because most of what goes is a repeat sighting from a place
+   already covered rather than new ground.
+
+   CC0 and CC-BY only. CC-BY still obliges us to credit the sources,
+   which the app has to surface somewhere. */
+var LICENCE = '&license=CC0_1_0&license=CC_BY_4_0';
+
 function occurrenceURL(key, off, limit) {
   return 'https://api.gbif.org/v1/occurrence/search?taxonKey=' + key +
     '&country=US&hasCoordinate=true&hasGeospatialIssue=false' +
-    '&year=2015,2025&limit=' + limit + '&offset=' + off;
+    '&year=2015,2025&limit=' + limit + '&offset=' + off + LICENCE;
 }
 
 async function occurrences(key, grid, chron, taxonGrid) {
-  const LIMIT = 300, MAXOFF = 30000, PAR = 8;
+  /* 9000, not 30000.
+
+     GBIF serves offset 3000 in about two seconds and simply never
+     finishes the body at offset 12000 - two builds today died there,
+     one of them after sitting idle for ninety-five minutes. Deep
+     paging is the documented weak point of this endpoint and the
+     answer is to stop relying on it.
+
+     Nothing is really lost. After the licence filter the mammals have
+     fewer records than this anyway - elk 4565, moose 2877 - so they
+     are unaffected. For the birds this is a thinner sample of a very
+     large pool, and what the presence surface needs is coverage, not
+     count: 4565 elk records already resolve 860 distinct cells. */
+  const LIMIT = 300, MAXOFF = 9000, PAR = 6;
   let off = 0, got = 0, end = false, lost = 0;
   while (!end && off < MAXOFF) {
     const batch = [];
@@ -776,9 +808,11 @@ async function main() {
   }
 
   const js = 'window.US_HABITAT=' + JSON.stringify({
-    source: 'NLCD 2021 land cover (MRLC), AWS terrarium elevation, GBIF occurrence records 2015-2025',
+    source: 'NLCD 2021 land cover (MRLC), AWS terrarium elevation, GBIF occurrence records 2015-2025 (CC0 and CC-BY only)',
     note: 'Land cover and elevation set habitat quality; GBIF occurrence share gates presence. ' +
-          'Modelled suitability, not a census and not an abundance estimate.',
+          'Modelled suitability, not a census and not an abundance estimate. Occurrence records ' +
+          'filtered to CC0 and CC-BY so the layer can be used commercially; CC-BY requires ' +
+          'attribution to the contributing datasets.',
     built: new Date().toISOString().slice(0, 10),
     grid: { lon0: LON0, lat0: LAT0, d: D, nlon: NLON, nlat: NLAT },
     sp: out,
