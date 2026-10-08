@@ -652,6 +652,27 @@
     return wsum > 0.2 ? sum / wsum : NaN;
   };
 
+  /* Is anything on this layer moving, for this species?
+
+     The trails on the Movement layer are for waterfowl only. Ducks and
+     geese travel: in the migration window the trails run down the
+     flyway, and the rest of the time with the wind the birds are
+     working. For everything else the layer is local activity - deer on
+     their feet, trout feeding - which has no direction, and the trails
+     drawn over it simply followed the wind. That read as elk streaming
+     across Colorado, which nothing in the model says.
+
+     One answer for two askers: what draw() paints, and whether the
+     frame loop in app.js has to keep repainting. */
+  var FLOW_LAYERS = { migration: 1, movement: 1, wind: 1, gusts: 1 };
+
+  Radar.prototype.hasFlow = function (layer, spId) {
+    if (!FLOW_LAYERS[layer]) return false;
+    if (layer !== 'movement') return true;
+    var sp = models.byId(spId);
+    return !!sp && sp.group === 'waterfowl';
+  };
+
   Radar.prototype.draw = function () {
     var app = this.app, ctx = this.ctx, theme = app.theme();
     ctx.clearRect(0, 0, this.w, this.h);
@@ -685,7 +706,7 @@
 
     if (layer === 'migration') this.drawMigration(res);
     if (layer === 'wind' || layer === 'gusts') this.drawWindFlow(res);
-    if (layer === 'movement') this.drawMovementFlow(res);
+    if (layer === 'movement' && this.hasFlow(layer, spId)) this.drawMovementFlow(res);
     this.drawPlaceLabels(win, res);
     this.drawGraticule();
     this.drawSpots();

@@ -209,9 +209,6 @@
 
   /* ---------- Layers ---------- */
 
-  /* Redrawn continuously, because something on them is animating. */
-  var FLOW_LAYERS = { migration: 1, movement: 1, wind: 1, gusts: 1 };
-
   var LAYERS = [
     { id: 'opportunity', name: 'Opportunity', desc: 'Overall OmniGuide Opportunity Score' },
     { id: 'movement', name: 'Movement', desc: 'Expected local animal activity' },
@@ -2907,7 +2904,10 @@
          flow is a single frozen smear. Only migration was listed, so the
          wind streamlines and the movement lines were drawn once and then
          sat there - which reads as nothing being drawn at all. */
-      if (App.dirty || FLOW_LAYERS[App.state.layer]) {
+      /* Which layers those are is the radar's to say - see hasFlow. The
+         Movement layer only animates for waterfowl, and repainting a
+         still map sixty times a second is wasted battery. */
+      if (App.dirty || radar.hasFlow(App.state.layer, App.state.species)) {
         radar.draw();
         App.dirty = false;
       }
