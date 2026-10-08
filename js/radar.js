@@ -249,17 +249,36 @@
      flat land shapes, which still works, just without the relief. */
 
   var BASEMAPS = {
+    /* USGS National Map rather than Esri.
+
+       The Esri services at services.arcgisonline.com need no key and
+       are easy to point at, which is why they were here. Their terms
+       say plainly that they are not available for commercial use and
+       require an ArcGIS Online or Enterprise licence, and this
+       product has a paid tier.
+
+       The National Map is a federal service, public domain, covers
+       the lower 48 - which is all this app models - and speaks the
+       same tile scheme, so it is a URL swap. The one real cost is
+       zoom: imagery reaches 16 rather than Esri 18, so the very
+       closest look at a field edge is coarser than it was. */
     relief: {
       name: 'Relief',
-      url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',
-      credit: 'Esri, USGS, NOAA',
-      maxZoom: 15, premium: false
+      url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}',
+      credit: 'USGS The National Map',
+      maxZoom: 13, premium: false
+    },
+    topo: {
+      name: 'Topo',
+      url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}',
+      credit: 'USGS The National Map',
+      maxZoom: 16, premium: false
     },
     satellite: {
       name: 'Satellite',
-      url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      credit: 'Esri, Maxar, Earthstar Geographics',
-      maxZoom: 18, premium: true
+      url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',
+      credit: 'USGS The National Map',
+      maxZoom: 16, premium: true
     },
     waterways: {
       name: 'Duck water', url: null, credit: 'NLCD 2021 land cover, Natural Earth',
@@ -300,7 +319,32 @@
 
   /* True once enough tile requests have failed that we are clearly offline or
      sandboxed, so the renderer can draw land shapes instead. */
-  function tilesBlocked() { return tileTried >= 6 && tileFails / tileTried > 0.8; }
+  /* Give up on tiles, but not permanently.
+
+     This latched: once a run of failures pushed the ratio over the
+     threshold it stayed true for the life of the page, so a provider
+     having a bad minute - or being swapped out for a working one -
+     left the map on flat shapes with no way back. Switching basemap
+     clears it, and otherwise it backs off for twenty seconds and tries
+     again rather than deciding once and forever. */
+  var tileBlockUntil = 0;
+
+  function tilesBlocked() {
+    var now = Date.now();
+    if (now < tileBlockUntil) return true;
+    if (tileTried >= 6 && tileFails / tileTried > 0.8) {
+      tileBlockUntil = now + 20000;
+      tileTried = 0; tileFails = 0;
+      return true;
+    }
+    return false;
+  }
+
+  /* A different provider deserves a clean slate. */
+  function resetTileHealth() {
+    tileTried = 0; tileFails = 0; tileBlockUntil = 0;
+    tileCache.clear();
+  }
 
   Radar.prototype.drawBasemap = function () {
     var bkey = this.app.state.basemap || 'relief';
@@ -1562,7 +1606,7 @@
   };
 
   global.OG.radar = {
-    WX_LAYERS: WX_LAYERS,
+    WX_LAYERS: WX_LAYERS, resetTileHealth: resetTileHealth,
     Radar: Radar, rampCSS: rampCSS, rampRGB: rampRGB,
     clearScores: clearScores, STATUS_COLOR: STATUS_COLOR
   };

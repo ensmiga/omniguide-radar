@@ -380,6 +380,57 @@
     return dl;
   }
 
+  /* Where every number in this app comes from.
+
+     Several of these licences require attribution and the app was
+     showing none of it - there was a credit string on the basemap
+     that never reached the screen. Beyond the obligation, a forecast
+     that will not say what it is built from is asking to be trusted
+     on nothing. */
+  var SOURCES = [
+    { group: 'Weather and water', items: [
+      { n: 'Open-Meteo', d: 'Forecast grid, a blend of NBM, GFS, HRRR and ICON. Refreshed three times a day.', l: 'CC-BY 4.0' },
+      { n: 'NOAA NCEI', d: '1991-2020 daily climate normals, 494 stations. Everything beyond the forecast window.', l: 'Public domain' },
+      { n: 'USGS NWIS', d: 'About 9,500 stream gauges: discharge, water temperature, tailwater identification.', l: 'Public domain' },
+      { n: 'NOAA NSIDC SNODAS', d: 'Daily modelled snow depth.', l: 'Public domain' }
+    ] },
+    { group: 'Land and water cover', items: [
+      { n: 'MRLC NLCD 2021', d: 'Land cover at 30 m. Habitat quality, open water, wetland, and the hunting pressure surface.', l: 'Public domain' },
+      { n: 'AWS Terrain Tiles', d: 'Elevation and relief, from USGS 3DEP and others.', l: 'Open data, attribution requested' },
+      { n: 'Natural Earth', d: 'Rivers, lakes, state and county outlines.', l: 'Public domain' },
+      { n: 'USGS The National Map', d: 'Shaded relief, topographic and aerial basemaps.', l: 'Public domain' }
+    ] },
+    { group: 'Species records', items: [
+      { n: 'GBIF', d: 'Occurrence records 2015-2025 for 24 taxa, filtered to CC0 and CC-BY. Sets species range, migration timing and the species mix in the decoy advice. Most bird records originate from eBird; most mammal records from iNaturalist.', l: 'CC0 and CC-BY 4.0' }
+    ] },
+    { group: 'Regulations', items: [
+      { n: 'State and federal agencies', d: 'Season dates in this build are UNVERIFIED PLACEHOLDERS shaped like a typical federal framework. They are not real seasons. Confirm every date, zone, bag limit and shooting hour with the issuing agency before you go.', l: 'Not a data feed' }
+    ] }
+  ];
+
+  function renderSourcesPanel() {
+    openPanel('Where this comes from', function () {
+      var root = frag();
+      root.appendChild(el('div', 'lede', 'Every number in OmniGuide is built from public data. ' +
+        'These are the sources, and what each one is responsible for.'));
+      SOURCES.forEach(function (g) {
+        var sec = section(g.group);
+        g.items.forEach(function (it) {
+          var row = el('div', 'srcrow');
+          row.appendChild(el('div', 'src-n', it.n));
+          row.appendChild(el('div', 'src-d', it.d));
+          row.appendChild(el('div', 'src-l', it.l));
+          sec.appendChild(row);
+        });
+        root.appendChild(sec);
+      });
+      root.appendChild(el('p', 'note', 'Modelled output, not measurement. The scores are an opinion ' +
+        'formed from these inputs and they can be wrong. Nothing here is a statement that hunting ' +
+        'or fishing is permitted where or when you are reading it.'));
+      return root;
+    });
+  }
+
   /* ---------- The Plan ---------- */
 
   function buildPlan(lon, lat, spotName) {
@@ -2479,6 +2530,8 @@
     $('#btn-alerts').addEventListener('click', renderAlertsPanel);
     $('#btn-log').addEventListener('click', function () { renderLogPanel(); });
     $('#btn-account').addEventListener('click', renderAccountPanel);
+    var srcBtn = $('#btn-sources');
+    if (srcBtn) srcBtn.addEventListener('click', renderSourcesPanel);
 
     /* GPS. Needs a secure origin, which GitHub Pages provides and the
        artifact sandbox does not. */
@@ -2625,7 +2678,7 @@
     /* Basemap. Satellite is a Pro layer: imagery is what lets someone pick a
        slough or a field edge out by eye, so it is worth paying for. */
     var bmBtn = $('#btn-basemap');
-    var BM_CYCLE = ['relief', 'satellite', 'waterways', 'none'];
+    var BM_CYCLE = ['relief', 'topo', 'satellite', 'waterways', 'none'];
     function bmLabel() {
       var k = App.state.basemap;
       return k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite' : 'No base';
@@ -2676,8 +2729,8 @@
     layerRail.appendChild(el('div', 'layer-grp', 'Base map'));
     var bmBtns = {};
     BM_CYCLE.forEach(function (k) {
-      var b = el('button', 'layerbtn', k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite'
-        : k === 'waterways' ? 'Duck water' : 'None');
+      var b = el('button', 'layerbtn', k === 'relief' ? 'Relief' : k === 'topo' ? 'Topo'
+        : k === 'satellite' ? 'Satellite' : k === 'waterways' ? 'Duck water' : 'None');
       if (k === 'satellite') b.appendChild(el('span', 'pro-tag', 'Pro'));
       b.dataset.basemap = k;
       b.addEventListener('click', function () { setBasemap(k); });
@@ -2711,6 +2764,7 @@
       }
       App.state.basemap = next;
       save('og.basemap', next);
+      if (radarNS.resetTileHealth) radarNS.resetTileHealth();
       App._theme = null;             // ground changed, so the ink has to be rebuilt
       if (App.autoOpacity) App.autoOpacity();
       App.dirty = true;

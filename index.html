@@ -468,6 +468,18 @@
     color: var(--muted);
   }
   .hv-coord { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .srcrow {
+    display: grid; gap: 2px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .src-n { font-family: var(--disp); font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+  .src-d { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+  .src-l {
+    font-family: var(--mono); font-size: 10.5px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+
   .frontnote {
     margin: 9px 0 2px;
     padding: 9px 11px;
@@ -1184,6 +1196,7 @@
       <button class="tool" id="btn-alerts">Alerts<span class="badge" id="alertdot" hidden></span></button>
       <button class="tool" id="btn-log">Log</button>
       <button class="tool" id="btn-account">Account</button>
+      <button class="tool" id="btn-sources">Sources</button>
       <button class="tool" id="btn-gps" title="Show my location">Locate</button>
       <button class="tool" id="btn-markhere" title="Save a spot at my location">Mark here</button>
       <button class="tool" id="btn-basemap" title="Switch the base map">Relief</button>
@@ -1253,39 +1266,39 @@
   <div id="panel-body"></div>
 </aside>
 
-<script src="js/us-topo.js?v=tmk4yk"></script>
-<script src="js/us-cities.js?v=tmk4yk"></script>
-<script src="js/hydro.js?v=tmk4yk"></script>
-<script src="js/wx-grid.js?v=tmk4yk"></script>
-<script src="js/geo.js?v=tmk4yk"></script>
-<script src="js/wx.js?v=tmk4yk"></script>
+<script src="js/us-topo.js?v=tmkdzd"></script>
+<script src="js/us-cities.js?v=tmkdzd"></script>
+<script src="js/hydro.js?v=tmkdzd"></script>
+<script src="js/wx-grid.js?v=tmkdzd"></script>
+<script src="js/geo.js?v=tmkdzd"></script>
+<script src="js/wx.js?v=tmkdzd"></script>
 <!-- The baked habitat raster and its reader load before env.js, which
      consults them inside habitat() and falls back to its own synthetic
      surface if either is missing. -->
-<script src="js/normals.js?v=tmk4yk"></script>
-<script src="js/climo.js?v=tmk4yk"></script>
-<script src="js/habitat-grid.js?v=tmk4yk"></script>
-<script src="js/elev-grid.js?v=tmk4yk"></script>
-<script src="js/water-grid.js?v=tmk4yk"></script>
-<script src="js/habgrid.js?v=tmk4yk"></script>
-<script src="js/env.js?v=tmk4yk"></script>
-<script src="js/models.js?v=tmk4yk"></script>
-<script src="js/regs.js?v=tmk4yk"></script>
-<script src="js/dist.js?v=tmk4yk"></script>
-<script src="js/snow.js?v=tmk4yk"></script>
-<script src="js/snowfield.js?v=tmk4yk"></script>
-<script src="js/gauges.js?v=tmk4yk"></script>
-<script src="js/gaugefield.js?v=tmk4yk"></script>
-<script src="js/openwater.js?v=tmk4yk"></script>
-<script src="js/duckwater.js?v=tmk4yk"></script>
-<script src="js/flyshops.js?v=tmk4yk"></script>
-<script src="js/patterns.js?v=tmk4yk"></script>
-<script src="js/terrain.js?v=tmk4yk"></script>
-<script src="js/landcover.js?v=tmk4yk"></script>
-<script src="js/guide.js?v=tmk4yk"></script>
-<script src="js/planner.js?v=tmk4yk"></script>
-<script src="js/radar.js?v=tmk4yk"></script>
-<script src="js/app.js?v=tmk4yk"></script>
+<script src="js/normals.js?v=tmkdzd"></script>
+<script src="js/climo.js?v=tmkdzd"></script>
+<script src="js/habitat-grid.js?v=tmkdzd"></script>
+<script src="js/elev-grid.js?v=tmkdzd"></script>
+<script src="js/water-grid.js?v=tmkdzd"></script>
+<script src="js/habgrid.js?v=tmkdzd"></script>
+<script src="js/env.js?v=tmkdzd"></script>
+<script src="js/models.js?v=tmkdzd"></script>
+<script src="js/regs.js?v=tmkdzd"></script>
+<script src="js/dist.js?v=tmkdzd"></script>
+<script src="js/snow.js?v=tmkdzd"></script>
+<script src="js/snowfield.js?v=tmkdzd"></script>
+<script src="js/gauges.js?v=tmkdzd"></script>
+<script src="js/gaugefield.js?v=tmkdzd"></script>
+<script src="js/openwater.js?v=tmkdzd"></script>
+<script src="js/duckwater.js?v=tmkdzd"></script>
+<script src="js/flyshops.js?v=tmkdzd"></script>
+<script src="js/patterns.js?v=tmkdzd"></script>
+<script src="js/terrain.js?v=tmkdzd"></script>
+<script src="js/landcover.js?v=tmkdzd"></script>
+<script src="js/guide.js?v=tmkdzd"></script>
+<script src="js/planner.js?v=tmkdzd"></script>
+<script src="js/radar.js?v=tmkdzd"></script>
+<script src="js/app.js?v=tmkdzd"></script>
 <script>
   (function () {
     var x = document.getElementById('notice-x');
