@@ -2224,7 +2224,12 @@
         : (App.state.layer === 'opportunity' && App.state.oppMode === 'day')
           ? 'Today against each place’s own season, so red means unusually good ' +
             'for that spot rather than good outright. Smoothed to about 60 miles.'
-          : 'Blank ground means out of range, no season record, or outside your plan.'));
+                    /* What blank actually means. Measured across the country for
+             ducks: every blank cell was the habitat floor and not one was
+             a missing season record, so the old wording named two causes
+             that were not happening and missed the one that was. */
+          : 'Blank ground is where the species is not modelled at all - no habitat and no records. ' +
+            'It is not the same as poor hunting, which still gets a score.'));
     }
   }
 
@@ -2619,7 +2624,7 @@
         if (v !== v) {
           vn.textContent = '--';
           vn.style.color = '';
-          hov.querySelector('.hv-lab').textContent = 'No data';
+          hov.querySelector('.hv-lab').textContent = 'Not modelled here';
         } else if (v === -1) {
           vn.textContent = '—';
           vn.style.color = '';

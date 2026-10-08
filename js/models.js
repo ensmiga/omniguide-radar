@@ -220,7 +220,7 @@
       freezeLock: true,
       pressureSens: 0.13,
       distWeight: 0.20,
-      habFloor: 0.07, rangeFloor: 0.015,
+      habFloor: 0.02, rangeFloor: 0.015,
       weights: { hab: 0.26, move: 0.30, mig: 0.28, wx: 0.16 },
       blurb: 'All duck species together - dabblers and divers, early teal through late mallards. ' +
              'The chronology is deliberately broad because the group is.',
@@ -264,7 +264,7 @@
       freezeLock: true,
       pressureSens: 0.12,
       distWeight: 0.20,
-      habFloor: 0.07, rangeFloor: 0.015,
+      habFloor: 0.02, rangeFloor: 0.015,
       weights: { hab: 0.24, move: 0.36, mig: 0.22, wx: 0.18 },
       blurb: 'Field feeder. Reads snow cover and feed availability more than freeze.',
       movement: function (wx, hab) {
@@ -292,7 +292,7 @@
       migratory: false, habKey: 'elk',
       pressureSens: 0.17,
       distWeight: 0.45,
-      habFloor: 0.10, rangeFloor: 0.03,
+      habFloor: 0.02, rangeFloor: 0.03,
       weights: { hab: 0.38, move: 0.38, mig: 0, wx: 0.24 },
       blurb: 'Preview model. Thermals, rut stage and terrain rather than flyway dynamics.',
       movement: function (wx, hab, doy) {
@@ -312,7 +312,7 @@
       migratory: false, habKey: 'whitetail',
       pressureSens: 0.11,
       distWeight: 0.35,
-      habFloor: 0.08, rangeFloor: 0.02,
+      habFloor: 0.02, rangeFloor: 0.02,
       weights: { hab: 0.34, move: 0.42, mig: 0, wx: 0.24 },
       blurb: 'Rut timing, cold fronts and pressure. Daylight movement is the whole game.',
       movement: function (wx, hab, doy) {
@@ -344,7 +344,7 @@
       migratory: false, habKey: 'muledeer',
       pressureSens: 0.10,
       distWeight: 0.45,
-      habFloor: 0.10, rangeFloor: 0.035,
+      habFloor: 0.02, rangeFloor: 0.035,
       weights: { hab: 0.38, move: 0.38, mig: 0, wx: 0.24 },
       blurb: 'Open-country glassing. Later rut than whitetail, and snow moves them down.',
       movement: function (wx, hab, doy) {
@@ -369,7 +369,7 @@
       migratory: false, habKey: 'moose',
       pressureSens: 0.05,
       distWeight: 0.50,
-      habFloor: 0.10, rangeFloor: 0.04,
+      habFloor: 0.02, rangeFloor: 0.04,
       weights: { hab: 0.44, move: 0.34, mig: 0, wx: 0.22 },
       blurb: 'Heat is the limiting factor. Willow bottoms, wet ground and the late-September rut.',
       movement: function (wx, hab, doy) {
@@ -393,7 +393,7 @@
       migratory: false, habKey: 'pronghorn',
       pressureSens: 0.06,
       distWeight: 0.50,
-      habFloor: 0.10, rangeFloor: 0.035,
+      habFloor: 0.02, rangeFloor: 0.035,
       weights: { hab: 0.42, move: 0.34, mig: 0, wx: 0.24 },
       blurb: 'Eyes, not noses. Visibility, water and the mid-September rut.',
       movement: function (wx, hab, doy) {
@@ -419,7 +419,7 @@
       migratory: false, habKey: 'turkey',
       pressureSens: 0.11,
       distWeight: 0.30,
-      habFloor: 0.09, rangeFloor: 0.025,
+      habFloor: 0.02, rangeFloor: 0.025,
       weights: { hab: 0.36, move: 0.40, mig: 0, wx: 0.24 },
       blurb: 'Gobbling activity. Calm clear mornings in spring, flocked up and feed-driven in fall.',
       movement: function (wx, hab, doy) {
@@ -450,7 +450,7 @@
       migratory: false, habKey: 'upland',
       pressureSens: 0.09,
       distWeight: 0.30,
-      habFloor: 0.09, rangeFloor: 0.025,
+      habFloor: 0.02, rangeFloor: 0.025,
       weights: { hab: 0.40, move: 0.36, mig: 0, wx: 0.24 },
       blurb: 'Pheasant, quail and grouse together. Scenting conditions for the dog drive most of it.',
       movement: function (wx, hab, doy) {
@@ -480,7 +480,7 @@
       migratory: false, habKey: 'trout',
       pressureSens: 0.11,
       distWeight: 0.30,
-      habFloor: 0.08, rangeFloor: 0.02,
+      habFloor: 0.02, rangeFloor: 0.02,
       weights: { hab: 0.34, move: 0.40, mig: 0, wx: 0.26 },
       blurb: 'Fly fishing model. Water temperature, flow stability and hatch timing.',
       movement: function (wx, hab) {
@@ -602,7 +602,20 @@
        frontal terms. That is how elk opportunity appeared in Florida. A
        species outside its range does not get a weak score - it gets no
        score, and the renderer leaves the ground blank. */
-    var habFloor = sp.habFloor == null ? 0.07 : sp.habFloor;
+    /* 0.02, not 0.07.
+
+       The floor existed to stop elk scoring in Florida back when habitat
+       was hand-drawn blobs and a cell with no elk in it still collected a
+       fraction from the noise. The real raster does that job already: its
+       occurrence gate drives genuinely absent country to exactly zero -
+       measured, elk habitat in Florida and Georgia is 0.0 - so the extra
+       cushion was no longer protecting against anything and was instead
+       erasing thin but real ground. Mississippi reads 5.6 for ducks and
+       was being blanked, in the middle of the Mississippi flyway.
+
+       Ducks go from 30% of the country blank to 14%, elk from 70% to 57%,
+       whitetail from 5% to 1%, and Florida elk stays blank. */
+    var habFloor = sp.habFloor == null ? 0.02 : sp.habFloor;
     var rangeFloor = sp.rangeFloor == null ? 0.02 : sp.rangeFloor;
     var outOfRange = null;
     if (habModel < habFloor) outOfRange = 'habitat';

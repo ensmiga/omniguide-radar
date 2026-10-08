@@ -742,9 +742,17 @@ async function main() {
          the land-cover term, so a cold creek with almost no mapped
          water still clears the floor. */
 
-      /* Presence gate. Full weight once the species is as common here as
-         it is anywhere; a long toe so a cell just outside the recorded
-         range is reduced rather than erased. */
+      /* Presence gate. Full weight once the species is as common here
+         as it is anywhere, with a short toe so a cell just outside the
+         recorded range is reduced rather than erased.
+
+         The toe was 0.12, which meant a cell with no records at all
+         still kept an eighth of whatever its land cover was worth. For
+         a species whose cover looks plausible where it does not live,
+         that is enough to clear the habitat floor: Nevada and the Utah
+         west desert both scored for whitetail on shrub cover and zero
+         deer. 0.04 keeps the softness at the edge of a range without
+         inventing one. */
       const pres = clamp01(Math.pow(clamp01(share[k] / p97), 0.45));
       /* For most species the land cover is the evidence and the
          occurrence record is the gate. For a fish in a small stream
@@ -757,7 +765,7 @@ async function main() {
          actually knows. */
       const v = sp === 'trout'
         ? (0.35 + 0.65 * s) * pres * cold[k]
-        : s * (0.12 + 0.88 * pres);
+        : s * (0.04 + 0.96 * pres);
       vals[k] = Math.round(clamp01(v) * 255);
     }
     out[sp] = Buffer.from(vals).toString('base64');
