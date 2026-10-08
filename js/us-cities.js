@@ -1,3 +1,12 @@
+/* Town and city names and locations.
+
+   Source: GeoNames, https://www.geonames.org/, licensed under Creative
+   Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/,
+   by way of the cities.json package, https://github.com/lutangar/cities.json
+   (also CC BY 4.0).
+
+   Changed for OmniGuide: United States places only, reduced to name,
+   latitude, longitude and state, coordinates rounded to four places. */
 window.US_CITIES=[
 ["Bay Minette",30.8830,-87.7730,"AL"],
 ["Edna",28.9786,-96.6461,"TX"],

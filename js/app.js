@@ -392,27 +392,102 @@
      that never reached the screen. Beyond the obligation, a forecast
      that will not say what it is built from is asking to be trusted
      on nothing. */
+  /* WHAT A CREDIT HAS TO CARRY.
+
+     Three of these are CC BY 4.0: free for any use, a paid product
+     included, on condition that the source is credited. The licence
+     spells out what a credit is - who made it, where it is, which
+     licence, and that it has been changed - and a bare name in a list
+     is not that. So each row links to its source and to its licence,
+     and the panel says once, at the bottom, that all of it has been
+     changed.
+
+     Two rows were also simply wrong. The town list is GeoNames and was
+     not credited at all, and the state and county outlines were credited
+     to Natural Earth when they are the Census Bureau's. */
+  var CC_BY = 'https://creativecommons.org/licenses/by/4.0/';
+  var CC_ZERO = 'https://creativecommons.org/publicdomain/zero/1.0/';
+
   var SOURCES = [
     { group: 'Weather and water', items: [
-      { n: 'Open-Meteo', d: 'Forecast grid, a blend of NBM, GFS, HRRR and ICON. Refreshed three times a day.', l: 'CC-BY 4.0' },
-      { n: 'NOAA NCEI', d: '1991-2020 daily climate normals, 494 stations. Everything beyond the forecast window.', l: 'Public domain' },
-      { n: 'USGS NWIS', d: 'About 9,500 stream gauges: discharge, water temperature, tailwater identification.', l: 'Public domain' },
-      { n: 'NOAA NSIDC SNODAS', d: 'Daily modelled snow depth.', l: 'Public domain' }
+      { n: 'Open-Meteo', u: 'https://open-meteo.com/',
+        d: 'Weather data by Open-Meteo.com. The forecast grid, a blend of NBM, GFS, HRRR and ICON, refreshed several times a day.',
+        l: 'CC BY 4.0', lu: CC_BY },
+      { n: 'NOAA NCEI', u: 'https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals',
+        d: '1991-2020 daily climate normals, 494 stations. Everything beyond the forecast window.', l: 'Public domain' },
+      { n: 'USGS NWIS', u: 'https://waterservices.usgs.gov/',
+        d: 'About 9,500 stream gauges: discharge, water temperature, tailwater identification.', l: 'Public domain' },
+      { n: 'NOAA NOHRSC SNODAS, distributed by NSIDC', u: 'https://nsidc.org/data/g02158',
+        d: 'Daily modelled snow depth.', l: 'Public domain' }
     ] },
     { group: 'Land and water cover', items: [
-      { n: 'MRLC NLCD 2021', d: 'Land cover at 30 m. Habitat quality, open water, wetland, and the hunting pressure surface.', l: 'Public domain' },
-      { n: 'USDA NASS Cropland Data Layer 2024', d: 'Rice acreage, which the land cover map files under crops in general. A waterfowl input only.', l: 'Public domain' },
-      { n: 'AWS Terrain Tiles', d: 'Elevation and relief, from USGS 3DEP and others.', l: 'Open data, attribution requested' },
-      { n: 'Natural Earth', d: 'Rivers, lakes, state and county outlines.', l: 'Public domain' },
-      { n: 'USGS The National Map', d: 'Shaded relief, topographic and aerial basemaps.', l: 'Public domain' }
+      { n: 'MRLC NLCD 2021', u: 'https://www.mrlc.gov/',
+        d: 'Land cover at 30 m. Habitat quality, open water, wetland, and the hunting pressure surface.', l: 'Public domain' },
+      { n: 'USDA NASS Cropland Data Layer 2024', u: 'https://www.nass.usda.gov/Research_and_Science/Cropland/SARS1a.php',
+        d: 'Rice acreage, which the land cover map files under crops in general. A waterfowl input only.', l: 'Public domain' },
+      { n: 'Terrain Tiles on AWS (Mapzen)', u: 'https://registry.opendata.aws/terrain-tiles/',
+        d: 'Elevation and relief. United States 3DEP (formerly NED) and global GMTED2010 and SRTM terrain data ' +
+           'courtesy of the U.S. Geological Survey. Global ETOPO1 terrain data U.S. National Oceanic and ' +
+           'Atmospheric Administration. Along the borders: Canada terrain data contains information licensed ' +
+           'under the Open Government Licence - Canada; Mexico terrain data source: INEGI, Continental relief, 2016.',
+        l: 'Open data, credit required' },
+      { n: 'Natural Earth', u: 'https://www.naturalearthdata.com/', d: 'Rivers and lakes.', l: 'Public domain' },
+      { n: 'U.S. Census Bureau, via us-atlas', u: 'https://github.com/topojson/us-atlas',
+        d: 'State and county outlines: the Census cartographic boundary files, as packaged by us-atlas ' +
+           '(copyright 2013-2019 Michael Bostock).', l: 'Public domain data, ISC licence' },
+      { n: 'GeoNames', u: 'https://www.geonames.org/',
+        d: 'Names and locations of 17,028 towns, for search and map labels, by way of the cities.json package. ' +
+           'Cut down to United States places, with coordinates rounded.', l: 'CC BY 4.0', lu: CC_BY },
+      { n: 'USGS The National Map', u: 'https://www.usgs.gov/programs/national-geospatial-program/national-map',
+        d: 'Shaded relief, topographic and aerial basemaps.', l: 'Public domain' }
     ] },
     { group: 'Species records', items: [
-      { n: 'GBIF', d: 'Occurrence records 2015-2025 for 30 taxa, filtered to CC0 and CC-BY, counted in full through the GBIF maps and statistics services - about 20.6 million. They decide whether a species is in range, when waterfowl normally arrive and how many are normally present by date, and the species mix in the decoy advice. They do not decide how good a place is. Most bird records originate from eBird; most mammal records from iNaturalist.', l: 'CC0 and CC-BY 4.0' }
+      { n: 'GBIF', u: 'https://www.gbif.org/', gbif: true,
+        d: 'Occurrence records 2015-2025 for 30 taxa, counted in full through the GBIF maps and statistics ' +
+           'services - about 20.6 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +
+           'decide whether a species is in range, when waterfowl normally arrive and how many are normally ' +
+           'present by date, and the species mix in the decoy advice. They do not decide how good a place is.',
+        l: 'CC BY 4.0 and CC0 1.0', lu: CC_BY }
     ] },
     { group: 'Regulations', items: [
       { n: 'State and federal agencies', d: 'Season dates in this build are UNVERIFIED PLACEHOLDERS shaped like a typical federal framework. They are not real seasons. Confirm every date, zone, bag limit and shooting hour with the issuing agency before you go.', l: 'Not a data feed' }
     ] }
   ];
+
+  function extLink(text, href) {
+    var a = el('a', null, text);
+    a.href = href; a.target = '_blank'; a.rel = 'noopener';
+    return a;
+  }
+
+  /* The datasets behind the GBIF records, by name.
+
+     GBIF is the index, not the owner. Each record belongs to a dataset
+     and carries that dataset's licence, so the credit CC BY asks for is
+     owed to the dataset. The list is written by tools/gbif-credits.mjs
+     from the same filter the raster build uses, so it is whoever the
+     records actually came from rather than a guess at the big names. */
+  function gbifCredits(row) {
+    var C = global.US_GBIF_CREDITS;
+    if (!C || !C.datasets || !C.datasets.length) return;
+    var top = C.datasets[0];
+    var lead = el('div', 'src-d', 'About ' + Math.floor(100 * top.n / C.records) + '% of them come from the ' +
+      top.t + ', ' + top.p + ', ');
+    lead.appendChild(extLink('doi:' + top.doi, 'https://doi.org/' + top.doi));
+    lead.appendChild(document.createTextNode('. Retrieved through GBIF.org, ' + C.built + '.'));
+    row.appendChild(lead);
+
+    var more = el('details', 'srcmore');
+    more.appendChild(el('summary', null, 'All ' + C.datasets.length + ' contributing datasets'));
+    var ol = el('ol');
+    C.datasets.forEach(function (d) {
+      var li = el('li', null, d.t + '. ' + d.p + '. ');
+      if (d.doi) li.appendChild(extLink('doi:' + d.doi, 'https://doi.org/' + d.doi));
+      ol.appendChild(li);
+    });
+    more.appendChild(ol);
+    row.appendChild(more);
+  }
 
   function renderSourcesPanel() {
     openPanel('Where this comes from', function () {
@@ -423,13 +498,26 @@
         var sec = section(g.group);
         g.items.forEach(function (it) {
           var row = el('div', 'srcrow');
-          row.appendChild(el('div', 'src-n', it.n));
+          var name = el('div', 'src-n');
+          name.appendChild(it.u ? extLink(it.n, it.u) : document.createTextNode(it.n));
+          row.appendChild(name);
           row.appendChild(el('div', 'src-d', it.d));
-          row.appendChild(el('div', 'src-l', it.l));
+          if (it.gbif) gbifCredits(row);
+          var lic = el('div', 'src-l');
+          lic.appendChild(it.lu ? extLink(it.l, it.lu) : document.createTextNode(it.l));
+          row.appendChild(lic);
           sec.appendChild(row);
         });
         root.appendChild(sec);
       });
+      var changed = el('p', 'note', 'None of this is shown as its provider published it. OmniGuide resamples, ' +
+        'counts, combines and models it into its own grids and scores, and no provider listed here endorses ' +
+        'OmniGuide or anything it says. Licence texts: ');
+      changed.appendChild(extLink('CC BY 4.0', CC_BY));
+      changed.appendChild(document.createTextNode(', '));
+      changed.appendChild(extLink('CC0 1.0', CC_ZERO));
+      changed.appendChild(document.createTextNode('.'));
+      root.appendChild(changed);
       root.appendChild(el('p', 'note', 'Modelled output, not measurement. The scores are an opinion ' +
         'formed from these inputs and they can be wrong. Nothing here is a statement that hunting ' +
         'or fishing is permitted where or when you are reading it.'));
@@ -1880,12 +1968,12 @@
         'Land cover: NLCD 2021, sampled at the pin and on a ring around it.',
         'Climate: NOAA 1991-2020 daily normals from ' +
           (global.OG.planner ? global.OG.planner.stations : 0) + ' stations, for Plan a hunt.',
-        'Geography: Census state and county boundaries, Natural Earth water, 17,028 towns.',
+        'Geography: Census state and county boundaries, Natural Earth water, 17,028 towns from GeoNames.',
         'Solar geometry and legal shooting light are computed, not looked up.'
       ].forEach(function (t) { real.appendChild(el('li', null, t)); });
       about.appendChild(real);
 
-      about.appendChild(el('p', null, 'The data above refreshes three times a day on its own. Between ' +
+      about.appendChild(el('p', null, 'The data above refreshes several times a day on its own. Between ' +
         'refreshes it is a snapshot, so the age shown next to the forecast is the number that matters.'));
 
       var notReal = el('ul', 'drivers neg');
@@ -2222,6 +2310,7 @@
       }
       lg.appendChild(wsc);
       lg.appendChild(el('div', 'lg-note', App.wxNote()));
+      legendCredit(lg);
       return;
     }
 
@@ -2262,6 +2351,24 @@
           : 'Blank ground is where the species is not modelled at all - no habitat and no records. ' +
             'It is not the same as poor hunting, which still gets a score.'));
     }
+    legendCredit(lg);
+  }
+
+  /* The credit that has to sit beside the data.
+
+     Open-Meteo's licence asks for a link next to anywhere its data is
+     shown, and the forecast is under every layer here, so it goes in
+     the legend, which is on screen whenever the map is. Everyone else
+     is one tap further, in the Sources panel this opens. */
+  function legendCredit(lg) {
+    var c = el('div', 'lg-credit');
+    c.appendChild(extLink('Weather data by Open-Meteo.com', 'https://open-meteo.com/'));
+    c.appendChild(document.createTextNode(' \u00b7 '));
+    var b = el('button', null, 'All sources');
+    b.type = 'button';
+    b.addEventListener('click', renderSourcesPanel);
+    c.appendChild(b);
+    lg.appendChild(c);
   }
 
   /* ---------- Interaction ---------- */

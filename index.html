@@ -479,6 +479,24 @@
     font-family: var(--mono); font-size: 10.5px; color: var(--accent);
     text-transform: uppercase; letter-spacing: 0.06em;
   }
+  .srcrow a, .note a, .lg-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .srcmore { font-size: 11.5px; color: var(--muted); }
+  .srcmore summary { cursor: pointer; color: var(--text); padding: 3px 0; }
+  .srcmore ol {
+    margin: 6px 0 4px; padding-left: 28px;
+    display: grid; gap: 5px; line-height: 1.4;
+    max-height: 300px; overflow-y: auto;
+  }
+  .lg-credit {
+    font-size: 10px; line-height: 1.4; color: var(--muted);
+    margin-top: 7px; padding-top: 6px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .lg-credit button {
+    font: inherit; color: inherit; letter-spacing: 0; text-transform: none;
+    background: none; border: 0; padding: 0; min-height: 0;
+    text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+  }
 
   .frontnote {
     margin: 9px 0 2px;
@@ -1232,7 +1250,7 @@
     <div id="notice">
       <b>Not legal advice.</b> Season information is an unverified reference. Confirm every season,
       limit and shooting hour with your state agency before you go.
-      <br><b>Live data, refreshed three times a day.</b> <span id="wxnote">Loading forecast metadata.</span>
+      <br><b>Live data, refreshed several times a day.</b> <span id="wxnote">Loading forecast metadata.</span>
       <br><button id="notice-x">Dismiss</button>
     </div>
     <div id="hover" hidden>
@@ -1278,39 +1296,40 @@
   <div id="panel-body"></div>
 </aside>
 
-<script src="js/us-topo.js?v=tmlt1f"></script>
-<script src="js/us-cities.js?v=tmlt1f"></script>
-<script src="js/hydro.js?v=tmlt1f"></script>
-<script src="js/wx-grid.js?v=tmlt1f"></script>
-<script src="js/geo.js?v=tmlt1f"></script>
-<script src="js/wx.js?v=tmlt1f"></script>
+<script src="js/us-topo.js?v=tmlu8g"></script>
+<script src="js/us-cities.js?v=tmlu8g"></script>
+<script src="js/gbif-credits.js?v=tmlu8g"></script>
+<script src="js/hydro.js?v=tmlu8g"></script>
+<script src="js/wx-grid.js?v=tmlu8g"></script>
+<script src="js/geo.js?v=tmlu8g"></script>
+<script src="js/wx.js?v=tmlu8g"></script>
 <!-- The baked habitat raster and its reader load before env.js, which
      consults them inside habitat() and falls back to its own synthetic
      surface if either is missing. -->
-<script src="js/normals.js?v=tmlt1f"></script>
-<script src="js/climo.js?v=tmlt1f"></script>
-<script src="js/habitat-grid.js?v=tmlt1f"></script>
-<script src="js/elev-grid.js?v=tmlt1f"></script>
-<script src="js/water-grid.js?v=tmlt1f"></script>
-<script src="js/habgrid.js?v=tmlt1f"></script>
-<script src="js/env.js?v=tmlt1f"></script>
-<script src="js/models.js?v=tmlt1f"></script>
-<script src="js/regs.js?v=tmlt1f"></script>
-<script src="js/dist.js?v=tmlt1f"></script>
-<script src="js/snow.js?v=tmlt1f"></script>
-<script src="js/snowfield.js?v=tmlt1f"></script>
-<script src="js/gauges.js?v=tmlt1f"></script>
-<script src="js/gaugefield.js?v=tmlt1f"></script>
-<script src="js/openwater.js?v=tmlt1f"></script>
-<script src="js/duckwater.js?v=tmlt1f"></script>
-<script src="js/flyshops.js?v=tmlt1f"></script>
-<script src="js/patterns.js?v=tmlt1f"></script>
-<script src="js/terrain.js?v=tmlt1f"></script>
-<script src="js/landcover.js?v=tmlt1f"></script>
-<script src="js/guide.js?v=tmlt1f"></script>
-<script src="js/planner.js?v=tmlt1f"></script>
-<script src="js/radar.js?v=tmlt1f"></script>
-<script src="js/app.js?v=tmlt1f"></script>
+<script src="js/normals.js?v=tmlu8g"></script>
+<script src="js/climo.js?v=tmlu8g"></script>
+<script src="js/habitat-grid.js?v=tmlu8g"></script>
+<script src="js/elev-grid.js?v=tmlu8g"></script>
+<script src="js/water-grid.js?v=tmlu8g"></script>
+<script src="js/habgrid.js?v=tmlu8g"></script>
+<script src="js/env.js?v=tmlu8g"></script>
+<script src="js/models.js?v=tmlu8g"></script>
+<script src="js/regs.js?v=tmlu8g"></script>
+<script src="js/dist.js?v=tmlu8g"></script>
+<script src="js/snow.js?v=tmlu8g"></script>
+<script src="js/snowfield.js?v=tmlu8g"></script>
+<script src="js/gauges.js?v=tmlu8g"></script>
+<script src="js/gaugefield.js?v=tmlu8g"></script>
+<script src="js/openwater.js?v=tmlu8g"></script>
+<script src="js/duckwater.js?v=tmlu8g"></script>
+<script src="js/flyshops.js?v=tmlu8g"></script>
+<script src="js/patterns.js?v=tmlu8g"></script>
+<script src="js/terrain.js?v=tmlu8g"></script>
+<script src="js/landcover.js?v=tmlu8g"></script>
+<script src="js/guide.js?v=tmlu8g"></script>
+<script src="js/planner.js?v=tmlu8g"></script>
+<script src="js/radar.js?v=tmlu8g"></script>
+<script src="js/app.js?v=tmlu8g"></script>
 <script>
   (function () {
     var x = document.getElementById('notice-x');
