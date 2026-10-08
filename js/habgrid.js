@@ -34,6 +34,56 @@
     return p;
   }
 
+  /* HOW MUCH A SIGHTING MATTERS, PER SPECIES.
+
+     The number is the share of suitability a cell keeps where nothing
+     of that species has ever been recorded. High means trust the
+     ground; low means trust the records.
+
+     It cannot be one value. Turkey has nine thousand records and cover
+     that looks plausible across half the country, so land cover on its
+     own proves nothing and the toe has to be near zero. A duck in the
+     Deep South has diagnostic cover and thin records, so it needs
+     slack or Mississippi blanks in the middle of the flyway. Elk needs
+     slack for the opposite reason - the reintroduced herds in Arkansas
+     and Kentucky are real and barely recorded.
+
+     Tuned against tools/validate.js. Change a number, reload, re-run
+     the validator - no rebuild. */
+  var PRESENCE_TOE = {
+    turkey:    0.00,   // ubiquitous cover, abundant records
+    whitetail: 0.00,   // same
+    upland:    0.02,
+    muledeer:  0.03,
+    moose:     0.03,
+    pronghorn: 0.04,
+    elk:       0.10,   // reintroduced herds are thinly recorded
+    waterfowl: 0.16,   // water is diagnostic; southern records are thin
+    trout:     0.30    // a 20 m stream is invisible to a 30 m raster
+  };
+  var TOE_DEFAULT = 0.05;
+
+  var presPlanes = {};
+
+  function presenceAt(sp, lon, lat) {
+    if (!raw || !raw.presence || !raw.presence.sp[sp]) return null;
+    var PG = raw.presence.grid;
+    var p = presPlanes[sp];
+    if (p === undefined) {
+      try {
+        var bin = global.atob(raw.presence.sp[sp]);
+        var a2 = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) a2[i] = bin.charCodeAt(i);
+        p = a2;
+      } catch (e) { p = null; }
+      presPlanes[sp] = p;
+    }
+    if (!p) return null;
+    var ix = Math.floor((lon - PG.lon0) / PG.d), iy = Math.floor((lat - PG.lat0) / PG.d);
+    if (ix < 0 || iy < 0 || ix >= PG.nlon || iy >= PG.nlat) return null;
+    return p[iy * PG.nlon + ix] / 255;
+  }
+
   function at(sp, lon, lat) {
     if (!G) return null;
     var a = plane(sp);
@@ -51,7 +101,13 @@
     var i01 = i00 + G.nlon, i11 = i01 + 1;
     var top = a[i00] * (1 - tx) + a[i10] * tx;
     var bot = a[i01] * (1 - tx) + a[i11] * tx;
-    return (top * (1 - ty) + bot * ty) / 255;
+    var suit = (top * (1 - ty) + bot * ty) / 255;
+
+    /* Combine with presence here rather than at build time. */
+    var pres = presenceAt(sp, lon, lat);
+    if (pres == null) return suit;
+    var toe = PRESENCE_TOE[sp] == null ? TOE_DEFAULT : PRESENCE_TOE[sp];
+    return suit * (toe + (1 - toe) * pres);
   }
 
   /* ---------- elevation ----------
@@ -244,7 +300,7 @@
 
   global.OG = global.OG || {};
   global.OG.habgrid = {
-    at: at,
+    at: at, presenceAt: presenceAt, PRESENCE_TOE: PRESENCE_TOE,
     ready: !!G,
     meta: raw ? { source: raw.source, note: raw.note, built: raw.built, d: raw.grid.d } : null,
 

@@ -37,7 +37,22 @@
         ['Bitterroot MT', -114.09, 46.10], ['Jackson WY', -110.70, 43.55],
         ['Gila NM', -108.40, 33.30], ['Blue Mountains OR', -118.40, 45.10],
         ['Olympic Pen. WA', -123.60, 47.70], ['Benezette PA', -78.35, 41.32],
-        ['Buffalo River AR', -93.05, 35.98], ['SE Kentucky', -83.30, 37.10]
+        ['Buffalo River AR', -93.05, 35.98], ['SE Kentucky', -83.30, 37.10],
+        /* The first version of this table listed ten elk positives, all
+           of them obvious western country plus two reintroductions, and
+           scored 8/10 - which looked respectable and was hiding that the
+           model missed ten of the eighteen established herds outside the
+           Rockies. Elk are in far more states than a mountain-shaped
+           intuition suggests. Every one of these has a herd and a
+           season. */
+        ['Fort Riley KS', -96.80, 39.10], ['Cimarron Grassland KS', -101.90, 37.10],
+        ['Black Hills SD', -103.70, 43.90], ['Custer SP SD', -103.40, 43.75],
+        ['Pigeon River MI', -84.45, 45.10], ['Clam Lake WI', -90.90, 46.15],
+        ['NW Minnesota', -96.40, 48.60], ['Peck Ranch MO', -91.15, 37.20],
+        ['Wichita Mts OK', -98.70, 34.73], ['Cookson Hills OK', -94.85, 35.70],
+        ['Glass Mts TX', -103.10, 30.55], ['Buchanan Co VA', -82.05, 37.25],
+        ['Tomblin WMA WV', -81.95, 37.85], ['N Cumberland TN', -84.15, 36.45],
+        ['Cataloochee NC', -83.10, 35.62]
       ],
       no: [
         ['Central Florida', -81.50, 28.50], ['Coastal Georgia', -82.00, 31.50],

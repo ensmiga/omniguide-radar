@@ -104,7 +104,15 @@ const SATURATE = { whitetail: 7, turkey: 5, waterfowl: 4, trout: 30 };
    now sits where the animals actually stop rather than where a round
    number felt about right. */
 const ELEV = {
-  elk:       [1500, 4000, 11800, 13500],
+  /* Elk are not a high-elevation animal. They are a continental one
+     that settlement pushed into the mountains, and every reintroduced
+     herd is back down low: Kentucky at 1500 ft, Michigan 1075, Missouri
+     900, Oklahoma 1000, Kansas 1188. A lower bound of 1500 scored all
+     of them at exactly zero and the model missed ten of the eighteen
+     established herds outside the Rockies - including Kentucky, which
+     holds the largest herd east of the Mississippi. I widened the top
+     of this band for the Sawatch and never questioned the bottom. */
+  elk:       [0, 500, 11800, 13500],
   muledeer:  [300, 2000, 11000, 13000],
   whitetail: [-100, 0, 7500, 10000],
   moose:     [0, 400, 11000, 12500],
@@ -155,6 +163,12 @@ const COMPOSITION = ['waterfowl', 'upland'];
 
 /* Composition is a smooth regional quantity, so it ships on a
    coarser grid than habitat and costs almost nothing. */
+/* Presence is smoothed over 33 km before use, so a tenth of a degree
+   was storing detail that is not in the signal. */
+const PRES_D = 0.25;
+const PRES_NLON = Math.ceil(NLON * D / PRES_D);
+const PRES_NLAT = Math.ceil(NLAT * D / PRES_D);
+
 const COMP_D = 0.5;
 const COMP_NLON = Math.ceil(NLON * D / COMP_D);
 const COMP_NLAT = Math.ceil(NLAT * D / COMP_D);
@@ -712,7 +726,7 @@ async function main() {
   /* Share of game records, so a cell watched by a thousand birders and a
      cell watched by one are judged the same way. */
   const effortS = smooth(effort, 3);
-  const out = {};
+  const out = {}, presOut = {};
   const report = [];
   for (const sp of SPECIES) {
     const occS = smooth(occ[sp], 3);
@@ -754,23 +768,34 @@ async function main() {
          deer. 0.04 keeps the softness at the edge of a range without
          inventing one. */
       const pres = clamp01(Math.pow(clamp01(share[k] / p97), 0.45));
-      /* For most species the land cover is the evidence and the
-         occurrence record is the gate. For a fish in a small stream
-         it is the other way round: Penns Creek and the Battenkill
-         are 20 m wide, invisible to a 30 m land-cover raster
-         averaged over 11 km, and both came out blank on the first
-         build while the records say plainly that trout are there.
-         So trout leans on presence and treats water cover as a
-         bonus, which is the honest reading of what each source
-         actually knows. */
-      const v = sp === 'trout'
-        ? (0.35 + 0.65 * s) * pres * cold[k]
-        : s * (0.04 + 0.96 * pres);
-      vals[k] = Math.round(clamp01(v) * 255);
+      /* Suitability only. The runtime multiplies in presence with a
+         per-species weighting - see habgrid.js - so that the balance
+         between "the ground looks right" and "something has actually
+         been seen here" can be set per species and measured against
+         the validation set without rebuilding.
+
+         Trout keeps its coldwater term here because that is a
+         property of the water rather than of the records. */
+      vals[k] = Math.round(clamp01(sp === 'trout' ? s * cold[k] : s) * 255);
     }
     out[sp] = Buffer.from(vals).toString('base64');
+
+    /* Presence, downsampled by taking the strongest value in each
+       coarse cell rather than the mean: a range edge should not be
+       eroded by the empty ground beyond it. */
+    const pv = new Uint8Array(PRES_NLON * PRES_NLAT);
+    for (let iy = 0; iy < NLAT; iy++) {
+      const cy = Math.floor((iy * D) / PRES_D);
+      for (let ix = 0; ix < NLON; ix++) {
+        const cx = Math.floor((ix * D) / PRES_D);
+        const q = Math.round(255 * clamp01(Math.pow(clamp01(share[iy * NLON + ix] / p97), 0.45)));
+        const o = cy * PRES_NLON + cx;
+        if (q > pv[o]) pv[o] = q;
+      }
+    }
+    presOut[sp] = Buffer.from(pv).toString('base64');
     let above = 0;
-    for (let k = 0; k < NCELL; k++) if (vals[k] > 18) above++;
+    for (let k = 0; k < NCELL; k++) if (vals[k] > 18) above++;   // suitability only
     report.push(sp + ': ' + above + ' cells above the range floor');
   }
   process.stderr.write('  ' + report.join('\n  ') + '\n');
@@ -824,6 +849,13 @@ async function main() {
     built: new Date().toISOString().slice(0, 10),
     grid: { lon0: LON0, lat0: LAT0, d: D, nlon: NLON, nlat: NLAT },
     sp: out,
+
+    /* Occurrence presence, separate from suitability so the runtime
+       can weight them per species. */
+    presence: {
+      grid: { lon0: LON0, lat0: LAT0, d: PRES_D, nlon: PRES_NLON, nlat: PRES_NLAT },
+      sp: presOut
+    },
 
     /* Hunting pressure from developed land cover, replacing a list
        of hand-weighted metro blobs. */
