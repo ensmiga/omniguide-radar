@@ -21,6 +21,10 @@
     var vals = [];
     for (var t = -170; t <= 195; t += DAY_STEP) {
       var doy = OG.env.doyFor(t);
+      /* Waterfowl are anchored over the months anyone hunts them. Summer
+         scores near nothing for a migrant, correctly, and a scale
+         stretched to include it says less about the season. */
+      if (OG.models.byId(spId).migratory && !(doy >= 244 || doy <= 31)) continue;
       for (var lat = 25.5; lat <= 49; lat += LAT_STEP) {
         for (var lon = -124; lon <= -67; lon += LON_STEP) {
           if (OG.geo.stateIndexAt(lon, lat) < 0) continue;
@@ -47,4 +51,5 @@
   });
 
   console.log('\n  var CAL = {\n' + lines.join(',\n') + '\n  };');
+
 })();

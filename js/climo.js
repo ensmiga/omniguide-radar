@@ -34,19 +34,23 @@
 
   var cache = new Map();
 
-  /* terrainFt is passed in rather than looked up, so this file does not
-     have to reach back into the habitat engine that calls it. */
-  function at(lon, lat, week, terrainFt) {
-    if (!available()) return null;
-    week = ((week % 52) + 52) % 52;
+  /* The four nearest stations to a place, found once.
 
-    var ck = (Math.round(lon * 8) * 4096 + Math.round(lat * 8)) * 64 + week;
-    var hit = cache.get(ck);
+     Which stations are nearest does not depend on the week, but the
+     search was inside the per-week lookup, so asking for seven weeks
+     at one point walked all 494 stations seven times. The freeze
+     model does exactly that - it reads the seven weeks before a date
+     - and it made the first paint of any new stretch of map take
+     seconds. */
+  var nearCache = new Map();
+
+  function neighbours(lon, lat) {
+    var nk = Math.round(lon * 8) * 4096 + Math.round(lat * 8);
+    var hit = nearCache.get(nk);
     if (hit !== undefined) return hit;
-
-    var best = [];
+    var best = [], cosLat = Math.cos(lat * Math.PI / 180);
     for (var s = 0; s < N.n; s++) {
-      var dx = (N.lon[s] - lon) * Math.cos(lat * Math.PI / 180);
+      var dx = (N.lon[s] - lon) * cosLat;
       var dy = N.lat[s] - lat;
       var d2 = dx * dx + dy * dy;
       if (best.length < K) {
@@ -57,6 +61,22 @@
         best.sort(function (a, b) { return a[0] - b[0]; });
       }
     }
+    if (nearCache.size > 40000) nearCache.clear();
+    nearCache.set(nk, best);
+    return best;
+  }
+
+  /* terrainFt is passed in rather than looked up, so this file does not
+     have to reach back into the habitat engine that calls it. */
+  function at(lon, lat, week, terrainFt) {
+    if (!available()) return null;
+    week = ((week % 52) + 52) % 52;
+
+    var ck = (Math.round(lon * 8) * 4096 + Math.round(lat * 8)) * 64 + week;
+    var hit = cache.get(ck);
+    if (hit !== undefined) return hit;
+
+    var best = neighbours(lon, lat);
     if (!best.length) { cache.set(ck, null); return null; }
 
     var wSum = 0, tx = 0, tn = 0, sd = 0, pp = 0, sdW = 0, ppW = 0;

@@ -169,24 +169,26 @@
            v >= 30 ? 'Tough' : 'Poor';
   }
 
-  /* One line of plain advice under the Day score: go, or wait, and how long
-     the wait is. Deliberately vague past six weeks, which is well beyond any
-     real forecast - past the ten-day window this is climatology, and it
-     should not read like a promise about a Tuesday in December. */
-  function dayVerdict(ds) {
-    /* nextBetter is the first day ahead that out-scores today, so today is
-       the best day here until then. Null means nothing ahead beats it. */
-    if (!ds.nextBetter) {
-      return ds.daysClear >= 45
-        ? 'Best day here for at least six weeks'
-        : 'The best of what is left of the season here';
+  /* One line of plain advice under the Day score: go, or wait for a named
+     day.
+
+     It used to look weeks ahead through the season sample, which is
+     invented weather past the end of the forecast, and came out with
+     things like "Best day here for the next 19 days" above a strip
+     showing Sunday sixteen points better. It now reads the same seven
+     numbers the strip below draws, so the line at the top and the bars
+     underneath cannot disagree, and it says nothing about a day the
+     forecast does not reach. */
+  function dayVerdict(ds, series, dayIdx) {
+    if (!series || !series.length) return '';
+    var here = series[Math.max(0, Math.min(series.length - 1, dayIdx))];
+    for (var j = dayIdx + 1; j < series.length; j++) {
+      if (series[j].opp != null && series[j].opp >= here.opp + 3) {
+        return (j === 1 ? 'Tomorrow' : fmtDay(series[j].date)) + ' looks better here';
+      }
     }
-    var d = ds.daysClear;
-    if (d <= 1) return 'Tomorrow looks better here';
-    if (d <= 10) return fmtDay(guide.dateFor(ds.nextBetter.t)) + ' looks better here';
-    if (d <= 20) return 'Best day here for the next ' + d + ' days';
-    if (d <= 45) return 'Best day here for about ' + Math.round(d / 7) + ' weeks';
-    return 'Best day here for over a month';
+    var left = series.length - 1 - dayIdx;
+    return left >= 2 ? 'Nothing better here in the ' + left + ' days the forecast reaches' : '';
   }
 
   function fmtDay(d) {
@@ -238,13 +240,19 @@
     var fr = wx.frontal || 0;
     var tr = wx.pressTrend || 0;
     var drop = -(wx.temp24 || 0);
+    /* Written for ducks and then shown to everyone: the elk plan for
+       Benezette talked about pulling birds off the clock. */
+    var sp = plan.species || {};
+    var who = sp.pursuit === 'fish' ? 'fish'
+      : (sp.group === 'waterfowl' || sp.id === 'turkey' || sp.id === 'upland') ? 'birds' : 'animals';
+    var Who = who.charAt(0).toUpperCase() + who.slice(1);
 
     if (fr >= 0.55 && tr < -0.25) {
       return {
         head: 'A front is moving through today',
         body: 'Pressure is falling ' + Math.abs(tr).toFixed(1) + ' hPa every three hours with the ' +
           'boundary overhead' + (drop > 4 ? ' and the temperature down ' + Math.round(drop) + ' degrees in ' +
-          'twenty-four hours' : '') + '. Birds move on the weather rather than the clock on a day like ' +
+          'twenty-four hours' : '') + '. ' + Who + ' move on the weather rather than the clock on a day like ' +
           'this, so the window above is wide on purpose. Be set up before the wind shifts rather than ' +
           'planning around first light.'
       };
@@ -253,14 +261,14 @@
       return {
         head: 'A front has just passed',
         body: 'Pressure is rising ' + tr.toFixed(1) + ' hPa every three hours behind the boundary. ' +
-          'The push came with the front; what is left is cold air and birds that have already ' +
-          'relocated. First light is the better bet again.'
+          'The push came with the front; what is left is cold air and ' + who + ' that have already ' +
+          'moved. First light is the better bet again.'
       };
     }
     if (fr >= 0.35) {
       return {
         head: 'A boundary is nearby',
-        body: 'Not overhead and not organised enough to pull birds off the clock, but close enough ' +
+        body: 'Not overhead and not organised enough to pull ' + who + ' off the clock, but close enough ' +
           'that the middle of the day is worth more than it usually is. Watch the wind for a shift.'
       };
     }
@@ -396,12 +404,13 @@
     ] },
     { group: 'Land and water cover', items: [
       { n: 'MRLC NLCD 2021', d: 'Land cover at 30 m. Habitat quality, open water, wetland, and the hunting pressure surface.', l: 'Public domain' },
+      { n: 'USDA NASS Cropland Data Layer 2024', d: 'Rice acreage, which the land cover map files under crops in general. A waterfowl input only.', l: 'Public domain' },
       { n: 'AWS Terrain Tiles', d: 'Elevation and relief, from USGS 3DEP and others.', l: 'Open data, attribution requested' },
       { n: 'Natural Earth', d: 'Rivers, lakes, state and county outlines.', l: 'Public domain' },
       { n: 'USGS The National Map', d: 'Shaded relief, topographic and aerial basemaps.', l: 'Public domain' }
     ] },
     { group: 'Species records', items: [
-      { n: 'GBIF', d: 'Occurrence records 2015-2025 for 24 taxa, filtered to CC0 and CC-BY. Sets species range, migration timing and the species mix in the decoy advice. Most bird records originate from eBird; most mammal records from iNaturalist.', l: 'CC0 and CC-BY 4.0' }
+      { n: 'GBIF', d: 'Occurrence records 2015-2025 for 30 taxa, filtered to CC0 and CC-BY, counted in full through the GBIF maps and statistics services - about 20.6 million. They decide whether a species is in range, when waterfowl normally arrive and how many are normally present by date, and the species mix in the decoy advice. They do not decide how good a place is. Most bird records originate from eBird; most mammal records from iNaturalist.', l: 'CC0 and CC-BY 4.0' }
     ] },
     { group: 'Regulations', items: [
       { n: 'State and federal agencies', d: 'Season dates in this build are UNVERIFIED PLACEHOLDERS shaped like a typical federal framework. They are not real seasons. Confirm every date, zone, bag limit and shooting hour with the issuing agency before you go.', l: 'Not a data feed' }
@@ -444,21 +453,18 @@
     var sc = plan.score;
     var root = frag();
 
-    if (!sc.inRange || (plan.legal.state && !regs.hasSeasonRecord(plan.legal.state.abbr, st.species))) {
+    if (!sc.inRange) {
       var oh = el('div', 'planhead');
       oh.appendChild(el('div', 'ph-title', plan.place.title));
       oh.appendChild(el('div', 'ph-sub', plan.place.sub + '  ·  ' + plan.place.coords));
       root.appendChild(oh);
       var ob = el('div', 'gate gate-outrange');
       ob.appendChild(el('div', 'gate-h', 'Outside the ' + App.speciesName(st.species).toLowerCase() + ' range'));
-      var why = !sc.inRange
-        ? (sc.outReason === 'habitat'
-            ? 'The terrain and land cover here do not support this species.'
-            : 'Occurrence records show this species is effectively absent here.')
-        : 'No season record exists for this species in ' +
-          (plan.legal.state ? plan.legal.state.name : 'this state') + '.';
+      var why = sc.outReason === 'habitat'
+        ? 'The terrain and land cover here do not support this species.'
+        : 'Occurrence records show this species is effectively absent here.';
       ob.appendChild(el('div', 'gate-b', why +
-        ' OmniGuide does not produce an opportunity score where the species is not a huntable resource.'));
+        ' OmniGuide does not produce an opportunity score where the species does not live.'));
       root.appendChild(ob);
       var alt = section('What you can do here');
       alt.appendChild(el('p', null, 'Switch species in the top bar, or move to country where this one ' +
@@ -501,9 +507,9 @@
     if (ds) {
       sbr.appendChild(el('div', 'bs-lab', 'Day score · today against ' +
         (ds.baseline === 'season'
-          ? 'the ' + ds.nDays + ' days you could hunt here this season'
+          ? 'the ' + ds.nDays + ' days you could ' + (plan.species.pursuit === 'fish' ? 'fish' : 'hunt') + ' here this season'
           : 'the rest of the year here, because no season record covers this spot')));
-      sbr.appendChild(el('div', 'bs-when', dayVerdict(ds)));
+      sbr.appendChild(el('div', 'bs-when', dayVerdict(ds, guide.outlook(lon, lat, st.species), Math.floor(st.t))));
     } else {
       sbr.appendChild(el('div', 'bs-lab', legalOk ? 'OmniGuide Opportunity Score'
                                                   : 'Biological activity only. This is not a statement that hunting is permitted.'));
@@ -742,7 +748,7 @@
     wkSec.appendChild(el('p', 'note',
       shortDay(best, series[best].date) + ' currently provides the strongest ' +
       plan.species.name.toLowerCase() + ' opportunity over the next seven days at this location (' +
-      series[best].opp + '/100).'));
+      series[best].opp + '/100). Each bar is that day at its best between dawn and dusk.'));
     root.appendChild(wkSec);
 
     /* Legal gate detail */
@@ -789,11 +795,31 @@
       tbl.appendChild(calcRow('· observed range index', Math.round(bd.distIdx * 100),
         (bd.distWeight * 100).toFixed(0) + '% pull', '→ ' + Math.round(bd.habAdjusted), 'calcsub'));
     }
-    bd.parts.forEach(function (p) {
+    var subtotal = 0, habAdd = 0;
+    bd.parts.forEach(function (p, pi) {
       if (!p.w) return;
-      tbl.appendChild(calcRow(p.k, Math.round(p.v), (p.w / bd.totalWeight).toFixed(2),
-        (p.w * p.v / bd.totalWeight).toFixed(1)));
+      var add = p.w * p.v / bd.totalWeight;
+      subtotal += add;
+      if (pi === 0) habAdd = add;
+      tbl.appendChild(calcRow(p.k, Math.round(p.v), (p.w / bd.totalWeight).toFixed(2), add.toFixed(1)));
     });
+    /* The two things that scale the sum, each on a line of its own so
+       the table still adds up to the number above it. */
+    var liveOnly = bd.liveOnly == null ? 1 : bd.liveOnly;
+    var shownF = bd.presenceShown == null ? 1 : bd.presenceShown;
+    if (liveOnly < 0.995) {
+      var afterLive = habAdd + liveOnly * (subtotal - habAdd);
+      tbl.appendChild(calcRow(bd.locked > 0.05
+          ? '· Water locked up: movement and conditions count for less'
+          : '· Thin habitat: movement and conditions count for less',
+        '', '×' + liveOnly.toFixed(2), '→ ' + afterLive.toFixed(1), 'calcsub'));
+      subtotal = afterLive;
+    }
+    if (shownF < 0.995) {
+      tbl.appendChild(calcRow('· Birds normally here by this date',
+        Math.round((bd.presence || 0) * 100) + '% of peak', '×' + shownF.toFixed(2),
+        '→ ' + (subtotal * shownF).toFixed(1), 'calcsub'));
+    }
     tbl.appendChild(calcRow('Weighted mean', '', '', bd.weighted.toFixed(1), 'calcsum'));
     tbl.appendChild(calcRow('Hunter pressure', Math.round(bd.pressureIdx * 100),
       '−' + (bd.pressureSens * 100).toFixed(0) + '% max', '−' + bd.pressureDrop.toFixed(1)));
@@ -803,7 +829,7 @@
     mSec.appendChild(tbl);
     mSec.appendChild(el('p', 'note', 'Weights are specific to ' + plan.species.name.toLowerCase() +
       '. The last step rescales the weighted mean through the range this species actually produces ' +
-      'nationwide across a full year, so 90 means near the best ' + plan.species.name.toLowerCase() +
+      'nationwide over its season, so 90 means near the best ' + plan.species.name.toLowerCase() +
       ' conditions found anywhere rather than an arbitrary number. It changes the scale, not the ranking.'));
     mSec.appendChild(el('p', 'note', 'Not in this number: land access, whether the habitat is in good ' +
       'condition this year, last season’s production, stocking or harvest history, or anything ' +
@@ -818,11 +844,16 @@
           Math.round(wx.temp24) + '° in 24h)' },
       { k: 'Wind', v: env.dirName(wx.windFrom) + ' ' + Math.round(wx.windSpd) + ' mph, gusts ' +
           Math.round(wx.gust) },
-      { k: 'Pressure', v: Math.round(wx.pressure) + ' hPa, ' +
+      /* Station pressure, which at 6500 feet is 780 hPa and looks like a
+         fault to anyone who owns a barometer. The trend is the part that
+         matters, so high ground says what the figure is. */
+      { k: 'Pressure', v: Math.round(wx.pressure) + (sc.hab.elev > 1200 ? ' hPa at this elevation, ' : ' hPa, ') +
           (wx.pressTrend > 0.15 ? 'rising' : wx.pressTrend < -0.15 ? 'falling' : 'steady') },
       { k: 'Cloud', v: Math.round(wx.cloud * 100) + '%' },
       { k: 'Freeze index', v: Math.round(wx.freeze * 100) + '%' },
-      { k: 'Water temperature', v: Math.round(wx.waterTemp) + '°F' },
+      { k: 'Water temperature', v: Math.round(wx.waterTemp) + '°F' +
+          (wx.gauge && wx.gauge.waterTempF != null ? (wx.gaugeCarried ? ' (from today\'s gauge reading)' : ' (measured)')
+                                                    : ' (estimated, typically within 5-6°)') },
       { k: 'Habitat', v: (sc.hab.region || sc.hab.water || 'Unnamed') + ' · ' +
           Math.round(sc.hab.elev) + ' ft' },
       { k: 'Estimated pressure', v: sc.pressure + '/100 hunting pressure proxy' }
@@ -1331,7 +1362,10 @@
         var lede = el('div', 'lede');
         lede.textContent = 'The strongest legal stretch here is normally ' +
           monthDay(rows[top.from].date) + ' to ' + monthDay(rows[top.to].date) +
-          ', peaking the week of ' + monthDay(peak.date) + ' at a typical ' + peak.score + '/100.';
+          ', peaking the week of ' + monthDay(peak.date) + ' at a typical ' + peak.score + '/100.' +
+          (peak.status === 'PERMIT'
+            ? ' This is a permit hunt: it is open only to holders of a tag for the unit, and most are drawn.'
+            : '');
         root.appendChild(lede);
       } else {
         root.appendChild(el('div', 'lede', 'No legally open week for this species at this location in ' +
@@ -2476,7 +2510,7 @@
           mb.appendChild(el('span', 'ob-s', m.sub));
           mb.title = m.id === 'spot'
             ? 'Spot: how good this place is compared with everywhere else in the country today. Answers "where do I drive".'
-            : 'Day: how good today is compared with the other days you could hunt this same place. Answers "do I go today".';
+            : 'Day: how good today is compared with the other days you could hunt or fish this same place. Answers "do I go today".';
           mb.addEventListener('click', function () {
             App.state.oppMode = m.id;
             App.state.layer = 'opportunity';

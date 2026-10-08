@@ -5,9 +5,10 @@
 
    WHY THIS EXISTS.
 
-   The range gate has two knobs - the habitat floor in models.js and the
-   presence toe in the habitat ingest - and both were being set by one
-   global number, then adjusted whenever a single bad cell turned up.
+   The range gate has knobs - the habitat floor in models.js, and in
+   habgrid.js the knee and the regional share at which a species counts
+   as in range - and they were being set by one global number and then
+   adjusted whenever a single bad cell turned up.
    That is how you end up back at hand-drawn blobs: each fix is local,
    nothing checks the whole picture, and a change that rescues
    Mississippi quietly invents whitetail in Nevada.

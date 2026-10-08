@@ -113,6 +113,8 @@
     source: G ? G.source : null,
     fetched: G ? G.t0 : null,
     stepFor: stepFor,
+    /* App time t for an absolute moment, at this longitude. */
+    tAt: function (lon, ms) { return (ms - localMidnightUTC(lon, _now)) / 86400000; },
     sample: sample,
     LAPSE_F_PER_FT: LAPSE_F_PER_FT,
     buffers: [buf, buf2, buf3],

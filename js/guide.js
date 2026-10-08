@@ -126,7 +126,7 @@
     'Anas platyrhynchos': { name: 'mallards', why: 'the local staple' },
     'Anas acuta': { name: 'pintails', why: 'high visibility on the outside' },
     'Mareca americana': { name: 'wigeon', why: 'well represented here' },
-    'Spatula discors': { name: 'teal', why: 'common here early' },
+    'Spatula discors': { name: 'blue-wing teal', why: 'common here early' },
     'Aythya affinis': { name: 'bluebill decoys', why: 'divers are a real share here' },
     'Aythya valisineria': { name: 'canvasback decoys', why: 'divers are a real share here' },
     'Anas crecca': { name: 'green-wing teal', why: 'common here' },
@@ -135,16 +135,55 @@
     'Bucephala clangula': { name: 'goldeneye decoys', why: 'divers hold on this water late' }
   };
 
-  function secondSpecies(sc) {
+  /* The mix among ducks only, and how much of the water is geese.
+
+     The species mix covers all waterfowl, and the plan for ducks was
+     reading it whole: whatever was most recorded became the core of
+     the spread. Resident Canada geese are on more checklists than any
+     duck across most of the country, so the duck plan for Stuttgart
+     came out as thirty to forty honker floaters with a few mallards
+     on the outside. Geese are taken out before ducks are ranked, and
+     offered back as an extra where they are a large part of what is
+     there. */
+  var GEESE = { 'Branta canadensis': 1, 'Anser caerulescens': 1 };
+
+  function duckMix(sc) {
     var hg = global.OG.habgrid;
     if (!hg || !hg.compReady) return null;
     var comp = hg.composition('waterfowl', sc.lon, sc.lat);
     if (!comp) return null;
+    /* The mix is counted over the whole season, and the season is not
+       one thing: blue-winged teal are the birds of September and are
+       gone by November, goldeneye are nowhere until the cold comes.
+       Each species is weighted by how much of its own peak it
+       normally has at this latitude on this date - the same measured
+       calendar the score uses - so the spread named in early October
+       is not the spread named at Christmas. */
+    var ducks = [], dsum = 0, gsum = 0;
+    for (var i = 0; i < comp.length; i++) {
+      var now = 1;
+      if (sc.doy != null && hg.seasonalPresence) {
+        var sp1 = hg.seasonalPresence([comp[i].taxon], sc.lat, sc.doy);
+        if (sp1 != null) now = 0.1 + 0.9 * sp1;
+      }
+      var sh = comp[i].share * now;
+      if (GEESE[comp[i].taxon]) gsum += sh;
+      else { ducks.push({ taxon: comp[i].taxon, share: sh }); dsum += sh; }
+    }
+    if (dsum <= 0) return null;
+    for (var j = 0; j < ducks.length; j++) ducks[j].share /= dsum;
+    ducks.sort(function (a, b) { return b.share - a.share; });
+    return { ducks: ducks, geese: gsum / (gsum + dsum) };
+  }
+
+  function secondSpecies(sc) {
+    var mix = duckMix(sc);
+    if (!mix) return null;
     /* Skip the top entry - that is the core of the spread already -
        and take the next one that is worth carrying decoys for. */
-    for (var i = 1; i < comp.length; i++) {
-      if (comp[i].share < 0.08) break;
-      var d = DECOY_NAMES[comp[i].taxon];
+    for (var i = 1; i < mix.ducks.length; i++) {
+      if (mix.ducks[i].share < 0.10) break;
+      var d = DECOY_NAMES[mix.ducks[i].taxon];
       if (d) return d;
     }
     return null;
@@ -176,9 +215,17 @@
          5514 mallard and 1056 goldeneye against 279 pintail, so it
          was naming the rarest duck in the drainage and leaving out
          the one you would actually decoy. */
+      /* The mix is counted over the season, September to January, so
+         it no longer needs the migration window to be open before a
+         second species is named. */
       var second = secondSpecies(sc);
-      if (second && sc.mig.chron > 0.35) {
+      if (second && core.indexOf('mixed decoys') !== 0) {
         lines.push('4-8 ' + second.name + ' on the outside edge - ' + second.why);
+      }
+      var mixNow = duckMix(sc);
+      /* Not in flooded timber. Geese do not come into the woods. */
+      if (mixNow && mixNow.geese > 0.3 && hab.cls !== 'timber') {
+        lines.push('A few honker floaters set well apart from the ducks - geese are a large share of the birds on this water');
       }
       if (hab.cls === 'rice' || hab.cls === 'coastal') lines.push('A half dozen wigeon or gadwall along the shallow edge');
       if (hab.cls === 'reservoir' || (hab.cls === 'coastal' && wx.windSpd > 15))
@@ -190,15 +237,22 @@
   }
 
   function coreSpecies(sc) {
-    var hg = global.OG.habgrid;
-    if (hg && hg.compReady) {
-      var comp = hg.composition('waterfowl', sc.lon, sc.lat);
-      if (comp && comp.length && comp[0].share > 0.2) {
-        var d = DECOY_NAMES[comp[0].taxon];
-        if (d) return d.name;
-      }
+    var mix = duckMix(sc);
+    if (!mix || !mix.ducks.length) return 'mallards';
+    var top = DECOY_NAMES[mix.ducks[0].taxon];
+    /* One bird clearly ahead: build on it. */
+    if (top && (mix.ducks[0].share > 0.34 || mix.ducks.length < 3 ||
+                mix.ducks[0].share > 1.6 * mix.ducks[1].share)) return top.name;
+    /* Otherwise it is a mixed bag and saying "mallards" would be a
+       guess. On the Louisiana coast the records run teal, gadwall and
+       pintail in near equal parts with mallard fifth. */
+    var names = [];
+    for (var i = 0; i < mix.ducks.length && names.length < 3; i++) {
+      var d = DECOY_NAMES[mix.ducks[i].taxon];
+      if (d && mix.ducks[i].share > 0.12) names.push(d.name.replace(/ decoys$/, ''));
     }
-    return 'mallards';
+    if (names.length < 2) return top ? top.name : 'mallards';
+    return 'mixed decoys - ' + names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' -';
   }
 
   function callingPlan(sc) {
@@ -265,11 +319,24 @@
     };
   }
 
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+                'September', 'October', 'November', 'December'];
+  /* Day of year, possibly past 365, as "20 January". */
+  function monthDayOf(doy) {
+    var d = new Date(Date.UTC(2023, 0, 1) + (Math.round(doy) - 1) * 86400000);
+    return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()];
+  }
+
   /* ---------- Big game strategy ---------- */
 
   function bigGamePlan(sc, legal, win, doy) {
-    if (sc.species.id === 'elk') return elkPlan(sc, legal, win);
+    if (sc.species.id === 'elk') return elkPlan(sc, legal, win, doy);
     var wx = sc.wx, id = sc.species.id;
+    /* The rut is read from the calendar, never from the movement score:
+       weather decides how much of it shows in daylight, not whether it
+       is on. */
+    var rs = models.rutStage ? models.rutStage(id, doy, sc.lon, sc.lat) : null;
+    var stage = rs ? rs.stage : 'after';
     var windFromName = env.dirName(wx.windFrom);
     var approachFrom = env.dirName(wx.windFrom);   // move into the wind
     var rec = [], setup = [];
@@ -282,18 +349,28 @@
         'and keep the stand downwind of the trail you expect to work.');
       if (wx.temp24 < -8) rec.push('Overnight temperature fell ' + Math.round(-wx.temp24) +
         ' degrees. That is the strongest daylight-movement trigger whitetails have - sit all day if you can.');
-      if (sc.movement > 70) rec.push('Rut activity is high enough that bucks will be covering ground mid-morning. ' +
-        'The 9 AM to noon window is worth more than it usually is.');
+      if (stage === 'peak') rec.push('This is the peak of the rut. Bucks will be covering ground mid-morning, so ' +
+        'the 9 AM to noon window is worth more than it usually is.');
+      else if (stage === 'building') rec.push('The rut is building. Bucks are starting to cruise between doe groups ' +
+        'and work scrapes, so a funnel between bedding areas is worth more than a food source.');
+      else if (stage === 'fading') rec.push('The peak of the rut has passed, but bucks are still searching for the ' +
+        'last unbred does. Stay on doe bedding cover and the food next to it.');
+      if (rs && rs.regional) rec.push('Rut timing here follows the regional calendar, peaking around ' +
+        monthDayOf(rs.peak) + ' rather than mid November. It varies county to county - check your state ' +
+        'agency\'s breeding-date map.');
       if (wx.windSpd > 18) rec.push('Wind over 18 mph pins deer into the lee of ridges and thick timber. ' +
         'Move your setup to a protected bench or a creek bottom.');
       setup = [
         { k: 'Stand position', v: ['Downwind of bedding cover, on the food side',
                                    'Entry and exit routes that never cross the trail you are watching'] },
         { k: 'Wind', v: windFromName + ' ' + Math.round(wx.windSpd) + '-' + Math.round(wx.gust) + ' mph' },
-        { k: 'Timing', v: sc.movement > 70 ? 'All day - the rut is doing the work'
-                                           : 'First and last two hours' },
-        { k: 'Calling', v: sc.movement > 70
+        { k: 'Timing', v: stage === 'peak' ? 'All day - the rut is doing the work'
+            : (stage === 'building' || stage === 'fading') ? 'First and last two hours, and stay through mid-morning'
+            : 'First and last two hours' },
+        { k: 'Calling', v: stage === 'peak'
             ? 'Light grunt and a snort-wheeze on a visible, moving buck. Do not call blind all morning.'
+            : stage === 'building' ? 'Rattling and grunts are at their best now, before bucks are locked down with does.'
+            : stage === 'fading' ? 'Sparing grunts or a doe bleat. Bucks are worn down and call-shy by now.'
             : 'Minimal. Outside the rut, calling mostly educates deer.' },
         { k: 'Scent control', v: ['Treat wind direction as the only thing that matters',
                                   'Rubber boots and an entry route through water or bare ground where possible'] }
@@ -321,12 +398,14 @@
       rec.push('Temperature is ' + Math.round(wx.tempF) + ' degrees. ' +
         (wx.tempF > 55 ? 'That is warm for moose - expect them in shade or standing in water, and concentrate on the first and last hour.'
                        : 'Cool enough that animals should be up and feeding well into the morning.'));
-      if (sc.movement > 65) rec.push('The rut is on. Raking brush and a cow call will pull a bull in, but be ' +
-        'ready for him to come quietly and close.');
+      if (stage === 'peak' || stage === 'building') rec.push('The rut is on. Raking brush and a cow call will ' +
+        'pull a bull in, but be ready for him to come quietly and close.');
+      else if (stage === 'fading') rec.push('The rut is winding down. A cow call can still turn a bull, but expect ' +
+        'a slow, silent approach.');
       setup = [
         { k: 'Habitat', v: ['Willow and alder bottoms', 'Beaver ponds and old burns with regrowth'] },
         { k: 'Wind', v: windFromName + ' ' + Math.round(wx.windSpd) + ' mph' },
-        { k: 'Calling', v: sc.movement > 65
+        { k: 'Calling', v: (stage === 'peak' || stage === 'building' || stage === 'fading')
             ? 'Cow call sparingly and rake brush. Stop calling once a bull commits.'
             : 'Outside the rut, hunt quietly on feed and sign rather than calling.' },
         { k: 'Approach', v: 'Slow, with long listening stops. Moose are quiet for their size.' },
@@ -433,8 +512,10 @@
 
   /* ---------- Elk strategy ---------- */
 
-  function elkPlan(sc, legal, win) {
+  function elkPlan(sc, legal, win, doy) {
     var wx = sc.wx, windFromName = env.dirName(wx.windFrom);
+    var rs = models.rutStage ? models.rutStage('elk', doy, sc.lon, sc.lat) : null;
+    var stage = rs ? rs.stage : 'after';
     var rec = [];
     rec.push('Hunt the timber-to-meadow edge in the ' + Math.round(sc.hab.elev / 100) * 100 +
       ' foot band and let the thermals, not the forecast wind, set your approach.');
@@ -454,9 +535,12 @@
         { k: 'Wind', v: windFromName + ' ' + Math.round(wx.windSpd) + ' mph, thermals dominant in drainages' },
         { k: 'Approach', v: ['Above the feed early, below the benches late',
                              'Glass from across the drainage before committing to a side'] },
-        { k: 'Calling', v: sc.wx.seas > -0.2 && sc.movement > 60
+        { k: 'Calling', v: (stage === 'peak' || stage === 'building')
             ? 'Locate with a bugle at first light, then go quiet and close. Cow call only to stop a moving animal.'
-            : 'Outside the rut, calling does more harm than good. Hunt feed, water and travel instead.' },
+            : stage === 'fading'
+              ? 'The rut is winding down. A locator bugle at first light may still get an answer; after that hunt ' +
+                'quietly and keep the cow call for stopping a moving animal.'
+              : 'Outside the rut, calling does more harm than good. Hunt feed, water and travel instead.' },
         { k: 'Concealment', v: ['Stay off skylines', 'Approach with the sun behind you where terrain allows'] }
       ]
     };
@@ -530,7 +614,7 @@
     var top = hatches[0];
     var surface = Math.round(100 * clamp01(top.v * (0.5 + 0.5 * wx.cloud) * pref(wx.waterTemp, 55, 10) * 1.3));
     var streamer = Math.round(100 * clamp01(
-      0.35 * clamp01(ramp(wx.flowIdx, 0.45, 0.85)) + 0.3 * clamp01(wx.cloud) +
+      0.35 * (wx.flowJudged ? clamp01(ramp(wx.flowIdx, 0.45, 0.85)) : 0.3) + 0.3 * clamp01(wx.cloud) +
       0.2 * clamp01(ramp(52 - wx.waterTemp, 0, 12)) + 0.25 * clamp01(ramp(doy, 250, 320))));
 
     var rec = [];
@@ -542,7 +626,8 @@
            their own feeding behaviour and deserve their own sentence. */
         rec.push(top.n + ' is the pattern today rather than any hatch. Water is around ' +
           Math.round(wx.waterTemp) + ' degrees' +
-          (wx.flowReal ? ' and running ' + wx.gauge.cfs.toLocaleString() + ' cfs' : '') +
+          (wx.flowReal ? (wx.gaugeCarried ? ', with the gauge last reading ' : ' and running ') +
+            wx.gauge.cfs.toLocaleString() + ' cfs' : '') +
           ', and the best of it should be near ' + env.hhmm(top.peak * 60) + '.');
       } else {
         rec.push(top.n + ' is the driver today. Water is around ' + Math.round(wx.waterTemp) +
@@ -557,8 +642,13 @@
     }
     if (surface > 55) rec.push('Surface feeding is likely. Start subsurface, but have the dry rigged and switch the ' +
       'moment you see consistent noses rather than one-off rises.');
-    if (streamer > 55) rec.push('Streamer conditions are good - low light and ' +
-      (wx.flowIdx > 0.6 ? 'pushy water' : 'cold water') + ' favor stripping a bigger fly along the bank structure.');
+    if (streamer > 55) {
+      var why = ['low light'];
+      if (wx.flowJudged && wx.flowIdx > 0.6) why.push('pushy water');
+      else if (wx.waterTemp < 52) why.push('cold water');
+      rec.push('Streamer conditions are good - ' + why.join(' and ') + (why.length > 1 ? ' favor' : ' favors') +
+        ' stripping a bigger fly along the bank structure.');
+    }
     if (wx.windSpd > 16) rec.push('Wind at ' + Math.round(wx.windSpd) + ' mph will make long drifts hard. Shorten up ' +
       'and fish close with a heavier point fly.');
 
@@ -579,18 +669,26 @@
       setup: [
         { k: 'Water', v: wx.gauge
             ? [Math.round(wx.waterTemp) + ' degrees F' +
-                 (wx.gauge.waterTempF != null ? ' (measured)' : ' (modelled)'),
-               wx.gauge.cfs != null ? wx.gauge.cfs.toLocaleString() + ' cfs measured' : 'Flow modelled',
+                 (wx.gauge.waterTempF == null ? ' (estimated from the season)'
+                   : wx.gaugeCarried ? ' (forecast, from a gauge reading of ' +
+                       Math.round(wx.gauge.waterTempF) + ' today)'
+                   : ' (measured)'),
+               wx.gauge.cfs != null
+                 ? wx.gauge.cfs.toLocaleString() + (wx.gaugeCarried ? ' cfs at the last reading' : ' cfs measured')
+                 : 'No flow reading',
                'Gauge: ' + (wx.gauge.flowSite || wx.gauge.tempSite) + ', about ' +
                  (wx.gauge.flowMiles != null ? wx.gauge.flowMiles : wx.gauge.tempMiles) + ' miles away']
-            : Math.round(wx.waterTemp) + ' degrees F modelled, flow index ' + wx.flowIdx.toFixed(2) +
+            : Math.round(wx.waterTemp) + ' degrees F estimated from the season' +
               (sc.hab.waterCls === 'tailwater' ? ' (tailwater - buffered)' : '') +
               '. No USGS gauge within ' + (global.OG.gauges ? global.OG.gauges.maxMiles : 25) + ' miles.' },
         { k: 'Target water', v: ['Slower inside seams below riffles', 'Soft edges and current breaks, not the fast middle'] },
         { k: 'Starting rig', v: top.rig.concat(surface > 55 ? ['Switch to ' + top.dry + ' on consistent risers'] : []) },
-        { k: 'Presentation', v: wx.flowIdx > 0.6
-            ? 'Short, heavy, close. Add weight until you tick bottom and shorten the drift.'
-            : 'Long leader and fine tippet. Low clear water means the drift matters more than the fly.' },
+        { k: 'Presentation', v: !wx.flowJudged
+            ? 'Start with a long leader and a clean drift. If the water is up or coloured when you get there, ' +
+              'shorten the drift and add weight until you tick bottom.'
+            : wx.flowIdx > 0.6
+              ? 'Short, heavy, close. Add weight until you tick bottom and shorten the drift.'
+              : 'Long leader and fine tippet. Low clear water means the drift matters more than the fly.' },
         { k: 'Depth', v: wx.waterTemp < 48 ? 'On the bottom - fish will not move far for a fly this cold'
                                            : 'Mid column, and higher as the hatch builds' }
       ]
@@ -776,6 +874,7 @@
     var date = dateFor(t);
     var doy = env.dayOfYear(date);
     var sc = models.scoreAt(lon, lat, t, env.doyFor(t), spId);
+    sc.doy = env.doyFor(t);
     var sp = sc.species;
     var legalRes = regs.check(lon, lat, date, spId);
     var hours = regs.legalHours(lon, lat, date, spId, legalRes.hoursRule);
@@ -806,10 +905,25 @@
   /* Seven-day outlook for a point. */
   function outlook(lon, lat, spId) {
     var out = [];
+    /* Each day at its best between dawn and dusk.
+
+       This scored every day at t = d exactly, which is midnight: the
+       temperature, the wind and the overnight change of a time nobody
+       is in a blind. It is why the strip never agreed with the number
+       at the top of the same panel, and why a day could be named the
+       best of the week for conditions that were gone by first light.
+       Five looks across the day, the best of them kept. */
+    var HOURS = [6, 9, 12, 15, 18];
     for (var d = 0; d < 7; d++) {
       var date = dateFor(d);
-      var doy = env.doyFor(d);
-      var sc = models.scoreAt(lon, lat, d, doy, spId);
+      var sc = null;
+      for (var h = 0; h < HOURS.length; h++) {
+        var tt = d + HOURS[h] / 24;
+        var s1 = models.scoreAt(lon, lat, tt, env.doyFor(tt), spId);
+        if (!s1.inRange) continue;
+        if (!sc || s1.opportunity > sc.opportunity) sc = s1;
+      }
+      if (!sc) sc = models.scoreAt(lon, lat, d + 0.5, env.doyFor(d + 0.5), spId);
       var lg = regs.check(lon, lat, date, spId);
       out.push({
         day: d, date: date, opp: sc.opportunity, conf: sc.confidence,

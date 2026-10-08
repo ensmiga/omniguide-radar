@@ -160,8 +160,15 @@
       bag: 'One elk, license and unit-specific permit required',
       hours: 'daylight', source: 'State wildlife agency' }),
 
+    /* Runs through to January. This placeholder ended on 5 November
+       with firearms opening on the 10th, which left the peak week of
+       the rut showing as closed - the one week of the year nearly
+       every whitetail state has a bow season open. Typical archery
+       frameworks run from mid September or 1 October into early or
+       mid January, overlapping the gun season rather than stopping
+       for it. Still a placeholder, still unverified. */
     rule({ states: NORTH.concat(MID, SOUTH), species: ['whitetail'], type: 'Archery deer season',
-      start: '09-15', end: '11-05', status: 'LIMITED',
+      start: '09-15', end: '01-10', status: 'LIMITED',
       bag: 'Varies widely by state, unit and sex. Antler restrictions common.',
       note: 'Deer seasons are among the most unit-specific regulations there are. Nothing here is unit-aware.',
       hours: 'daylight', source: 'State wildlife agency' }),
@@ -292,7 +299,11 @@
 
     if (!anyForSpecies) {
       status = 'UNKNOWN';
-      reason = 'No regulation record for ' + st.name + ' and this species. OmniGuide will not guess a season.';
+      /* Said plainly, because the map now draws this ground: the animal
+         being here says nothing about whether it may be hunted. */
+      reason = 'OmniGuide has no regulation record for this species in ' + st.name +
+        '. There may be no season here at all, or it may be by permit only. ' +
+        'Do not hunt or fish on the strength of this map - confirm with the state agency first.';
     } else {
       status = best.status;
       reason = best.active

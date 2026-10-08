@@ -33,10 +33,12 @@
 
    Writes js/habitat-grid.js. */
 
-import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { serialize, deserialize } from 'node:v8';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodePNG, paletteIndex, terrariumMetres } from './png.mjs';
+import { decodeBins } from './mvt.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(HERE, '..', 'js');
@@ -114,12 +116,17 @@ const ELEV = {
      of this band for the Sawatch and never questioned the bottom. */
   elk:       [0, 500, 11800, 13500],
   muledeer:  [300, 2000, 11000, 13000],
-  whitetail: [-100, 0, 7500, 10000],
+  /* The low end is -400 for anything that lives at the coast. It was -100,
+     which is fine until the Salton Sea: 230 feet below sea level, one of
+     the main waterfowl areas in the Southwest, and scored at exactly
+     zero. The Imperial Valley floor and the lowest Delta islands were
+     being shaved by the same ramp. */
+  whitetail: [-400, -300, 7500, 10000],
   moose:     [0, 400, 11000, 12500],
   pronghorn: [800, 3000, 10000, 11500],
-  turkey:    [-100, 0, 9500, 11000],
-  upland:    [-100, 0, 10500, 12000],
-  waterfowl: [-100, 0, 9500, 11800],
+  turkey:    [-400, -300, 9500, 11000],
+  upland:    [-400, -300, 10500, 12000],
+  waterfowl: [-400, -300, 9500, 11800],
   trout:     null
 };
 
@@ -160,6 +167,21 @@ const CHRON_BANDS = Math.ceil((NLAT * D) / CHRON_BAND_DEG);
    the habitat was decent; on the Bighorn, GBIF has 5514 mallard and
    1056 goldeneye records against 279 pintail. */
 const COMPOSITION = ['waterfowl', 'upland'];
+
+/* Which months a group's records are counted over.
+
+   Waterfowl are counted from September to January, for the range gate
+   and the species mix alike, because both are questions about the
+   hunting season: where the birds are when anyone is hunting them, and
+   what to put in the spread. Counted across the whole year, a prairie
+   marsh that empties in October looks as good as one that holds birds
+   to freeze-up, and blue-winged teal - all over the north in June,
+   gone before most openers - get recommended in North Dakota in
+   November. Everything else here is resident and keeps every month. */
+const SEASON_MONTHS = { waterfowl: [9, 10, 11, 12, 1] };
+
+/* Groups that migrate, and so need a calendar. */
+const CHRON_GROUPS = ['waterfowl'];
 
 /* Composition is a smooth regional quantity, so it ships on a
    coarser grid than habitat and costs almost nothing. */
@@ -220,6 +242,100 @@ async function getJSON(url, tries = 4) {
   }
 }
 
+/* ---------- cache ----------
+
+   Land cover and elevation do not change between builds, and the
+   occurrence counts change slowly. Without this, a one-line change to
+   how the layers are combined cost a full rebuild to test, which is
+   how a wrong sample survived as long as it did: every look at the
+   output was too expensive to take casually.
+
+   OG_FRESH=1 ignores it. */
+const CACHE = resolve(HERE, '.cache');
+const FRESH = process.env.OG_FRESH === '1';
+
+function cacheRead(name, maxAgeDays) {
+  if (FRESH) return null;
+  const f = resolve(CACHE, name + '.bin');
+  try {
+    if (!existsSync(f)) return null;
+    if (Date.now() - statSync(f).mtimeMs > maxAgeDays * 864e5) return null;
+    return deserialize(readFileSync(f));
+  } catch (e) { return null; }
+}
+
+function cacheWrite(name, value) {
+  mkdirSync(CACHE, { recursive: true });
+  writeFileSync(resolve(CACHE, name + '.bin'), serialize(value));
+}
+
+async function cached(name, maxAgeDays, build) {
+  const hit = cacheRead(name, maxAgeDays);
+  if (hit) return hit;
+  const v = await build();
+  cacheWrite(name, v);
+  return v;
+}
+
+/* ---------- a polite client for GBIF ----------
+
+   One request at a time per service, spaced out, and when the answer
+   is 429 the lane stops for as long as the response says and then a
+   bit. The old client fired six at once and retried a refusal after
+   700 ms, which is how to get an address throttled; it then reported
+   the refused pages as timeouts and carried on without them.
+
+   Gives up loudly. A request that cannot be made after eight tries
+   throws, and the build stops, because every caller here needs the
+   answer to be complete. */
+const lanes = {};
+
+function polite(lane, spacing, url, binary) {
+  const L = lanes[lane] || (lanes[lane] = { chain: Promise.resolve(), next: 0 });
+  const run = async () => {
+    let last = null;
+    for (let i = 0; i < 8; i++) {
+      const wait = L.next - Date.now();
+      if (wait > 0) await sleep(wait);
+      L.next = Date.now() + spacing;
+      try {
+        const r = await deadline(fetch(url, {
+          headers: { 'User-Agent': 'OmniGuide/ingest' }, signal: AbortSignal.timeout(90000)
+        }), 95000, url);
+        if (r.status === 429 || r.status === 503) {
+          const ra = parseFloat(r.headers.get('retry-after')) || 3;
+          await r.arrayBuffer().catch(() => null);
+          L.next = Date.now() + (ra + 2) * 1000 * (i + 1);
+          last = new Error('HTTP ' + r.status);
+          continue;
+        }
+        /* The map service answers a tile with nothing in it two ways:
+           204 with no body, or 400 with this message, depending on
+           which of its backends took the request. Checked on the
+           tile that stopped a build - whitetail on the Oregon coast
+           - against the search API's count for the same box: zero.
+           Only this exact message is read as empty; any other 400
+           is a malformed request and still fails. */
+        if (r.status === 400 && binary) {
+          const msg = await r.text().catch(() => '');
+          if (msg.indexOf('missing the expected layer') >= 0) return Buffer.alloc(0);
+          throw new Error('HTTP 400 ' + msg.slice(0, 120));
+        }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (binary) return Buffer.from(await deadline(r.arrayBuffer(), 60000, url));
+        return await deadline(r.json(), 60000, url);
+      } catch (e) {
+        last = e;
+        L.next = Date.now() + 1500 * (i + 1);
+      }
+    }
+    throw new Error('GBIF would not answer after 8 tries (' + (last && last.message) + '): ' + url);
+  };
+  const p = L.chain.then(run, run);
+  L.chain = p.catch(() => null);
+  return p;
+}
+
 /* ---------- 1. land cover fractions ---------- */
 
 /* Five pixels across each 0.1 degree cell, so a cell gets 25 samples and
@@ -264,6 +380,75 @@ async function landCover() {
     }
   }
   return { counts, total };
+}
+
+/* ---------- 1b. rice ----------
+
+   NLCD files rice under cultivated crops, with soybeans and corn. For
+   a duck that is the difference that matters most across the lower
+   Mississippi valley, the Gulf prairies and the Sacramento Valley: a
+   rice field is flooded, shallow and full of waste grain, and a bean
+   field is not. On land cover alone Stuttgart scored 51 against 42
+   for a square of north Iowa corn.
+
+   The USDA Cropland Data Layer separates the crops, at 30 m, every
+   year, in the public domain. Read here the same way as the land
+   cover: rendered tiles, five samples across a cell, counted by
+   colour. Only rice is taken. Its legend colour is 0,169,230 -
+   checked on the Grand Prairie, where it came back as 14.4 percent
+   of the box round Stuttgart beside 29 percent soybeans. */
+const CDL_YEAR = 2024;
+const RICE_RGB = [0, 169, 230];
+
+async function riceCover() {
+  const PPC = 5, COLS = 5, ROWS = 4;
+  const lonSpan = (NLON / COLS) * D, latSpan = (NLAT / ROWS) * D;
+  const w = (NLON / COLS) * PPC, h = (NLAT / ROWS) * PPC;
+  const hit = new Uint16Array(NCELL), seen = new Uint16Array(NCELL);
+
+  for (let cx = 0; cx < COLS; cx++) {
+    for (let cy = 0; cy < ROWS; cy++) {
+      const west = LON0 + cx * lonSpan, east = west + lonSpan;
+      const south = LAT0 + cy * latSpan, north = south + latSpan;
+      const url = 'https://nassgeodata.gmu.edu/CropScapeService/wms_cdlall.cgi' +
+        '?service=WMS&version=1.1.1&request=GetMap&layers=cdl_' + CDL_YEAR + '&styles=' +
+        '&bbox=' + r3(west) + ',' + r3(south) + ',' + r3(east) + ',' + r3(north) +
+        '&width=' + w + '&height=' + h + '&srs=EPSG:4326&format=image/png';
+      const img = decodePNG(await getBuf(url));
+      const pal = img.color === 3;
+      if (!pal && img.channels < 3) throw new Error('crop map returned an image this cannot read');
+      for (let py = 0; py < img.height; py++) {
+        const iy = Math.floor((NLAT / ROWS) * cy + (img.height - 1 - py) / PPC);
+        if (iy < 0 || iy >= NLAT) continue;
+        for (let px = 0; px < img.width; px++) {
+          const ix = Math.floor((NLON / COLS) * cx + px / PPC);
+          if (ix < 0 || ix >= NLON) continue;
+          let r, g, b;
+          if (pal) {
+            const i = paletteIndex(img, px, py) * 3;
+            r = img.palette[i]; g = img.palette[i + 1]; b = img.palette[i + 2];
+          } else {
+            const o = (py * img.width + px) * img.channels;
+            r = img.data[o]; g = img.data[o + 1]; b = img.data[o + 2];
+          }
+          const k = cellIdx(ix, iy);
+          seen[k]++;
+          if (Math.abs(r - RICE_RGB[0]) <= 3 && Math.abs(g - RICE_RGB[1]) <= 3 && Math.abs(b - RICE_RGB[2]) <= 3) hit[k]++;
+        }
+      }
+      process.stderr.write('  crop map tile ' + (cx * ROWS + cy + 1) + '/' + (COLS * ROWS) + '\n');
+    }
+  }
+  const out = new Float32Array(NCELL);
+  let cells = 0;
+  for (let k = 0; k < NCELL; k++) {
+    if (!seen[k]) continue;
+    out[k] = hit[k] / seen[k];
+    if (out[k] >= 0.05) cells++;
+  }
+  process.stderr.write('  ' + cells + ' cells at least a twentieth rice\n');
+  if (cells < 200) throw new Error('crop map found almost no rice - the legend colour has probably changed');
+  return out;
 }
 
 /* ---------- 2. elevation ---------- */
@@ -335,20 +520,14 @@ async function elevation() {
 /* ---------- 3. GBIF occurrences ---------- */
 
 async function taxonKey(name) {
-  const j = await getJSON('https://api.gbif.org/v1/species/match?strict=true&name=' +
-    encodeURIComponent(name));
-  if (!j || !j.usageKey) throw new Error('no GBIF key for ' + name);
-  return j.usageKey;
+  return cached('key-' + name.replace(/[^A-Za-z]+/g, '-'), 90, async () => {
+    const j = await polite('search', 2600,
+      'https://api.gbif.org/v1/species/match?strict=true&name=' + encodeURIComponent(name), false);
+    if (!j || !j.usageKey) throw new Error('no GBIF key for ' + name);
+    return j.usageKey;
+  });
 }
 
-/* Pages coordinates for one taxon into the grid.
-
-   Capped at 30000 records. GBIF's deep paging degrades badly past roughly
-   that offset - the first build of this file spent over an hour there -
-   and 30000 points is far more than enough to draw a range at 11 km. This
-   is a presence surface, not a census. The per-species normalisation
-   below means a taxon that hits the cap is not penalised against one that
-   does not. */
 /* LICENCE FILTER.
 
    GBIF records carry a licence per record, chosen by whoever logged
@@ -368,76 +547,147 @@ async function taxonKey(name) {
    which the app has to surface somewhere. */
 var LICENCE = '&license=CC0_1_0&license=CC_BY_4_0';
 
-function occurrenceURL(key, off, limit) {
-  return 'https://api.gbif.org/v1/occurrence/search?taxonKey=' + key +
+/* HOW THE RECORDS ARE COUNTED.
+
+   This used to page the first 9000 records of each taxon through the
+   search API and treat them as a sample. They were not one. GBIF
+   returns records in the order they were indexed, which for the eBird
+   dataset runs by date, so the first 9000 northern pintail are every
+   pintail logged between 1 January and mid February 2025 - out of
+   1,365,890. The build shipped a pintail that was 94% January, a
+   canvasback that was 97% January and a mallard with no records at
+   all from September to December, and three things were built on it:
+   the range gate, the migration calendar, and the species mix behind
+   the decoy advice. The calendar came out saying ducks arrive
+   everywhere in January, which sent the national hotspot north again
+   in midwinter.
+
+   It was also losing a third of its pages. What the log called
+   timeouts were HTTP 429: GBIF saying, in as many words, that the
+   search API is not for bulk harvesting.
+
+   So nothing is paged any more, and nothing is sampled. GBIF's map
+   service does the counting on its side: ask for a tile with any
+   search filter attached and it returns the exact number of matching
+   records in each of 32 by 32 squares, placed at the centroid of the
+   records in that square. At zoom 5 a square is 0.176 degrees, which
+   is finer than the presence plane this feeds. Checked against the
+   search API's own count for the same box and filter on three tiles
+   and it agrees to the record: 16241, 785, 78562.
+
+   Every taxon therefore comes back complete - a mallard and a
+   canvasback are counted as the seven million and the two hundred
+   thousand they are, rather than each being capped at the same
+   number and looking equally common. */
+const YEAR0 = 2015, YEAR1 = 2025;
+const r3 = (v) => Math.round(v * 1000) / 1000;
+const LAT1 = r3(LAT0 + NLAT * D), LON1 = r3(LON0 + NLON * D);
+
+/* The grid's own bounding box goes in every query, so a count is a
+   count of records that can actually land in a cell. */
+function occurrenceFilter(key, latLo, latHi) {
+  return 'taxonKey=' + key +
     '&country=US&hasCoordinate=true&hasGeospatialIssue=false' +
-    '&year=2015,2025&limit=' + limit + '&offset=' + off + LICENCE;
+    '&year=' + YEAR0 + ',' + YEAR1 +
+    '&decimalLatitude=' + latLo + ',' + latHi +
+    '&decimalLongitude=' + LON0 + ',' + LON1 + LICENCE;
 }
 
-async function occurrences(key, grid, chron, taxonGrid) {
-  /* 9000, not 30000.
+/* Plain latitude and longitude tiles: two across at zoom 0, each
+   level halving the span. The service aggregates to a 32 by 32 grid
+   inside a tile whatever bin size is asked for, so the zoom is the
+   resolution. */
+const TILE_Z = 5, TILE_SPAN = 180 / Math.pow(2, TILE_Z);
 
-     GBIF serves offset 3000 in about two seconds and simply never
-     finishes the body at offset 12000 - two builds today died there,
-     one of them after sitting idle for ninety-five minutes. Deep
-     paging is the documented weak point of this endpoint and the
-     answer is to stop relying on it.
-
-     Nothing is really lost. After the licence filter the mammals have
-     fewer records than this anyway - elk 4565, moose 2877 - so they
-     are unaffected. For the birds this is a thinner sample of a very
-     large pool, and what the presence surface needs is coverage, not
-     count: 4565 elk records already resolve 860 distinct cells. */
-  const LIMIT = 300, MAXOFF = 9000, PAR = 6;
-  let off = 0, got = 0, end = false, lost = 0;
-  while (!end && off < MAXOFF) {
-    const batch = [];
-    for (let i = 0; i < PAR && off + i * LIMIT < MAXOFF; i++) batch.push(off + i * LIMIT);
-    off += PAR * LIMIT;
-    process.stderr.write('    .. offset ' + off + String.fromCharCode(10));
-
-    let pages = await Promise.all(batch.map((o) =>
-      getJSON(occurrenceURL(key, o, LIMIT)).catch(() => null)));
-
-    /* Second pass over just the offsets that came back empty-handed.
-       getJSON has already retried each of these four times with
-       backoff, so this is a fifth through eighth attempt on a page
-       that is probably being throttled rather than one that does
-       not exist. Serial, to stop hammering a service that is
-       already struggling. */
-    for (let i = 0; i < pages.length; i++) {
-      if (pages[i] !== null) continue;
-      await sleep(1200);
-      pages[i] = await getJSON(occurrenceURL(key, batch[i], LIMIT)).catch(() => null);
-      if (pages[i] === null) lost++;
-    }
-    for (const p of pages) {
-      /* A page we could not get is a hole in the sample, not the
-         bottom of it. Keep going; the loop still stops at MAXOFF. */
-      if (p === null) continue;
-      if (!p.results) { end = true; continue; }
-      if (p.results.length === 0 || p.endOfRecords) end = true;
-      for (const r of p.results) {
-        const ix = Math.floor((r.decimalLongitude - LON0) / D);
-        const iy = Math.floor((r.decimalLatitude - LAT0) / D);
-        if (ix < 0 || ix >= NLON || iy < 0 || iy >= NLAT) continue;
-        const ci = cellIdx(ix, iy);
-        grid[ci]++; got++;
-        if (taxonGrid) taxonGrid[ci]++;
-        /* Migration timing, by latitude band. When a species is
-           where is a fact in the record - the month is on every
-           occurrence - and it was being guessed with a peak day and
-           a width per species plus a flat 2.1 days per degree of
-           latitude. */
-        if (chron && typeof r.month === 'number' && r.month >= 1 && r.month <= 12) {
-          const band = Math.max(0, Math.min(CHRON_BANDS - 1,
-            Math.floor((r.decimalLatitude - LAT0) / CHRON_BAND_DEG)));
-          chron[band * 12 + (r.month - 1)]++;
+/* Only the tiles with any mapped land cover in them. Open ocean and
+   the far side of both borders are a third of the bounding box. */
+function landTiles(lcTotal) {
+  const x0 = Math.floor((LON0 + 180) / TILE_SPAN), x1 = Math.floor((LON1 - 1e-9 + 180) / TILE_SPAN);
+  const y0 = Math.floor((90 - LAT1) / TILE_SPAN), y1 = Math.floor((90 - LAT0 - 1e-9) / TILE_SPAN);
+  const out = [];
+  for (let x = x0; x <= x1; x++) {
+    for (let y = y0; y <= y1; y++) {
+      const lonW = -180 + x * TILE_SPAN, latN = 90 - y * TILE_SPAN;
+      const ixa = Math.max(0, Math.floor((lonW - LON0) / D));
+      const ixb = Math.min(NLON - 1, Math.ceil((lonW + TILE_SPAN - LON0) / D));
+      const iya = Math.max(0, Math.floor((latN - TILE_SPAN - LAT0) / D));
+      const iyb = Math.min(NLAT - 1, Math.ceil((latN - LAT0) / D));
+      let land = false;
+      for (let iy = iya; iy <= iyb && !land; iy++) {
+        for (let ix = ixa; ix <= ixb; ix++) {
+          if (lcTotal[cellIdx(ix, iy)]) { land = true; break; }
         }
       }
+      if (land) out.push([x, y]);
     }
   }
-  return { got: got, lost: lost };
+  return out;
+}
+
+/* Record counts for one taxon on the habitat grid, optionally for a
+   set of calendar months. Exact, and either complete or an error:
+   a tile that cannot be fetched fails the build rather than leaving
+   a hole the size of Nebraska in the range. */
+async function density(key, name, months, tiles) {
+  const tag = 'den-' + key + '-' + (months ? months.join('.') : 'all');
+  const hit = cacheRead(tag, 20);
+  if (hit) {
+    process.stderr.write('    ' + name + ': from cache\n');
+    return hit;
+  }
+
+  const filter = occurrenceFilter(key, LAT0, LAT1) +
+    (months ? months.map((m) => '&month=' + m).join('') : '');
+  const grid = new Float32Array(NCELL);
+  let total = 0, placed = 0, bins = 0;
+
+  for (let i = 0; i < tiles.length; i++) {
+    const x = tiles[i][0], y = tiles[i][1];
+    const buf = await polite('map', 220,
+      'https://api.gbif.org/v2/map/occurrence/adhoc/' + TILE_Z + '/' + x + '/' + y +
+      '.mvt?srs=EPSG:4326&bin=square&squareSize=8&' + filter, true);
+    if (!buf.length) continue;                    // 204: nothing here
+    const t = decodeBins(buf);
+    const lonW = -180 + x * TILE_SPAN, latN = 90 - y * TILE_SPAN;
+    for (const b of t.bins) {
+      const lon = lonW + (b.x0 + b.x1) / 2 / t.extent * TILE_SPAN;
+      const lat = latN - (b.y0 + b.y1) / 2 / t.extent * TILE_SPAN;
+      total += b.total; bins++;
+      const ix = Math.floor((lon - LON0) / D), iy = Math.floor((lat - LAT0) / D);
+      if (ix < 0 || ix >= NLON || iy < 0 || iy >= NLAT) continue;
+      grid[cellIdx(ix, iy)] += b.total;
+      placed += b.total;
+    }
+  }
+
+  const out = { grid: grid, total: total, placed: placed, bins: bins };
+  cacheWrite(tag, out);
+  return out;
+}
+
+/* Month by latitude band, as exact counts.
+
+   The one thing still asked of the search API, and asked the way it
+   is meant to be used: a facet, where GBIF counts every matching
+   record on its side and returns twelve numbers. Thirteen small
+   requests a taxon, one at a time, in a lane that waits when told to. */
+async function monthsByBand(key) {
+  const out = new Float64Array(CHRON_BANDS * 12);
+  for (let b = 0; b < CHRON_BANDS; b++) {
+    const lo = LAT0 + b * CHRON_BAND_DEG;
+    /* Both ends of a GBIF range are inclusive; stop a hair short so
+       a record on the boundary is not counted in two bands. */
+    const hi = r3(lo + CHRON_BAND_DEG - 0.001);
+    const j = await polite('search', 2600,
+      'https://api.gbif.org/v1/occurrence/search?' + occurrenceFilter(key, lo, hi) +
+      '&limit=0&facet=month&facetLimit=12', false);
+    const counts = j && j.facets && j.facets[0] ? j.facets[0].counts : [];
+    for (const c of counts) {
+      const m = +c.name;
+      if (m >= 1 && m <= 12) out[b * 12 + m - 1] = c.count;
+    }
+  }
+  return out;
 }
 
 /* ---------- coldwater ----------
@@ -649,6 +899,70 @@ function elevFactor(ft, band) {
   return 1;
 }
 
+/* Waterfowl suitability, built from water outward.
+
+   The class weights alone gave a square of cropland with no water
+   in it 0.94 and a square of dry grassland 0.70 - the Trans-Pecos
+   scored as duck country - and the only thing holding that down was
+   the occurrence layer, which is not what an occurrence layer is
+   for. A cornfield is feed, and feed is worth exactly as much as
+   the roost water within a flight of it.
+
+   So water and wetland carry the score, and fields add to it in
+   proportion to the water and wetland cover in the block of cells
+   round about, counting in full at three percent. Open water is
+   worth most where it meets something - a square that is all lake
+   is the middle of the lake. */
+function waterfowlSuit(lc, rice) {
+  const frac = (cls, k) => { const a = lc.counts.get(cls); return a ? a[k] / lc.total[k] : 0; };
+  const wet = new Float32Array(NCELL), feed = new Float32Array(NCELL), water = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    const open = frac(11, k), marsh = frac(95, k), swamp = frac(90, k);
+    /* Rice counts three ways: as the best feed there is, as shallow
+       water in its own right for the part of it that is flooded
+       through the season, and as water for the fields beside it. It
+       is already inside the NLCD crop fraction, so only the extra
+       over an ordinary crop is added to feed. */
+    const paddy = rice ? rice[k] : 0;
+    wet[k] = 1.00 * marsh + 0.86 * swamp + 0.80 * open * (1 - open * open) + 0.45 * paddy;
+    feed[k] = 0.70 * frac(82, k) + 0.45 * frac(81, k) + 0.30 * frac(71, k) + 0.30 * paddy;
+    water[k] = open + marsh + swamp + 0.5 * paddy;
+  }
+  const near = smooth(water, 1);
+  const out = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    const reach = clamp01(near[k] / 0.03);
+    /* A pond in a city is water and is not somewhere to hunt. Built-up
+       ground - not the parks and verges NLCD calls open space - takes
+       the score down with it: Central Park read 37. */
+    const built = frac(22, k) + frac(23, k) + frac(24, k);
+    out[k] = clamp01((1 - Math.exp(-4 * wet[k])) + 0.6 * feed[k] * reach) * Math.pow(1 - built, 1.5);
+  }
+  return out;
+}
+
+/* 1-2-1 in each direction, on a grid of any size. */
+function blur3(src, nx, ny) {
+  const tmp = new Float64Array(src.length), out = new Float64Array(src.length);
+  for (let y = 0; y < ny; y++) {
+    for (let x = 0; x < nx; x++) {
+      const a = src[y * nx + Math.max(0, x - 1)], b = src[y * nx + x];
+      const c = src[y * nx + Math.min(nx - 1, x + 1)];
+      tmp[y * nx + x] = (a + 2 * b + c) / 4;
+    }
+  }
+  for (let y = 0; y < ny; y++) {
+    for (let x = 0; x < nx; x++) {
+      const a = tmp[Math.max(0, y - 1) * nx + x], b = tmp[y * nx + x];
+      const c = tmp[Math.min(ny - 1, y + 1) * nx + x];
+      out[y * nx + x] = (a + 2 * b + c) / 4;
+    }
+  }
+  return out;
+}
+
 /* Separable box blur, radius in cells. Occurrence records are points; a
    cell with no record next to one with forty is not empty of animals. */
 function smooth(src, radius) {
@@ -680,10 +994,13 @@ function smooth(src, radius) {
 
 async function main() {
   process.stderr.write('land cover...\n');
-  const lc = await landCover();
+  const lc = await cached('landcover-' + NLON + 'x' + NLAT, 45, landCover);
 
   process.stderr.write('elevation...\n');
-  const ev = await elevation();
+  const ev = await cached('elevation-' + NLON + 'x' + NLAT, 45, elevation);
+
+  process.stderr.write('rice...\n');
+  const rice = await cached('rice-' + CDL_YEAR + '-' + NLON + 'x' + NLAT, 120, riceCover);
 
   process.stderr.write('pressure...\n');
   const press = pressureGrid(lc.counts, lc.total);
@@ -696,20 +1013,48 @@ async function main() {
 
   process.stderr.write('occurrences...\n');
   const occ = {}, effort = new Float32Array(NCELL);
-  const chronology = {}, composition = {};
+  const chronology = {}, composition = {}, harvest = [];
+
+  const land = landTiles(lc.total);
+  process.stderr.write('  ' + land.length + ' map tiles with land in them\n');
+
+  const keys = {};
+  for (const sp of SPECIES) for (const name of TAXA[sp]) keys[name] = await taxonKey(name);
+
+  /* Every bird record in the grid, by band and month: how much
+     looking was going on. The runtime divides by it, so that a
+     species is read as a share of what birders reported rather than
+     a raw count, and May does not look like a migration peak just
+     because that is when people go birding. */
+  const aves = await cached('key-class-Aves', 90, () => polite('search', 2600,
+    'https://api.gbif.org/v1/species/match?strict=true&rank=CLASS&name=Aves', false));
+  if (!aves || aves.canonicalName !== 'Aves' || !aves.usageKey) throw new Error('could not resolve class Aves');
+
+  /* The calendar comes down in its own slow lane while the tiles
+     come down in theirs. Settled rather than left bare, so a refusal
+     surfaces where the result is collected and not as an unhandled
+     rejection halfway through something else. */
+  const settle = (p) => p.then((v) => ({ ok: v }), (e) => ({ err: e }));
+  const effortJob = settle(cached('effort-aves', 20, () => monthsByBand(aves.usageKey)));
+  const chronJobs = {};
+  for (const sp of CHRON_GROUPS) {
+    for (const name of TAXA[sp]) {
+      chronJobs[name] = settle(cached('chron-' + keys[name], 20, () => monthsByBand(keys[name])));
+    }
+  }
   for (const sp of SPECIES) {
     occ[sp] = new Float32Array(NCELL);
     let total = 0;
     const perTaxon = {};
+    const months = SEASON_MONTHS[sp] || null;
     for (const name of TAXA[sp]) {
-      perTaxon[name] = new Float32Array(NCELL);
-      const key = await taxonKey(name);
-      if (!chronology[name]) chronology[name] = new Float64Array(CHRON_BANDS * 12);
-      const res = await occurrences(key, occ[sp], chronology[name], perTaxon[name]);
-      const got = res.got;
-      total += got;
-      process.stderr.write('  ' + sp + ' / ' + name + ': ' + got +
-        (res.lost ? '   WARNING ' + res.lost + ' pages lost to timeouts' : '') + '\n');
+      const S = await density(keys[name], name, months, land);
+      perTaxon[name] = S.grid;
+      for (let k = 0; k < NCELL; k++) occ[sp][k] += S.grid[k];
+      total += S.placed;
+      harvest.push({ name: name, records: S.placed, months: months ? months.join(',') : 'all' });
+      process.stderr.write('  ' + sp + ' / ' + name + ': ' + S.placed + ' records in ' +
+        S.bins + ' squares' + (months ? ', months ' + months.join(',') : '') + '\n');
     }
     if (total < 500) throw new Error(sp + ' returned only ' + total + ' records - refusing to ship it');
     if (COMPOSITION.indexOf(sp) >= 0) composition[sp] = perTaxon;
@@ -743,6 +1088,7 @@ async function main() {
     const band = ELEV[sp], suit = SUIT[sp], satK = SATURATE[sp] || 0;
     const suitPairs = Object.keys(suit).map((c) => [+c, suit[c]]);
     const vals = new Uint8Array(NCELL);
+    const ducks = sp === 'waterfowl' ? waterfowlSuit(lc, rice) : null;
     for (let k = 0; k < NCELL; k++) {
       if (!lc.total[k]) continue;
       let s = 0;
@@ -750,8 +1096,18 @@ async function main() {
         const arr = lc.counts.get(suitPairs[q][0]);
         if (arr) s += suitPairs[q][1] * (arr[k] / lc.total[k]);
       }
-      s *= elevFactor(ev.meanFt[k], band);
-      if (satK) s = 1 - Math.exp(-satK * s);
+      /* Pronghorn live on ground they can see across and run on. Land
+         cover cannot tell a sage flat from a sage mountainside, so
+         every range in Nevada and the whole Colorado high country
+         scored as antelope ground. Relief can: the spread of elevation
+         inside the cell, full value under 250 feet and nothing by
+         1100. */
+      if (sp === 'pronghorn') s *= 1 - clamp01((ev.reliefFt[k] - 250) / 850);
+      if (ducks) s = ducks[k] * elevFactor(ev.meanFt[k], band);
+      else {
+        s *= elevFactor(ev.meanFt[k], band);
+        if (satK) s = 1 - Math.exp(-satK * s);
+      }
       /* Coldwater is applied to the finished value rather than to
          the land-cover term, so a cold creek with almost no mapped
          water still clears the floor. */
@@ -800,6 +1156,16 @@ async function main() {
   }
   process.stderr.write('  ' + report.join('\n  ') + '\n');
 
+  const effortRes = await effortJob;
+  if (effortRes.err) throw effortRes.err;
+  const effortChron = effortRes.ok;
+  for (const name of Object.keys(chronJobs)) {
+    const r = await chronJobs[name];
+    if (r.err) throw r.err;
+    chronology[name] = r.ok;
+    process.stderr.write('  calendar / ' + name + '\n');
+  }
+
   /* Chronology: raw counts per band per month, rounded. Kept as
      counts rather than a fitted curve so the runtime can decide how
      much to trust a thin band. */
@@ -827,8 +1193,13 @@ async function main() {
           totals[cy * COMP_NLON + cx] += v;
         }
       }
-      coarse[tx] = c;
+      /* Blurred across its neighbours first. A half-degree cell with
+         forty records in it is not a stable place to read a ratio
+         between eleven species from. */
+      coarse[tx] = blur3(c, COMP_NLON, COMP_NLAT);
     }
+    totals.fill(0);
+    for (const tx of taxa) for (let k = 0; k < totals.length; k++) totals[k] += coarse[tx][k];
     const grpOut = {};
     for (const tx of taxa) {
       const b = new Uint8Array(COMP_NLON * COMP_NLAT);
@@ -841,13 +1212,19 @@ async function main() {
   }
 
   const js = 'window.US_HABITAT=' + JSON.stringify({
-    source: 'NLCD 2021 land cover (MRLC), AWS terrarium elevation, GBIF occurrence records 2015-2025 (CC0 and CC-BY only)',
+    source: 'NLCD 2021 land cover (MRLC), USDA NASS Cropland Data Layer ' + CDL_YEAR + ' (rice), AWS terrarium elevation, ' +
+            'GBIF occurrence records 2015-2025 (CC0 and CC-BY only)',
     note: 'Land cover and elevation set habitat quality; GBIF occurrence share gates presence. ' +
           'Modelled suitability, not a census and not an abundance estimate. Occurrence records ' +
           'filtered to CC0 and CC-BY so the layer can be used commercially; CC-BY requires ' +
           'attribution to the contributing datasets.',
     built: new Date().toISOString().slice(0, 10),
     grid: { lon0: LON0, lat0: LAT0, d: D, nlon: NLON, nlat: NLAT },
+
+    /* What the occurrence layers were counted from: every matching
+       record per taxon, and over which months. Complete counts from
+       GBIF's map service, not a sample. */
+    harvest: harvest,
     sp: out,
 
     /* Occurrence presence, separate from suitability so the runtime
@@ -866,6 +1243,8 @@ async function main() {
        these rather than from a hardcoded peak day and width. */
     chronology: {
       bandDeg: CHRON_BAND_DEG, bands: CHRON_BANDS, lat0: LAT0,
+      /* All bird records, same bands and months: the denominator. */
+      effort: Array.from(effortChron).map((v) => Math.round(v)),
       sp: chronOut
     },
 

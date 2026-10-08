@@ -6,3 +6,6 @@ omniguide.zip
 
 # scratch probes written by the ingest tests
 ingest/_*probe.mjs
+
+# cached land cover, elevation and GBIF harvest
+ingest/.cache/

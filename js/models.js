@@ -118,7 +118,7 @@
     var fw = geo.flyway(lon), br = geo.UPFLYWAY[fw], brR = br * D2R;
     var cosLat = Math.max(0.4, Math.cos(lat * D2R));
     var dists = [2.6, 5.2, 8.6], wts = [0.45, 0.33, 0.22];
-    var upFreeze = 0, upDrop = 0, upSnow = 0, tail = 0;
+    var upFreeze = 0, upGain = 0, upDrop = 0, upSnow = 0, tail = 0;
 
     for (var i = 0; i < dists.length; i++) {
       var dl = dists[i];
@@ -126,6 +126,7 @@
       var plon = lon + dl * Math.sin(brR) / cosLat;
       var s = env.probe(plon, plat, t, doy);
       upFreeze += wts[i] * s.freeze;
+      upGain += wts[i] * (s.freezeGain || 0);
       upDrop += wts[i] * Math.max(0, -s.temp24);
       upSnow += wts[i] * s.snow;
       /* Wind blowing FROM the up-flyway bearing is a tailwind for birds
@@ -133,7 +134,14 @@
       tail += wts[i] * Math.cos((s.windFrom - br) * D2R) * s.windSpd;
     }
 
-    var freezeDelta = clamp01((upFreeze - localFreeze) * 2.0);
+    /* The push is freeze-up ARRIVING up the flyway, not the standing
+       fact that the north is colder than here. That gradient exists
+       from November to March; read as a push it had birds pouring out
+       of a North Dakota that had been iced over and empty for eight
+       weeks. What empties a marsh is the week it locks. The standing
+       difference keeps a small say, because open water south of a
+       frozen country does go on collecting stragglers. */
+    var freezeDelta = clamp01(upGain * 2.5 + 0.25 * Math.max(0, upFreeze - localFreeze));
     var tailwind = clamp01(tail / 17);
     var drop = clamp01(upDrop / 13);
     var snow = clamp01(upSnow * 1.7);
@@ -146,13 +154,15 @@
        latitude - one guessed peak day and one guessed lag, applied
        identically to every migratory species. The chronology plane
        carries occurrence counts by latitude band and month, taken
-       as a share of all recorded game species in the same band so
+       as a share of every bird record in the same band and month so
        that the seasonality of birdwatchers cancels out.
 
-       Only trusted where the species is actually seasonal here:
-       a circular concentration below 0.15 means it is recorded
-       all year round in this band, and a peak fitted to that is
-       noise. The hand-set numbers still cover those cells. */
+       What comes back is the autumn arrival - the rising edge of
+       the curve between August and January - and how much of the
+       bird's peak abundance at this latitude arrives then. Below
+       0.15 the species is close to resident here and a date fitted
+       to it is noise, so the hand-set numbers still cover those
+       cells. */
     var peak = sp.migPeak + (46 - lat) * 2.1, migWidth = sp.migWidth;
     var hgC = global.OG.habgrid;
     var chronSrc = null;
@@ -190,6 +200,71 @@
     };
   }
 
+  /* ---------- Rut calendar ----------
+
+     Where in the rut a date falls, in one place.
+
+     Each movement curve used to carry its own peak day, and the advice
+     text did not read any of them: it decided "the rut is on" from the
+     movement score. So a cold snap in January told a deer hunter the rut
+     was doing the work, a warm day in the middle of it told him he was
+     outside it, and an elk plan in early October listed "Peak rut
+     activity" as a positive three lines above "Outside the rut, calling
+     does more harm than good." The rut is a date. Weather decides how
+     much of it happens in daylight, not whether it is happening.
+
+     Peak day and width in days, as used by the movement curves. */
+  var RUT = {
+    elk: [268, 18], whitetail: [318, 16], muledeer: [328, 15],
+    moose: [273, 15], pronghorn: [259, 14]
+  };
+
+  function wrapDays(d) {
+    d = (d + 182.625) % 365.25;
+    if (d < 0) d += 365.25;
+    return d - 182.625;
+  }
+
+  /* Whitetails do not rut in mid November everywhere. Across the north,
+     the Midwest and most of the South it is within a week or two of
+     that; along the central Gulf it is not close. Alabama breeds in
+     mid to late January, most of Mississippi around the new year,
+     Louisiana and the south Texas brush in December. The same date was
+     being applied to all of it, which called a November sit in Alabama
+     the peak of the rut two months early.
+
+     Boxes, not state lines, and one date for a state that in truth
+     varies county to county - Louisiana most of all. Taken from the
+     state agencies' published breeding-date maps as a regional middle;
+     the advice says so wherever one of these is in force. Florida is
+     left on the default because its breeding dates run from July to
+     February and no single date would be honest. */
+  function whitetailPeak(lon, lat) {
+    if (lat == null || lon == null) return RUT.whitetail[0];
+    if (lat < 35.0 && lat > 30.1 && lon > -88.45 && lon < -84.95) return 385;    // Alabama, ~20 Jan
+    if (lat < 35.0 && lat > 30.1 && lon >= -91.65 && lon <= -88.45) return 362;  // Mississippi, ~28 Dec
+    if (lat < 33.05 && lat > 28.9 && lon > -94.05 && lon < -91.65) return 349;   // Louisiana, ~15 Dec
+    if (lat < 29.6 && lon > -100.6 && lon < -96.9) return 354;                   // south Texas brush, ~20 Dec
+    return RUT.whitetail[0];
+  }
+
+  function rutStage(spId, doy, lon, lat) {
+    var r = RUT[spId];
+    if (!r) return null;
+    var peak = spId === 'whitetail' ? whitetailPeak(lon, lat) : r[0];
+    var d = wrapDays(doy - peak);
+    var v = Math.exp(-Math.pow(d / r[1], 2));
+    var stage = v >= 0.7 ? 'peak' : v >= 0.15 ? (d < 0 ? 'building' : 'fading')
+                                                : (d < 0 ? 'before' : 'after');
+    return { v: v, stage: stage, days: d, peak: peak, width: r[1], regional: peak !== r[0] };
+  }
+
+  function rutText(rs, atPeak, building, fading) {
+    if (rs.stage === 'peak') return atPeak;
+    if (rs.stage === 'building' || rs.stage === 'before') return building;
+    return fading;
+  }
+
   /* ---------- Species models ---------- */
 
   /* Shared duck response curves, then each species bends them its own way. */
@@ -197,7 +272,10 @@
     return {
       wind: { w: 1, v: clamp01(ramp(wx.windSpd, 2, 13)) * (1 - 0.45 * ramp(wx.windSpd, 27, 40)),
         hi: 'Wind strong enough to keep birds moving and decoys working',
-        lo: 'Flat calm - birds sit tight and flare on clean water' },
+        /* Flat calm is under about three miles an hour. Above that it is a
+           light wind, and the plan beside this prints the speed. */
+        lo: wx.windSpd < 3.5 ? 'Flat calm - birds sit tight and flare on clean water'
+                             : 'Light wind - little to move birds or work the decoys' },
       drop: { w: 1, v: ramp(-wx.temp24, 1, 15),
         hi: 'Major overnight temperature decline', lo: 'Warming trend overnight' },
       front: { w: 1, v: wx.frontal,
@@ -296,10 +374,15 @@
       weights: { hab: 0.38, move: 0.38, mig: 0, wx: 0.24 },
       blurb: 'Preview model. Thermals, rut stage and terrain rather than flyway dynamics.',
       movement: function (wx, hab, doy) {
-        var rut = Math.exp(-Math.pow((doy - 268) / 18, 2));
+        var rs = rutStage('elk', doy, wx.lon, wx.lat), rut = rs.v;
         return blend([
           { w: 1.6, v: clamp01(ramp(52 - wx.tempF, -8, 26)), hi: 'Cool enough to keep elk on their feet past first light', lo: 'Warm - elk bedded in dark timber early' },
-          { w: 1.5, v: 0.25 + 0.75 * rut, hi: 'Peak rut activity', lo: 'Outside the rut - movement is feed-driven only' },
+          { w: 1.5, v: 0.25 + 0.75 * rut,
+            hi: rutText(rs, 'Peak rut - bulls bugling and holding cows',
+                        'Rut building - bulls starting to bugle and gather cows',
+                        'Rut winding down - a few bulls still with cows'),
+            lo: rs.days < 0 ? 'Before the rut - movement is feed-driven only'
+                            : 'Rut is over - movement is feed-driven only' },
           { w: 1.3, v: pref(wx.windSpd, 7, 6), hi: 'Light, predictable thermals', lo: 'Wind too strong for a quiet approach and consistent thermals' },
           { w: 1.1, v: clamp01(hab.elk * 1.3), hi: 'Timber, benches and meadow edges in the right elevation band', lo: 'Marginal elk country' },
           { w: 0.9, v: clamp01(wx.snowDepth * 1.6 + ramp(-wx.temp24, 2, 16) * 0.6), hi: 'Weather pushing elk toward lower feed', lo: null },
@@ -316,13 +399,16 @@
       weights: { hab: 0.34, move: 0.42, mig: 0, wx: 0.24 },
       blurb: 'Rut timing, cold fronts and pressure. Daylight movement is the whole game.',
       movement: function (wx, hab, doy) {
-        /* Northern rut peaks mid-November and slides later going south; the
-           model is given the date, not the latitude, so this is the average. */
-        var rut = Math.exp(-Math.pow((doy - 318) / 16, 2));
-        var preRut = Math.exp(-Math.pow((doy - 300) / 14, 2));
+        /* Mid November across most of the range, later along the central
+           Gulf - see whitetailPeak. The seeking phase leads it by about
+           eighteen days wherever it falls. */
+        var rs = rutStage('whitetail', doy, wx.lon, wx.lat), rut = rs.v;
+        var preRut = Math.exp(-Math.pow(wrapDays(doy - (rs.peak - 18)) / 14, 2));
         return blend([
           { w: 1.8, v: 0.2 + 0.8 * clamp01(rut + preRut * 0.75),
-            hi: 'Rut activity has bucks on their feet in daylight',
+            hi: rutText(rs, 'Peak rut - bucks on their feet in daylight',
+                        'Pre-rut - bucks cruising and working scrapes',
+                        'Late rut - bucks still searching for the last does'),
             lo: 'Outside the rut - movement is feed and cover driven only' },
           { w: 1.6, v: ramp(-wx.temp24, 1, 15),
             hi: 'Sharp temperature drop, which is the single best whitetail trigger',
@@ -348,10 +434,14 @@
       weights: { hab: 0.38, move: 0.38, mig: 0, wx: 0.24 },
       blurb: 'Open-country glassing. Later rut than whitetail, and snow moves them down.',
       movement: function (wx, hab, doy) {
-        var rut = Math.exp(-Math.pow((doy - 328) / 15, 2));
+        var rs = rutStage('muledeer', doy, wx.lon, wx.lat), rut = rs.v;
         return blend([
-          { w: 1.6, v: 0.25 + 0.75 * rut, hi: 'Rut has bucks moving with does in the open',
-            lo: 'Pre-rut - bucks still in bachelor groups and high country' },
+          { w: 1.6, v: 0.25 + 0.75 * rut,
+            hi: rutText(rs, 'Rut has bucks moving with does in the open',
+                        'Rut approaching - bucks starting to check doe groups',
+                        'Late rut - bucks still with does but tiring'),
+            lo: rs.days < 0 ? 'Pre-rut - bucks still in bachelor groups and high country'
+                            : 'Post-rut - bucks worn down and back on feed' },
           { w: 1.5, v: clamp01(1 - wx.cloud * 0.9),
             hi: 'Clear light for long-range glassing', lo: 'Flat light and low cloud will cost you glassing distance' },
           { w: 1.4, v: clamp01(ramp(45 - wx.tempF, -8, 28)),
@@ -373,12 +463,15 @@
       weights: { hab: 0.44, move: 0.34, mig: 0, wx: 0.22 },
       blurb: 'Heat is the limiting factor. Willow bottoms, wet ground and the late-September rut.',
       movement: function (wx, hab, doy) {
-        var rut = Math.exp(-Math.pow((doy - 273) / 15, 2));
+        var rs = rutStage('moose', doy, wx.lon, wx.lat), rut = rs.v;
         return blend([
           { w: 2.0, v: clamp01(ramp(50 - wx.tempF, -4, 26)),
             hi: 'Cool enough that moose stay on their feet',
             lo: 'Too warm - moose will be bedded in shade or standing in water' },
-          { w: 1.6, v: 0.2 + 0.8 * rut, hi: 'Peak rut, bulls responding and moving',
+          { w: 1.6, v: 0.2 + 0.8 * rut,
+            hi: rutText(rs, 'Peak rut - bulls responding and moving',
+                        'Rut building - bulls starting to travel and answer',
+                        'Rut winding down - bulls still answer but come slowly'),
             lo: 'Outside the rut - this is a spot-and-stalk feeding pattern' },
           { w: 1.4, v: clamp01(hab.moose * 1.3), hi: 'Willow bottoms and wet feeding ground', lo: 'Marginal moose habitat' },
           { w: 1.0, v: pref(wx.windSpd, 6, 6), hi: 'Calm enough to hear and be heard',
@@ -397,9 +490,12 @@
       weights: { hab: 0.42, move: 0.34, mig: 0, wx: 0.24 },
       blurb: 'Eyes, not noses. Visibility, water and the mid-September rut.',
       movement: function (wx, hab, doy) {
-        var rut = Math.exp(-Math.pow((doy - 259) / 14, 2));
+        var rs = rutStage('pronghorn', doy, wx.lon, wx.lat), rut = rs.v;
         return blend([
-          { w: 1.7, v: 0.3 + 0.7 * rut, hi: 'Rut has bucks tending does and ignoring everything else',
+          { w: 1.7, v: 0.3 + 0.7 * rut,
+            hi: rutText(rs, 'Rut has bucks tending does and ignoring everything else',
+                        'Rut starting - bucks gathering and defending does',
+                        'Rut tapering - bucks still with does'),
             lo: 'Outside the rut - animals are grouped, wary and hard to approach' },
           { w: 1.5, v: clamp01(hab.pronghorn * 1.25), hi: 'Open shortgrass and sage country', lo: 'Outside core pronghorn range' },
           { w: 1.3, v: clamp01(ramp(wx.tempF, 48, 82)),
@@ -486,7 +582,16 @@
       movement: function (wx, hab) {
         return blend([
           { w: 2.0, v: pref(wx.waterTemp, 55, 9), hi: 'Water temperature inside the active feeding band', lo: wx.waterTemp < 46 ? 'Water too cold for sustained feeding' : 'Water too warm - fish stressed and off the feed' },
-          { w: 1.5, v: pref(wx.flowIdx, 0.48, 0.26), hi: 'Flows in a fishable, stable range', lo: wx.flowIdx > 0.7 ? 'High, pushy water' : 'Very low, clear water' },
+          /* River level counts only when it is known against that
+             river's normal. Until then it is a fixed, unlabelled term.
+             The index was first the size of the river, which called the
+             Madison at an ordinary 991 cfs rising and off-colour; with
+             that removed it fell back to a seasonal curve, which called
+             the same water very low and clear two lines under the
+             gauge reading. Neither knew anything. */
+          wx.flowJudged
+            ? { w: 1.5, v: pref(wx.flowIdx, 0.48, 0.26), hi: 'Flows in a fishable, stable range', lo: wx.flowIdx > 0.7 ? 'High, pushy water' : 'Very low, clear water' }
+            : { w: 1.5, v: 0.62 },
           { w: 1.3, v: clamp01(wx.cloud * 1.2), hi: 'Cloud cover supporting a strong emergence', lo: 'Bright sun suppressing surface activity' },
           { w: 1.0, v: 0.35 + 0.65 * clamp01(1 - Math.abs(wx.pressTrend) * 0.8), hi: 'Stable barometer', lo: 'Rapidly changing pressure' },
           { w: 1.2, v: clamp01(hab.trout * 1.25), hi: 'Productive, well-known water', lo: 'Marginal trout water' },
@@ -516,16 +621,16 @@
      below the same basin in September. Regenerate with tools/calibrate.js
      after changing any species model. */
   var CAL = {
-    'ducks':        [10.9, 52.7],
-    'canada-goose': [11.1, 53.3],
-    'elk':          [22.3, 67.7],
-    'whitetail':    [19.7, 65.8],
-    'muledeer':     [20.7, 61.9],
-    'moose':        [18.9, 67.1],
-    'pronghorn':    [22.9, 74.8],
-    'turkey':       [30.4, 62.7],
-    'upland':       [22.6, 79.0],
-    'trout':        [28.9, 76.8]
+    'ducks':        [1.4, 46.9],
+    'canada-goose': [1.6, 48.0],
+    'elk':          [10.1, 78.2],
+    'whitetail':    [11.9, 81.1],
+    'muledeer':     [16.5, 76.9],
+    'moose':        [7.9, 72.4],
+    'pronghorn':    [9.5, 76.6],
+    'turkey':       [19.8, 77.6],
+    'upland':       [10.5, 82.7],
+    'trout':        [8.8, 77.2]
   };
   var CAL_LO = 8, CAL_HI = 94;   // the scores those two anchors map to
 
@@ -558,11 +663,50 @@
     return 100 * clamp(c, 0.12, 0.94);
   }
 
+  /* How far the freeze has taken this place out of play: 0 none, 1
+     entirely. Nothing for species that do not need open water, and
+     nothing where there is evidence the water stays open. */
+  function freezeLock(sp, freeze, hab, deep) {
+    if (!sp.freezeLock) return 0;
+    /* A big river holds out against a freeze for a while, which is
+       what the open-water index credits it for. It does not hold out
+       against six weeks below zero: the Rainy and the Red in the
+       middle of December were scoring as open because they are
+       large. Past the point of a hard freeze that credit runs down,
+       and only water with a reason to stay open keeps it - a
+       tailwater or a measured warm reach, which the index marks at
+       0.85 and up. */
+    var ow = hab.openWater || 0;
+    if (deep > 0 && ow < 0.85) ow *= (1 - 0.75 * deep);
+    var openW = clamp01(ow * 1.15);
+    return clamp01(ramp(freeze, 0.30, 0.90)) * (1 - openW);
+  }
+
+  /* Raw weighted number to the published 1-99, through the species'
+     own measured range. Shared with the seasonal planner so that its
+     weekly figure and the live score are the same kind of number. */
+  function toScore(raw, spId) {
+    var cal = CAL[spId] || [15, 70];
+    return clamp(Math.round(CAL_LO + (CAL_HI - CAL_LO) * ((raw - cal[0]) / (cal[1] - cal[0]))), 1, 99);
+  }
+
+  var PRESENT_FLOOR = 0.35;
+  var HAB_ENOUGH = 0.33, HAB_THIN = 0.25;
+
+  /* Measured seasonal presence for the groups that have a calendar,
+     nothing for those that do not move. */
+  function presenceFactor(sp, lat, doy) {
+    var hg = global.OG.habgrid;
+    if (!sp.chronTaxa || !hg || !hg.seasonalPresence) return null;
+    return hg.seasonalPresence(sp.chronTaxa, lat, doy);
+  }
+
   /* ---------- Composite ---------- */
 
   function scoreAt(lon, lat, t, doy, spId) {
     var sp = BY_ID[spId];
     var wx = env.conditions(lon, lat, t, doy);
+    wx.lon = lon; wx.lat = lat;          // the rut calendar is regional
     var hab = env.habitat(lon, lat);
     var mv = sp.movement(wx, hab, doy);
     var mig = migration(lon, lat, t, doy, sp, hab, wx.freeze);
@@ -590,11 +734,8 @@
        measured water temperature against NLCD open-water cover. This is
        what turns a hard freeze from a flat regional penalty into the
        thing that concentrates birds somewhere specific. */
-    if (sp.freezeLock) {
-      var openW = clamp01((hab.openWater || 0) * 1.15);
-      var lock = clamp01(ramp(wx.freeze, 0.30, 0.90)) * (1 - openW);
-      habV *= (1 - 0.75 * lock);
-    }
+    var lock = freezeLock(sp, wx.freeze, hab, wx.freezeDeep || 0);
+    habV *= (1 - 0.75 * lock);
 
     /* RANGE GATE.
        Habitat is only part of the weighted sum, so a cell with zero elk
@@ -641,7 +782,42 @@
       { k: 'Migration', v: mig.intensity, w: wMig },
       { k: 'Conditions', v: wxs, w: w.wx }
     ];
-    var weighted = (w.hab * habV * 100 + w.move * mv.score + wMig * mig.intensity + w.wx * wxs) / total;
+    /* The lockout used to stop at habitat, which is a quarter of the
+       number. Everything else in it - wind, a falling glass, a front,
+       a push down the flyway - describes how birds that are here will
+       behave, and every one of those reads better the harder it
+       blows. So a marsh under a foot of ice lost a fifth of its score
+       to the freeze and gained more than that from the weather that
+       froze it. Those terms now count only to the extent there is
+       open water for a bird to be sitting on. */
+    var live = 1 - 0.8 * lock;
+
+    /* And in proportion to how much there is to hunt. Being in range
+       is a low bar - two percent of ideal - and above it the weather
+       terms were counted in full, so the creosote flats round Phoenix
+       scored 65 to 79 for pronghorn on a fifth of the habitat: the
+       same fault the range gate was written to stop at zero, one
+       step up. Animals are roughly where the habitat is; conditions
+       count in full from a third of ideal, and taper below it.
+       Read from the habitat as mapped, before the freeze takes its
+       share, so that ice is not counted against a marsh twice. */
+    live *= HAB_THIN + (1 - HAB_THIN) * clamp01(habModel / HAB_ENOUGH);
+
+    /* And only to the extent the birds have arrived. A share of the
+       score is kept even at nothing, because the reporting rate this
+       is read from understates the swing and some birds are resident;
+       the rest follows how much of its peak presence the group
+       normally has at this latitude by this date. See habgrid.js. */
+    var present = presenceFactor(sp, lat, doy);
+    var shown = present == null ? 1 : PRESENT_FLOOR + (1 - PRESENT_FLOOR) * present;
+    /* The rows of the breakdown keep their own values. They were
+       being scaled in place, so the panel showed Habitat 97 in its
+       summary and Habitat 62 in the table underneath with nothing to
+       say why. The two scalings are reported as lines of their own. */
+    var liveOnly = live;
+    live *= shown;
+    var weighted = (w.hab * habV * shown * 100 +
+      live * (w.move * mv.score + wMig * mig.intensity + w.wx * wxs)) / total;
 
     /* Hunter density was previously computed and then ignored. It belongs in
        the number: a cell an hour from a metro does not hunt like the same
@@ -657,8 +833,7 @@
        species ever offers anywhere in the country, and a band label means the
        same thing to a duck hunter as it does to an elk hunter. */
     var cal = CAL[sp.id] || [15, 70];
-    var opp = clamp(Math.round(CAL_LO + (CAL_HI - CAL_LO) *
-      ((afterPress - cal[0]) / (cal[1] - cal[0]))), 1, 99);
+    var opp = toScore(afterPress, sp.id);
 
     return {
       opportunity: opp,
@@ -670,7 +845,13 @@
       confidence: Math.round(confidence(lon, lat, t, wx, hab, sp, press)),
       pressure: Math.round(press * 100),
       wx: wx, hab: hab, mig: mig,
-      pos: mv.pos.concat(mig.pos), neg: mv.neg.concat(mig.neg),
+      pos: mv.pos.concat(mig.pos),
+      neg: mv.neg.concat(mig.neg, present != null && present < 0.6 ? [{
+        t: (doy > 190 && doy < 345 ? 'Early for this latitude' : 'Past the peak for this latitude') +
+           ' - birds are normally reported at about ' +
+           Math.round(present * 100) + '% of their peak-season rate by now',
+        s: 2.2 * (1 - present)
+      }] : []),
       species: sp, inRange: true, outReason: null, lon: lon, lat: lat,
       /* Everything needed to reconstruct the number by hand. */
       breakdown: {
@@ -679,7 +860,8 @@
         afterPressure: afterPress, calLo: cal[0], calHi: cal[1], final: opp,
         habModel: habModel * 100, distIdx: dIdx, distWeight: dw, habAdjusted: habV * 100,
         openWater: hab.openWater == null ? null : hab.openWater * 100,
-        freezeLock: sp.freezeLock ? wx.freeze : null
+        freezeLock: sp.freezeLock ? wx.freeze : null, locked: lock, live: live,
+        presence: present, presenceShown: shown, liveOnly: liveOnly
       }
     };
   }
@@ -929,11 +1111,10 @@
 
     /* How many of the coming days at this spot beat today, so the panel can
        say "best day for three weeks" or "wait for Thursday". */
-    var ahead = c.rows.filter(function (r) { return r.t > t && r.t <= t + 45; });
-    var nextBetter = null;
-    for (var q = 0; q < ahead.length; q++) {
-      if (ahead[q].v > here.opportunity) { nextBetter = ahead[q]; break; }
-    }
+    /* Which coming day beats this one is not worked out here. It was,
+       from the season sample, and that sample is invented weather
+       past the end of the forecast. The panel reads it from the
+       seven-day outlook instead - see dayVerdict in app.js. */
 
     return {
       score: clamp(Math.round(blended), 1, 99),
@@ -941,9 +1122,7 @@
       median: med, spread: Math.round((p90R - p10R) * calScale),
       spot: here.opportunity,
       baseline: c.baseline,
-      nDays: c.sorted.length,
-      nextBetter: nextBetter,
-      daysClear: nextBetter ? Math.round(nextBetter.t - t) : (ahead.length ? 45 : 0)
+      nDays: c.sorted.length
     };
   }
 
@@ -1079,6 +1258,9 @@
     SPECIES: SPECIES, byId: function (id) { return BY_ID[id]; },
     scoreAt: scoreAt, dayScore: dayScore, dayField: dayField, nationalPct: nationalPct,
     hourlyActivity: hourlyActivity,
-    huntingPressure: huntingPressure, migration: migration
+    huntingPressure: huntingPressure, migration: migration, rutStage: rutStage,
+    freezeLock: freezeLock, presenceFactor: presenceFactor, PRESENT_FLOOR: PRESENT_FLOOR,
+    HAB_ENOUGH: HAB_ENOUGH, HAB_THIN: HAB_THIN,
+    toScore: toScore, weatherScore: weatherScore
   };
 })(window);

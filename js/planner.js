@@ -102,7 +102,10 @@
     var temp24 = (c.tmean - prev.tmean) / 7;
 
     var meanT = c.tmean;
-    var freeze = clamp01((30 - meanT) / 13) * (seasonalIdx(doy) < 0.15 ? 1 : 0.2);
+    /* Accumulated, the same way the live model does it - see the ice
+       notes in env.js. */
+    var freeze = env.freezeIndex(lon, lat, doy, hab.elev, meanT, 0);
+    var freezeDeep = env.freezeDepth ? env.freezeDepth(lon, lat, doy, hab.elev, meanT, 0) : 0;
     /* Snow depth normals are reported by very few stations, so where the
        station does not carry one it is derived from the temperature normal
        rather than assumed to be zero - which would read as bare ground in
@@ -113,9 +116,8 @@
     freeze = clamp01(freeze + snowDepth * 0.25);
 
     var cloud = clamp01(0.32 + (c.precipProb / 100) * 1.1);
-    var buffer = hab.waterCls === 'tailwater' ? 0.72 : hab.waterCls === 'spring' ? 0.80 : 0.35;
-    var waterTemp = clamp(0.62 * meanT + 16 - (hab.elev / 1000) * 0.8, 32, 80);
-    waterTemp = waterTemp * (1 - buffer) + (46 + 6 * seasonalIdx(doy)) * buffer;
+    /* The fitted estimate the live model uses - see env.js. */
+    var waterTemp = env.modelWaterTemp(meanT, hab, doy, lon, lat);
 
     return {
       tempF: tempF, temp24: temp24,
@@ -124,9 +126,9 @@
       gust: 15, cloud: cloud,
       precip: clamp01(c.precipProb / 100 * 0.5),
       snow: snowDepth * 0.3, snowDepth: snowDepth,
-      freeze: freeze, waterTemp: waterTemp,
+      freeze: freeze, freezeDeep: freezeDeep, waterTemp: waterTemp,
       flowIdx: clamp01(0.45 + 0.35 * Math.sin((doy - 80) / 365 * 2 * Math.PI)),
-      flowReal: false, frontal: 0.35,          // average, not a predicted passage
+      flowReal: false, flowJudged: false, frontal: 0.35,   // average, not a predicted passage
       elev: hab.elev, seas: seasonalIdx(doy), real: false, climatological: true,
       precipIn: 0, snowDepthFt: c.snowIn / 12,
       _clim: c
@@ -144,29 +146,52 @@
     var fw = geo.flyway(lon), br = geo.UPFLYWAY[fw] * Math.PI / 180;
     var cosLat = Math.max(0.4, Math.cos(lat * Math.PI / 180));
     var dists = [2.6, 5.2, 8.6], wts = [0.45, 0.33, 0.22];
-    var upFreeze = 0, got = 0;
+    var upFreeze = 0, upGain = 0, upSnow = 0, got = 0;
 
     for (var i = 0; i < dists.length; i++) {
       var plat = clamp(lat + dists[i] * Math.cos(br), 20, 49.4);
       var plon = lon + dists[i] * Math.sin(br) / cosLat;
       var c = at(plon, plat, week);
       if (!c) continue;
-      var f = clamp01((30 - c.tmean) / 13);
+      var pe = env.elevFt ? env.elevFt(plon, plat) : 0;
+      var f = env.freezeIndex(plon, plat, week * 7 + 4, pe, c.tmean, 0);
       upFreeze += wts[i] * f;
+      upGain += wts[i] * env.freezeGain(plon, plat, week * 7 + 4, pe, f);
+      upSnow += wts[i] * clamp01((c.snowIn || 0) / 9.6);
       got += wts[i];
     }
     if (got <= 0) return { intensity: 0, newBird: 0, applies: false, notes: [] };
-    upFreeze /= got;
+    upFreeze /= got; upGain /= got; upSnow /= got;
 
-    var freezeDelta = clamp01((upFreeze - localFreeze) * 2.0);
+    /* Freeze-up arriving, not the north merely being frozen - as in the
+       live migration engine. */
+    var freezeDelta = clamp01(upGain * 2.5 + 0.25 * Math.max(0, upFreeze - localFreeze));
     var doy = week * 7 + 4;
-    var peak = sp.migPeak + (46 - lat) * 2.1;
-    var dd = doy - peak;
-    if (dd > 182) dd -= 365;
-    if (dd < -182) dd += 365;
-    var chron = Math.exp(-Math.pow(dd / sp.migWidth, 2));
 
-    var intensity = 100 * clamp01((0.45 * freezeDelta + 0.55 * chron) * (0.35 + 0.65 * chron) * 1.5);
+    /* The same calendar the live engine uses: arrival measured from
+       the records where the species is seasonal enough at this
+       latitude to fit one, the hand-set dates where it is not. This
+       function had kept the hand-set dates for every case, so the
+       planner and the map disagreed about when birds arrive. */
+    var peak = sp.migPeak + (46 - lat) * 2.1, width = sp.migWidth;
+    var hg = global.OG.habgrid;
+    if (hg && hg.chronReady && sp.chronTaxa) {
+      var cro = hg.chronology(sp.chronTaxa, lat);
+      if (cro && cro.concentration > 0.15) { peak = cro.peakDoy; width = cro.widthDays; }
+    }
+    var dd = Math.abs(doy - peak);
+    if (dd > 182.625) dd = 365.25 - dd;
+    var chron = Math.exp(-Math.pow(dd / width, 2));
+
+    /* And the same sum, with the two things climate cannot know set
+       to what they average: a tailwind about a third of the time, a
+       sharp drop up the flyway about a fifth. It used to be its own
+       formula in which the calendar alone was worth 80 points, three
+       times what the live engine gives an ordinary day - harmless on
+       a private scale, and the reason every peak week pegged at 99
+       once the planner was put on the live one. */
+    var push = 0.33 * freezeDelta + 0.25 * 0.30 + 0.23 * 0.20 + 0.19 * clamp01(upSnow * 1.7);
+    var intensity = 100 * clamp01(push * (0.30 + 0.70 * chron) * 1.18);
     var newBird = 100 * clamp01((intensity / 100) * (0.45 + 0.55 * clamp01(hab.waterfowl * 1.5)) *
                                 (1 - 0.75 * localFreeze) * 1.1);
 
@@ -197,24 +222,44 @@
     if (!wx) return null;
 
     var doy = week * 7 + 4;
+    wx.lon = lon; wx.lat = lat;          // the rut calendar is regional
     var mv = sp.movement(wx, hab, doy);
     var mig = climateMigration(lon, lat, week, sp, hab, wx.freeze);
     var habV = hab[sp.habKey];
     var w = sp.weights;
     var wMig = mig.applies ? w.mig : 0;
+    /* A week the water is normally locked is not a week to hunt it,
+       whatever the cold does for movement. Same gate as the live score. */
+    var lock = models.freezeLock ? models.freezeLock(sp, wx.freeze, hab, wx.freezeDeep || 0) : 0;
+    /* Thin habitat does not ride on its weather - as in the live score. */
+    var thin = models.HAB_THIN == null ? 1
+      : models.HAB_THIN + (1 - models.HAB_THIN) * clamp01(habV / models.HAB_ENOUGH);
+    /* And scaled by how many of the birds are normally here yet. */
+    var present = models.presenceFactor ? models.presenceFactor(sp, lat, doy) : null;
+    var shown = present == null ? 1 : models.PRESENT_FLOOR + (1 - models.PRESENT_FLOOR) * present;
 
-    /* The weather component is dropped entirely at this range. Its weight is
-       redistributed across the terms climate can actually speak to.
+    /* What a day of ordinary weather would score in this week, on the
+       live scale.
 
-       The result is NOT the Opportunity Score. Wind, pressure and frontal
-       passage are held neutral because climate cannot predict them, and
-       those are three of the strongest positive drivers - so these numbers
-       sit systematically lower than a forecast day would. They rank weeks
-       against each other; they do not predict a day. The UI labels this a
-       seasonal index for that reason. */
-    var total = w.hab + w.move + wMig;
-    var raw = (w.hab * habV * 100 + w.move * mv.score + wMig * mig.intensity) / total;
-    var score = clamp(Math.round(50 + (raw - 51) * 1.42), 1, 99);
+       Climate cannot say whether a front arrives on the fourteenth, so
+       wind, pressure and frontal passage are held at neutral values and
+       the weather term is scored from those. The sum is then put
+       through the same weights, the same hunting-pressure cut and the
+       same per-species scale as the live score, so 70 here means what
+       70 means on the map: this is what the week is worth before the
+       weather has had its say. A real day in it will land above or
+       below depending on what blows through.
+
+       It had its own scale before, a fixed line set by eye, and then
+       briefly a measured one of its own. Either way the number could
+       not be read against the map, and a typical rut week in Iowa came
+       out at 93. */
+    var total = w.hab + w.move + wMig + w.wx;
+    var wxs = models.weatherScore ? models.weatherScore(wx, sp) : 50;
+    var keep = 1 - (sp.pressureSens == null ? 0.10 : sp.pressureSens) * models.huntingPressure(lon, lat);
+    var raw = keep * shown * (w.hab * habV * (1 - 0.75 * lock) * 100 +
+      thin * (1 - 0.8 * lock) * (w.move * mv.score + wMig * mig.intensity + w.wx * wxs)) / total;
+    var score = models.toScore(raw, sp.id);
 
     /* Band: re-score a notably warm and a notably cold version of the same
        week. Year-to-year temperature swing is the dominant uncertainty. */
@@ -222,12 +267,16 @@
       var alt = {};
       for (var k in wx) alt[k] = wx[k];
       alt.tempF = wx.tempF + delta;
-      alt.freeze = clamp01(clamp01((30 - (wx._clim.tmean + delta)) / 13) *
-                           (wx.seas < 0.15 ? 1 : 0.2) + wx.snowDepth * 0.25);
-      alt.waterTemp = clamp(wx.waterTemp + delta * 0.5, 32, 80);
+      /* A warm or cold year is warm or cold for the weeks before as well. */
+      alt.freeze = env.freezeIndex(lon, lat, doy, hab.elev, wx._clim.tmean + delta, wx.snowDepth, delta);
+      alt.freezeDeep = env.freezeDepth ? env.freezeDepth(lon, lat, doy, hab.elev, wx._clim.tmean + delta, delta) : 0;
+      alt.waterTemp = clamp(wx.waterTemp + delta * 0.787, 32, 90);
       var m2 = sp.movement(alt, hab, doy);
-      var r2 = (w.hab * habV * 100 + w.move * m2.score + wMig * mig.intensity) / total;
-      return clamp(Math.round(50 + (r2 - 51) * 1.42), 1, 99);
+      var l2 = models.freezeLock ? models.freezeLock(sp, alt.freeze, hab, alt.freezeDeep || 0) : 0;
+      var wx2 = models.weatherScore ? models.weatherScore(alt, sp) : 50;
+      var r2 = keep * shown * (w.hab * habV * (1 - 0.75 * l2) * 100 +
+        thin * (1 - 0.8 * l2) * (w.move * m2.score + wMig * mig.intensity + w.wx * wx2)) / total;
+      return models.toScore(r2, sp.id);
     }
     var a = shifted(-9), b = shifted(9);
 
@@ -235,9 +284,18 @@
     var legal = regs.check(lon, lat, date, spId);
 
     return {
-      week: week, date: date, score: score,
+      week: week, date: date, score: score, raw: raw,
       lo: Math.min(a, b, score), hi: Math.max(a, b, score),
-      status: legal.status, legalOpen: legal.status === 'OPEN' || legal.status === 'LIMITED',
+      /* A permit season is open - to whoever holds the tag. This
+         counted only OPEN and LIMITED, so every draw species came
+         back closed in every week: an elk hunter in Colorado was
+         told there was no legal week in the next twenty, in the
+         middle of rifle season. The status still says PERMIT and
+         the panel still says a tag is needed; what changes is that
+         the weeks inside the season are ranked instead of greyed
+         out. */
+      status: legal.status,
+      legalOpen: legal.status === 'OPEN' || legal.status === 'LIMITED' || legal.status === 'PERMIT',
       mig: Math.round(mig.intensity), newBird: Math.round(mig.newBird),
       clim: wx._clim, coverage: wx._clim.coverage,
       drivers: mv.pos.slice(0, 3).concat(mig.notes.map(function (t) { return { t: t, s: 1 }; })),

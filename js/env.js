@@ -441,10 +441,139 @@
 
   /* ---------- Real forecast path ---------- */
 
-  var RB = [{}, {}, {}];
+  var RB = [{}, {}, {}, {}, {}];
 
   function lapsed(s, terrainFt) {
     return s.T + (s.gelev - terrainFt) * 0.00357;
+  }
+
+  /* ---------- Ice ----------
+
+     Whether the water is frozen was decided from the last two days of
+     air temperature and nothing else: thirty degrees and falling read
+     as freezing up, anything milder as open. That has no memory. A
+     Minnesota marsh on the twentieth of January came out 83 percent
+     open because the afternoon touched 28 F, and Iowa at 10 F read
+     mostly open because the day before had been warm. With the freeze
+     lockout keyed to that number, the frozen north scored as some of
+     the best duck hunting in the country every time a front went
+     through it in midwinter.
+
+     Ice is an accumulation. This keeps a running balance of freezing
+     and thawing degree-days over the seven weeks before the date, from
+     the 1991-2020 normals, and then adds the last few days at whatever
+     the temperature actually is. A cold snap still locks shallow water
+     quickly, a week of thaw still opens it, and one mild afternoon in
+     January does nothing at all.
+
+     The base is 34 F on the daily mean rather than 32, because skim
+     ice is made by the nights and a day that averages 34 has had a
+     hard frost in it. Scaled so that about a week averaging in the
+     middle twenties closes shallow marsh, which is what it takes.
+
+     The past weeks are normals, not what happened. In a notably warm
+     December this will call water frozen that is still open. Real
+     recent temperatures would fix that and are not in the feed yet. */
+  var ICE_BASE = 34;
+  var iceCache = new Map();
+
+  function iceIdx(ice) { return clamp01((ice - 10) / 90); }
+
+  /* Balance through the end of last week, and what the index would
+     have read a week ago in a normal year. Both depend only on the
+     place and the week, so they are worked out once. */
+  function iceMemory(lon, lat, wk, elev, offset) {
+    var C = global.OG && global.OG.climo;
+    if (!C || !C.available()) return null;
+    var key = 0;
+    if (!offset) {
+      key = (Math.round(lon * 4) + 1000) * 100000 + Math.round(lat * 4) * 100 + wk;
+      var hit = iceCache.get(key);
+      if (hit !== undefined) return hit;
+    }
+    var ice = 0, before = 0, lastNormal = 0, out = null;
+    for (var i = 7; i >= 1; i--) {
+      var c = C.at(lon, lat, wk - i, elev);
+      if (!c) { ice = -1; break; }
+      var tm = c.tmean + (offset || 0);
+      if (i === 1) { before = ice; lastNormal = tm; }
+      ice = Math.max(0, ice + 7 * (ICE_BASE - tm));
+    }
+    if (ice >= 0) out = { bal: ice, weekAgo: iceIdx(Math.max(0, before + 3 * (ICE_BASE - lastNormal))) };
+    if (!offset) iceCache.set(key, out);
+    return out;
+  }
+
+  /* 0 open, 1 locked. offset shifts the whole preceding period, for
+     asking what a notably warm or cold year looks like. */
+  function freezeIndex(lon, lat, doy, elev, meanT, snowDepth, offset) {
+    var C = global.OG && global.OG.climo;
+    var m = C && C.available() ? iceMemory(lon, lat, C.weekOf(doy), elev, offset) : null;
+    var f = m ? iceIdx(Math.max(0, m.bal + 3 * (ICE_BASE - meanT)))
+              : clamp01((30 - meanT) / 13) * (seasonalIndex(doy) < 0.15 ? 1 : 0.2);
+    return clamp01(f + (snowDepth || 0) * 0.25);
+  }
+
+  /* How far past merely frozen: 0 at the point shallow water has just
+     locked, 1 after the kind of cold that puts a foot of ice on a
+     river. The index above stops at 1 long before that. */
+  function freezeDepth(lon, lat, doy, elev, meanT, offset) {
+    var C = global.OG && global.OG.climo;
+    var m = C && C.available() ? iceMemory(lon, lat, C.weekOf(doy), elev, offset) : null;
+    if (!m) return 0;
+    return clamp01((m.bal + 3 * (ICE_BASE - meanT) - 100) / 300);
+  }
+
+  /* How much further frozen this place is than it was a week ago. This
+     is what moves birds: not the north being frozen, which it is all
+     winter, but the week it freezes. */
+  function freezeGain(lon, lat, doy, elev, freezeNow) {
+    var C = global.OG && global.OG.climo;
+    var m = C && C.available() ? iceMemory(lon, lat, C.weekOf(doy), elev, 0) : null;
+    return m ? Math.max(0, freezeNow - m.weekAgo) : 0;
+  }
+
+  /* Water temperature from the air around it, where nothing has
+     measured it. Tailwaters and spring creeks are held close to a
+     seasonal value; everything else follows the air. */
+  /* Day of year at the moment a gauge was read, given the day of year
+     at app time t. */
+  function env_doyAt(tObs, doy, t) { return doy - (t - tObs); }
+
+  /* FITTED, NOT GUESSED.
+
+     The first version was 0.62 of the last two days of air temperature
+     plus sixteen, then pulled a third of the way toward a fixed 46.
+     Checked against every gauge in the feed that reports water
+     temperature - 2105 of them on one October evening - it ran 9.5 F
+     cold on average and barely moved: 52 where the water was 40, 59
+     where it was 80. Typical miss 11 F. It put Arkansas backwater at
+     51 in the first week of October.
+
+     A straight line on the normal mean air temperature for the week
+     does twice as well: 17.5 + 0.787 x normal, typical miss 5.5 F,
+     and the same 5.5 on gauges held out of the fit. Water follows the
+     season, not the afternoon. Adding how far the last two days ran
+     from normal changed nothing (coefficient -0.08), and neither did
+     elevation beyond what the normal already carries, so they are
+     not in it.
+
+     Two limits. It is fitted to one evening, near the warm end of
+     the daily swing, so it reads a couple of degrees high for dawn.
+     And it cannot see a cold snap: between gauges the estimate moves
+     with the calendar and not with the weather. Where a gauge is in
+     reach none of this is used.
+
+     Named tailwaters and spring creeks are still held toward a cold
+     seasonal value, by hand, because a release from the bottom of a
+     reservoir does not follow the air at all. */
+  function modelWaterTemp(meanT, hb, doy, lon, lat) {
+    var C = global.OG && global.OG.climo;
+    var cl = (C && C.available() && lon != null) ? C.at(lon, lat, C.weekOf(doy), hb.elev) : null;
+    var w = cl ? clamp(17.5 + 0.787 * cl.tmean, 32, 90)
+               : clamp(0.62 * meanT + 16 - (hb.elev / 1000) * 0.8, 32, 80);
+    var buffer = hb.waterCls === 'tailwater' ? 0.72 : hb.waterCls === 'spring' ? 0.80 : 0;
+    return buffer ? w * (1 - buffer) + (46 + 6 * seasonalIndex(doy)) * buffer : w;
   }
 
   function conditionsReal(lon, lat, t, doy) {
@@ -476,35 +605,77 @@
       }
     }
     var meanT = (tempF + tempPrev) / 2;
-    var freeze = clamp01((30 - meanT) / 13) * (seasonalIndex(doy) < 0.15 ? 1 : 0.2);
-    freeze = clamp01(freeze + snowDepth * 0.25);
+    var freeze = freezeIndex(lon, lat, doy, hb.elev, meanT, snowDepth);
+    var freezeDeep = freezeDepth(lon, lat, doy, hb.elev, meanT, 0);
 
     /* No frontal analysis field in the feed, so a passage is inferred from the
        signature it leaves: a sharp temperature fall with a pressure kick. */
     var frontal = clamp01(0.65 * clamp01(-temp24 / 13) + 0.35 * clamp01(Math.abs(pressTrend) / 2.5));
 
-    var buffer = hb.waterCls === 'tailwater' ? 0.72 : hb.waterCls === 'spring' ? 0.80 : 0.35;
-    var waterTemp = clamp(0.62 * meanT + 16 - (hb.elev / 1000) * 0.8, 32, 80);
-    waterTemp = waterTemp * (1 - buffer) + (46 + 6 * seasonalIndex(doy)) * buffer;
+    var waterTemp = modelWaterTemp(meanT, hb, doy, lon, lat);
 
     var flowIdx = clamp01(0.45 + 0.35 * Math.sin((doy - 80) / 365 * 2 * Math.PI) +
       (fbm(lon * 0.6, lat * 0.6, 31) - 0.5) * 0.5);
     var flowReal = false, gaugeInfo = null;
 
     /* A nearby gauge is a measurement, and a measurement beats a model.
-       Only for today, though: a reading taken an hour ago says nothing
-       about Thursday. */
+
+       For today the reading is used as it stands. For the days after
+       it used to be discarded altogether, on the reasoning that a
+       reading taken an hour ago says nothing about Thursday - which
+       left a formula to speak for a river with a thermometer in it.
+       On the Madison at Ennis the formula said 43 F on a day the
+       gauge seven miles off read 60, and the plan for the next
+       morning told the angler the water was too cold for fish to
+       feed.
+
+       A river does not forget overnight. What the formula gets wrong
+       is mostly the place - a lake upstream, a dam, a spring - and
+       that error is the same tomorrow. So a forecast day keeps the
+       formula's change over time and takes its level from the gauge:
+       the modelled value for the hour in question, plus whatever the
+       formula was off by at the moment the gauge was read. Discharge
+       is carried forward as measured; there is no runoff model here
+       that would improve on it. */
     var GA = global.OG.gauges;
-    if (GA && GA.available() && t < 1) {
+    var gaugeCarried = false;
+    if (GA && GA.available()) {
       var g = GA.at(lon, lat);
+      if (g && t >= 1) {
+        var tObs = W.tAt && g.fetched ? W.tAt(lon, Date.parse(g.fetched)) : NaN;
+        /* A file from last week is not a current reading. */
+        if (!(tObs > -1.5 && tObs < 1.5)) g = null;
+        else {
+          gaugeCarried = true;
+          if (g.waterTempF != null) {
+            var so = W.stepFor(lon, tObs);
+            var o1 = lapsed(W.sample(lon, lat, so, RB[3]), hb.elev);
+            var o2 = lapsed(W.sample(lon, lat, so - 8, RB[4]), hb.elev);
+            waterTemp = clamp(waterTemp + g.waterTempF -
+              modelWaterTemp((o1 + o2) / 2, hb, env_doyAt(tObs, doy, t), lon, lat), 32, 90);
+          }
+        }
+      }
       if (g) {
         gaugeInfo = g;
-        if (g.waterTempF != null) waterTemp = g.waterTempF;
+        if (g.waterTempF != null && !gaugeCarried) waterTemp = g.waterTempF;
         if (g.cfs != null) {
-          /* Discharge in cfs is not comparable between a creek and the
-             Missouri, so it is converted to a position within that gauge's
-             own plausible range rather than used as an absolute. */
-          flowIdx = clamp01(Math.log10(Math.max(1, g.cfs)) / 4.2);
+          /* The reading is reported, and that is all.
+
+             This line used to set the flow index to log10(cfs) / 4.2
+             and call it the gauge's position within its own range. It
+             is nothing of the kind: it is the size of the river. The
+             Madison at a perfectly ordinary 991 cfs came out at 0.71
+             and the plan called it rising, off-colour water; every
+             large trout river read as permanently blown out and every
+             small creek as permanently low.
+
+             Whether a river is high depends on what is normal for that
+             gauge at that time of year, and the feed does not carry it.
+             USGS publishes it (the statistics service, daily medians
+             per site). Until that is ingested the index stays on the
+             seasonal estimate, which at least does not confuse big
+             with high. */
           flowReal = true;
         }
       }
@@ -515,8 +686,12 @@
       windFrom: a.WD, windSpd: a.WS, gust: Math.max(a.WG, a.WS),
       cloud: clamp01(a.CC / 100), precip: clamp01(a.PR / 0.08),
       snow: clamp01(a.SF / 0.4), snowDepth: snowDepth,
-      freeze: freeze, waterTemp: waterTemp, flowIdx: flowIdx, flowReal: flowReal,
-      gauge: gaugeInfo, snowObserved: snowObserved, snowInches: snowInches,
+      freeze: freeze, freezeDeep: freezeDeep, waterTemp: waterTemp, flowIdx: flowIdx, flowReal: flowReal,
+      /* True only when the index says where this river stands against its
+         own normal. Nothing sets it yet: the index is a seasonal guess,
+         and everything that would call the water high or low waits on it. */
+      flowJudged: false,
+      gauge: gaugeInfo, gaugeCarried: gaugeCarried, snowObserved: snowObserved, snowInches: snowInches,
       frontal: frontal, elev: hb.elev, seas: seasonalIndex(doy), real: true,
       precipIn: a.PR, snowDepthFt: a.SD
     };
@@ -531,10 +706,10 @@
     var b = W.sample(lon, lat, step - 8, RB[1]);
     var tPrev = lapsed(b, hb.elev);
     var meanT = (tNow + tPrev) / 2;
+    var frz = freezeIndex(lon, lat, doy, hb.elev, meanT, clamp01(a.SD / 0.8));
     return {
       temp: tNow, temp24: tNow - tPrev,
-      freeze: clamp01(clamp01((30 - meanT) / 13) * (seasonalIndex(doy) < 0.15 ? 1 : 0.2) +
-              clamp01(a.SD / 0.8) * 0.25),
+      freeze: frz, freezeGain: freezeGain(lon, lat, doy, hb.elev, frz),
       windFrom: a.WD, windSpd: a.WS, press: a.P,
       snow: clamp01(a.SD / 0.8)
     };
@@ -572,21 +747,21 @@
 
     /* Freeze-up: shallow water first, driven by the recent mean temperature. */
     var meanT = (now.temp + prev.temp) / 2;
-    var freeze = clamp01((30 - meanT) / 13) * clamp01((now.seas < 0 ? 1 : 0.15));
+    var freeze = freezeIndex(lon, lat, doy, now.elev, meanT, 0);
+    var freezeDeep = freezeDepth(lon, lat, doy, now.elev, meanT, 0);
     var snowDepth = clamp01(freeze * 0.8 + snow * 0.6 - clamp01((tempF - 34) / 10));
 
     /* Water: tailwaters buffer the air temperature swing hard. */
     var hb = habitat(lon, lat);
-    var buffer = hb.waterCls === 'tailwater' ? 0.72 : hb.waterCls === 'spring' ? 0.80 : 0.35;
-    var waterTemp = clamp(0.62 * meanT + 16 + (hb.elev / 1000) * -0.8, 32, 80);
-    waterTemp = waterTemp * (1 - buffer) + (46 + 6 * now.seas) * buffer;
+    var waterTemp = modelWaterTemp(meanT, hb, doy, lon, lat);
     var flowIdx = clamp01(0.45 + 0.35 * Math.sin((doy - 80) / 365 * 2 * Math.PI) + (fbm(lon * 0.6, lat * 0.6, t * 0.2 + 31) - 0.5) * 0.5);
 
     return {
       tempF: tempF, temp24: temp24, pressure: now.press, pressTrend: pressTrend,
       windFrom: windFrom, windSpd: windSpd, gust: gust,
       cloud: cloud, precip: precip, snow: snow, snowDepth: snowDepth,
-      freeze: freeze, waterTemp: waterTemp, flowIdx: flowIdx, flowReal: false,
+      freeze: freeze, freezeDeep: freezeDeep, waterTemp: waterTemp, flowIdx: flowIdx, flowReal: false,
+      flowJudged: false,
       frontal: bell(now.d + 0.5, 2.4), elev: now.elev, seas: now.seas, real: false,
       precipIn: precip * 0.08, snowDepthFt: snowDepth * 0.8
     };
@@ -600,10 +775,11 @@
     var vx = Math.sin(190 * D2R) * (1 - behind) + Math.sin(318 * D2R) * behind;
     var vy = Math.cos(190 * D2R) * (1 - behind) + Math.cos(318 * D2R) * behind;
     var meanT = (now.temp + prev.temp) / 2;
+    var frz = freezeIndex(lon, lat, doy, now.elev, meanT, 0);
     return {
       temp: now.temp,
       temp24: now.temp - prev.temp,
-      freeze: clamp01((30 - meanT) / 13) * (now.seas < 0 ? 1 : 0.15),
+      freeze: frz, freezeGain: freezeGain(lon, lat, doy, now.elev, frz),
       windFrom: (Math.atan2(vx, vy) / D2R + 360) % 360,
       windSpd: clamp(5 + 17 * now.wBell + 7 * habitat(lon, lat).openness + (now.nz - 0.5) * 9, 1, 42),
       press: now.press,
@@ -690,6 +866,8 @@
   global.OG = global.OG || {};
   global.OG.env = {
     conditions: conditions, probe: probe, habitat: habitat, elevFt: elevFt, sun: sun,
+    freezeIndex: freezeIndex, freezeGain: freezeGain, freezeDepth: freezeDepth,
+    modelWaterTemp: modelWaterTemp,
     doyFor: doyFor,
     dayOfYear: dayOfYear, hhmm: hhmm, dirName: dirName, tzOffset: tzOffset,
     fbm: fbm, clamp: clamp, clamp01: clamp01, bell: bell,

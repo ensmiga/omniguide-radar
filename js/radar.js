@@ -500,14 +500,21 @@
         /* Sampled from the coarse Day lattice rather than scored per cell -
            see dayField in models.js for why 1 degree is the honest
            resolution for this quantity. */
-        if (!regs.hasSeasonRecord(st.abbr, spId)) out = NaN;
-        else {
-          var dv = models.dayField(spId, t).at(lon, lat);
-          out = dv === dv ? dv : NaN;
-        }
+        var dv = models.dayField(spId, t).at(lon, lat);
+        out = dv === dv ? dv : NaN;
       } else {
         var sc = models.scoreAt(lon, lat, t, env.doyFor(t), spId);
-        if (!sc.inRange || !regs.hasSeasonRecord(st.abbr, spId)) out = NaN;
+        /* Range is the model's to say, from land cover and occurrence
+           records. This also blanked any state with no entry in the
+           regulations table, on the reasoning that no record meant the
+           species was not hunted there. The table is a placeholder
+           and lists ten states for elk, so the map showed nothing in
+           Pennsylvania, Kentucky, Michigan, California or the Black
+           Hills however well the model found the herds - and the
+           range checks, which read the score and not the picture,
+           never saw it. A state with no record now draws, and its
+           legal status reads as what it is: unknown. */
+        if (!sc.inRange) out = NaN;
         else {
           out = layer === 'movement' ? sc.movement : layer === 'migration' ? sc.migration :
                 layer === 'newbird' ? sc.newBird : layer === 'confidence' ? sc.confidence :
@@ -605,11 +612,19 @@
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    /* Half a node of inset on each side: the outer ring of samples exists
-       only to give the filter something to interpolate against. */
-    var half = nodeWorld * z / 2;
+    /* A sample sits at the centre of its pixel, so the source rectangle
+       runs from the centre of the first pixel to the centre of the last
+       and lands on the screen positions of those two nodes.
+
+       The destination used to be pushed a further half node right and
+       down, on the theory that the source inset needed matching. It did
+       not - the inset is the match - so every layer was drawn four or
+       five pixels south-east of the ground it described. Measured by
+       reading the canvas back against the model: agreement was best
+       with the picture shifted 0.2 degrees west and north at national
+       zoom, which is half a node. */
     ctx.drawImage(this._fc, 0.5, 0.5, cols - 1, rows - 1,
-                  px + half, py + half, pw, ph);
+                  px, py, pw, ph);
     ctx.restore();
 
     this.field = { gx0: gx0, gy0: gy0, cols: cols, rows: rows, nodeWorld: nodeWorld };
