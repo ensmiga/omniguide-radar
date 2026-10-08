@@ -527,9 +527,16 @@
   Radar.prototype.drawField = function (layer, spId, t, day, ent) {
     var ctx = this.ctx, z = this.view.zoom;
 
-    /* Roughly 15 screen pixels between samples: fine enough that the
-       upscaled surface shows real structure, coarse enough to stay live. */
-    var nodeWorld = 15 / z;
+    /* Roughly 9 screen pixels between samples.
+
+       It was 15, which put the painted colour a mean of 4.8 points away
+       from the exact score at the same spot, and 42 points away at the
+       worst - more than a whole band, so the map could read Poor where
+       the panel read Decent. Habitat is patchy at 11 km and a 15 px
+       lattice was stepping straight over it. A cold field build costs
+       43 ms at 15 px and cached redraws cost 3 ms, so there was room to
+       pay for this. */
+    var nodeWorld = 9 / z;
     /* oppMode is in the stamp because Spot and Day are different numbers
        for the same cell - without it, switching the toggle would redraw
        from the cache and show the old surface. */
