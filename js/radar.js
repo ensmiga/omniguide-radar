@@ -497,10 +497,10 @@
       } else if (layer === 'legal') {
         out = STATUS_ORDER[legalAt(lon, lat, spId, day)];
       } else if (layer === 'opportunity' && this.app.state.oppMode === 'day') {
-        /* Sampled from the coarse Day lattice rather than scored per cell -
-           see dayField in models.js for why 1 degree is the honest
-           resolution for this quantity. */
-        var dv = models.dayField(spId, t).at(lon, lat);
+        /* Range and the place's own score are taken at the cell, as for
+           Spot; how today compares with the season comes off a coarse
+           lattice - see dayAt and dayField in models.js. */
+        var dv = models.dayAt(spId, t, lon, lat);
         out = dv === dv ? dv : NaN;
       } else {
         var sc = models.scoreAt(lon, lat, t, env.doyFor(t), spId);

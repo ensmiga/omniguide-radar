@@ -1021,7 +1021,7 @@
       var c = regs.check(lon, lat, dt, spId);
       if (c.status === 'UNKNOWN') continue;
       any = true;
-      if (c.status === 'OPEN' || c.status === 'LIMITED') open.push(k);
+      if (c.status === 'OPEN' || c.status === 'LIMITED' || c.status === 'PERMIT') open.push(k);
     }
     /* Too few open days to rank against - a two-week elk window sampled
        every other day is seven points, which cannot carry a spread. */
@@ -1130,7 +1130,7 @@
 
      dayScore above samples a point's whole season, which is right for one
      pin and far too expensive for a field - a screen lattice would be most
-     of a million scoreAt calls. This computes it on a 1 degree lattice from
+     of a million scoreAt calls. This computes it on a half degree lattice from
      the same baseline days and lets the renderer interpolate. That is
      honest for this quantity: Day is driven by weather anomalies, and
      weather anomalies are synoptic. It is a 50 km picture of where today
@@ -1149,21 +1149,48 @@
     if (seasonByState[key] !== undefined) return seasonByState[key];
     var regs = global.OG.regs, open = [], any = false;
     var d = new Date(); d.setHours(12, 0, 0, 0);
-    for (var k = -182; k <= 182; k += 6) {
+    /* Every second day, as seasonDays does, so that thinning to the
+       baseline count picks the same days for the map as for the pin.
+       It stepped by six, which chose a different two dozen days and so
+       a different run of weather to compare against. */
+    for (var k = -182; k <= 182; k += 2) {
       var dt = new Date(d.getTime()); dt.setDate(dt.getDate() + k);
       var c = regs.check(lon, lat, dt, spId);
       if (c.status === 'UNKNOWN') continue;
       any = true;
-      if (c.status === 'OPEN' || c.status === 'LIMITED') open.push(k);
+      if (c.status === 'OPEN' || c.status === 'LIMITED' || c.status === 'PERMIT') open.push(k);
     }
     var res;
-    if (!any || open.length < 5) {
+    if (!any || open.length < 8) {
       res = [];
       for (var j = -182; j <= 182; j += 8) res.push(j);
       res = thin(res, BASELINE_N);
     } else res = thin(open, BASELINE_N);
     seasonByState[key] = res;
     return res;
+  }
+
+  /* How today compares with the season at one point, 1-99: the same
+     scaled deviation dayScore uses - see the comment there for why it is
+     not a percentile, and why it runs on the raw score rather than the
+     published one. `here` is the point's score now. */
+  function relAt(lon, lat, spId, tq, here) {
+    var days = stateSeasonDays(lon, lat, spId);
+    if (!days || !days.length) return NaN;
+    var frac = tq - Math.floor(tq), vs = [];
+    for (var q = 0; q < days.length; q++) {
+      var tt = days[q] + frac;
+      var sc = scoreAt(lon, lat, tt, env.doyFor(tt), spId);
+      if (sc.inRange) vs.push(sc.breakdown.afterPressure);
+    }
+    if (!vs.length) return NaN;
+    vs.sort(function (a, b) { return a - b; });
+    var calF = CAL[spId] || [15, 70];
+    var kScale = (CAL_HI - CAL_LO) / (calF[1] - calF[0]);
+    var medV = vs[Math.floor(vs.length / 2)];
+    var loV = vs[Math.floor(vs.length * 0.10)], hiV = vs[Math.floor(vs.length * 0.90)];
+    var halfV = clamp((hiV - loV) / 2 * kScale, 7, 28);
+    return clamp(50 + 40 * (here.breakdown.afterPressure - medV) * kScale / halfV, 1, 99);
   }
 
   function dayField(spId, t) {
@@ -1181,30 +1208,36 @@
         if (geo.stateIndexAt(lon, lat) < 0) continue;
         var here = scoreAt(lon, lat, tq, env.doyFor(tq), spId);
         if (!here.inRange) continue;
-        var days = stateSeasonDays(lon, lat, spId);
-        if (!days || !days.length) continue;
-        var frac = tq - Math.floor(tq), vs = [];
-        for (var q = 0; q < days.length; q++) {
-          var tt = days[q] + frac;
-          var sc = scoreAt(lon, lat, tt, env.doyFor(tt), spId);
-          if (sc.inRange) vs.push(sc.breakdown.afterPressure);
-        }
-        if (!vs.length) continue;
-        vs.sort(function (a, b) { return a - b; });
-        /* Same scaled-deviation treatment as dayScore - see the comment
-           there for why this is not a percentile, and why it runs on the
-           raw score rather than the published one. */
-        var calF = CAL[spId] || [15, 70];
-        var kScale = (CAL_HI - CAL_LO) / (calF[1] - calF[0]);
-        var medV = vs[Math.floor(vs.length / 2)];
-        var loV = vs[Math.floor(vs.length * 0.10)], hiV = vs[Math.floor(vs.length * 0.90)];
-        var halfV = clamp((hiV - loV) / 2 * kScale, 7, 28);
-        var relV = clamp(50 + 40 * (here.breakdown.afterPressure - medV) * kScale / halfV, 1, 99);
-        vals[iy * NX + ix] = clamp(0.75 * relV + 0.25 * here.opportunity, 1, 99);
+        /* Only the part that is about the day. The quarter that is about
+           the place is added at the point being drawn - see dayAt. */
+        vals[iy * NX + ix] = relAt(lon, lat, spId, tq, here);
       }
     }
 
+    /* No corner of the cell is in range. Take the nearest lattice values
+       out to a degree, the closest ring that has any, weighted by
+       distance. Returns NaN if there are none that near. */
+    function near(fx, fy) {
+      var cx = Math.round(fx), cy = Math.round(fy);
+      for (var r = 1; r <= 2; r++) {
+        var sum = 0, wsum = 0;
+        for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          var x = cx + dx, y = cy + dy;
+          if (x < 0 || y < 0 || x >= NX || y >= NY) continue;
+          var v = vals[y * NX + x];
+          if (v !== v) continue;
+          var w = 1 / ((x - fx) * (x - fx) + (y - fy) * (y - fy) + 0.01);
+          sum += v * w; wsum += w;
+        }
+        if (wsum > 0) return sum / wsum;
+      }
+      return NaN;
+    }
+
     var field = {
+      /* Points too far from any lattice value, worked out on their own. */
+      own: {}, ownN: 0,
       at: function (lon, lat) {
         var fx = (lon - LON0) / DD, fy = (lat - LAT0) / DD;
         var x0 = Math.floor(fx), y0 = Math.floor(fy);
@@ -1216,7 +1249,7 @@
            range; fall back to the nearest value that exists rather than
            painting a hole or interpolating against a NaN. */
         var pool = [a, b, c, d].filter(function (v) { return v === v; });
-        if (!pool.length) return NaN;
+        if (!pool.length) return near(fx, fy);
         if (pool.length < 4) return pool.reduce(function (p, v) { return p + v; }, 0) / pool.length;
         return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
       }
@@ -1226,6 +1259,43 @@
     if (keys.length > 6) delete dayFieldCache[keys[0]];
     dayFieldCache[key] = field;
     return field;
+  }
+
+  /* The Day value the map draws at a point.
+
+     The lattice above was drawn straight onto the map, and two things
+     were wrong with that. It filled in: any spot within half a degree
+     of somewhere in range took that neighbour's value, so the Day map
+     painted 23 percent of the country that the Spot map correctly
+     leaves blank - desert, mountain, city - in confident colour. And
+     the quarter of the Day score that comes from how good the place
+     itself is was the lattice point's, not the place's.
+
+     So the range test is made at the point, exactly as Spot makes it,
+     and the place's own score supplies its own quarter. What is left
+     on the lattice is only how today compares with the season, which
+     is weather and does vary that smoothly. */
+  function dayAt(spId, t, lon, lat) {
+    var tq = Math.round(t * 4) / 4;
+    var here = scoreAt(lon, lat, tq, env.doyFor(tq), spId);
+    if (!here.inRange) return NaN;
+    var field = dayField(spId, t);
+    var rel = field.at(lon, lat);
+    if (rel !== rel) {
+      /* In range, and nothing on the lattice within a degree: a trout
+         stream in dry country, an island of timber. The lattice missed
+         it, so it is worked out here, once per tenth of a degree. Left
+         alone this was a hole in the Day map where Spot had colour. */
+      var k = Math.floor(lon * 10) + ':' + Math.floor(lat * 10);
+      rel = field.own[k];
+      if (rel === undefined) {
+        if (field.ownN > 4000) { field.own = {}; field.ownN = 0; }
+        rel = field.own[k] = relAt(lon, lat, spId, tq, here);
+        field.ownN++;
+      }
+    }
+    if (rel !== rel) return NaN;
+    return clamp(0.75 * rel + 0.25 * here.opportunity, 1, 99);
   }
 
   /* Where this score sits among every in-range cell in the country right now.
@@ -1256,7 +1326,7 @@
 
   global.OG.models = {
     SPECIES: SPECIES, byId: function (id) { return BY_ID[id]; },
-    scoreAt: scoreAt, dayScore: dayScore, dayField: dayField, nationalPct: nationalPct,
+    scoreAt: scoreAt, dayScore: dayScore, dayField: dayField, dayAt: dayAt, nationalPct: nationalPct,
     hourlyActivity: hourlyActivity,
     huntingPressure: huntingPressure, migration: migration, rutStage: rutStage,
     freezeLock: freezeLock, presenceFactor: presenceFactor, PRESENT_FLOOR: PRESENT_FLOOR,
