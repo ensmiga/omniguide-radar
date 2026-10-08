@@ -19,7 +19,7 @@
  *   0 ‍*‍/6 * * * cd /srv/omniguide && node ingest/ingest.mjs >> ingest.log 2>&1
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -269,12 +269,78 @@ async function ingestWater() {
 
 /* -------------------------------------------------------------------- main */
 
+/* HOW A RUN ENDS.
+
+   This used to be one try block: forecast, then gauges, and any error
+   failed the job. Three things followed from that. A forecast refusal
+   threw away a gauge pull that had nothing wrong with it. One bad
+   attempt left the site stale until the next scheduled slot eight hours
+   on. And every miss was an email, whether the data was an hour old or a
+   day.
+
+   So the schedule now tries often and this decides what a try means:
+
+     --skip-if-fresh=H    the forecast in the repo is under H hours old:
+                          do nothing, successfully. Lets the workflow run
+                          every two hours without pulling every two hours.
+     --tolerate-stale=H   a pull that fails is a warning, not a failure,
+                          while the data already published is under H
+                          hours old - another attempt is two hours away.
+                          Past that it fails properly, because by then
+                          someone needs to know.
+
+   With neither flag - a run by hand - any failure fails, as before. */
+function forecastAgeHours() {
+  try {
+    const head = readFileSync(resolve(OUT, 'wx-grid.js'), 'utf8').slice(0, 800);
+    const m = /fetched:"([^"]+)"/.exec(head);
+    const t = m ? Date.parse(m[1]) : NaN;
+    return Number.isFinite(t) ? (Date.now() - t) / 3.6e6 : Infinity;
+  } catch (err) {
+    return Infinity;
+  }
+}
+
+const FRESH_H = Number(argv['skip-if-fresh'] ?? 0);
+const TOLERATE_H = Number(argv['tolerate-stale'] ?? 0);
+const IN_CI = !!process.env.GITHUB_ACTIONS;
+const annotate = (level, msg) => console.log(IN_CI ? `::${level}::${msg}` : `${level.toUpperCase()}: ${msg}`);
+/* Tells the workflow whether anything was pulled, so the steps after
+   this one can stand down when nothing was. */
+const report = (refreshed) => {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `refreshed=${refreshed}\n`);
+};
+
 const started = Date.now();
-try {
-  if (ONLY !== 'water') await ingestForecast();
-  if (ONLY !== 'wx') await ingestWater();
+const ageBefore = forecastAgeHours();
+
+if (FRESH_H > 0 && ageBefore < FRESH_H) {
+  console.log(`forecast is ${ageBefore.toFixed(1)} h old, under ${FRESH_H} h - nothing to do this run`);
+  report(false);
+} else {
+  const failed = [];
+  let pulled = 0;
+  if (ONLY !== 'water') {
+    try { await ingestForecast(); pulled++; } catch (err) { failed.push(['forecast', err.message]); }
+  }
+  if (ONLY !== 'wx') {
+    try { await ingestWater(); pulled++; } catch (err) { failed.push(['gauges', err.message]); }
+  }
   console.log(`done in ${((Date.now() - started) / 1000).toFixed(0)}s`);
-} catch (err) {
-  console.error('ingest failed:', err.message);
-  process.exitCode = 1;
+  report(pulled > 0);
+
+  for (const [what, msg] of failed) console.error(`${what} pull failed: ${msg}`);
+  if (failed.length) {
+    const forecastFailed = failed.some((f) => f[0] === 'forecast');
+    const excusable = TOLERATE_H > 0 && (!forecastFailed || ageBefore <= TOLERATE_H);
+    if (excusable) {
+      annotate('warning', failed.map((f) => `${f[0]} pull failed (${f[1]})`).join('; ') +
+        (forecastFailed ? `. Published forecast is ${ageBefore.toFixed(1)} h old; trying again next run.` : ''));
+    } else {
+      if (forecastFailed && TOLERATE_H > 0) {
+        annotate('error', `forecast has not refreshed in ${ageBefore.toFixed(1)} h`);
+      }
+      process.exitCode = 1;
+    }
+  }
 }

@@ -5,11 +5,25 @@ name: Refresh forecast data
 #   - the schedule also re-pulls the forecast first
 # Without the push trigger, code changes sat in the repo and never reached
 # the site, which is exactly what happened the first time.
+#
+# THE SCHEDULE.
+#
+# It was three slots a day, and a slot that failed left the site stale for
+# eight hours - longer in practice, because GitHub was starting them about
+# seven hours late. Two failed in a row on 8 October and the forecast sat a
+# day old.
+#
+# It now comes round every two hours and decides for itself whether there is
+# anything to do: the pull is skipped while the published forecast is under
+# six hours old, so the data still refreshes about four times a day, but a
+# miss is retried in two hours instead of eight. A miss is a warning while
+# the published forecast is under twenty hours old and a failure after that.
+# See the end of ingest/ingest.mjs for those two flags.
 on:
   push:
     branches: [main]
   schedule:
-    - cron: '20 2,10,18 * * *'
+    - cron: '20 */2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,21 +37,43 @@ concurrency:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    # Pinned, not "latest": that label moves to a new Ubuntu on a date of
+    # GitHub's choosing, and this job should change when we change it.
+    runs-on: ubuntu-24.04
+    # A hung request should cost twenty minutes, not six hours.
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # The head of main, not the commit that triggered the run. Runs queue
+      # behind each other, so a code push that waited on a refresh would
+      # otherwise publish its own older copy of the forecast over the one
+      # the refresh had just committed.
+      - uses: actions/checkout@v5
         with:
-          node-version: '20'
+          ref: main
+
+      # 24 is what the ingest is developed and tested on.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
 
       # Only on the schedule or a manual run. A code push just redeploys.
+      # A manual run always pulls and fails loudly; a scheduled one skips
+      # when fresh and tolerates a miss while the data is still recent.
       - name: Pull forecast and water data
+        id: pull
         if: github.event_name != 'push'
-        run: node ingest/ingest.mjs
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            node ingest/ingest.mjs --skip-if-fresh=6 --tolerate-stale=20
+          else
+            node ingest/ingest.mjs
+          fi
 
+      # Snow is a bonus on top of the forecast. If NSIDC is down, the
+      # forecast and gauges just pulled should still be published.
       - name: Pull SNODAS snow
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' && steps.pull.outputs.refreshed == 'true'
+        continue-on-error: true
         run: node ingest/snodas.mjs
 
       # The grid must be complete. A short file means a batch failed, and a
@@ -50,18 +86,17 @@ jobs:
           test "$SIZE" -gt 500000 || { echo "grid looks truncated"; exit 1; }
           grep -q 'npts:987' js/wx-grid.js || echo "WARNING: point count changed"
 
-      # [skip ci] keeps this commit from triggering another deploy run.
       - name: Commit refreshed data
+        id: commit
         if: github.event_name != 'push'
-        run: |
-          git config user.name  'omniguide-bot'
-          git config user.email 'omniguide-bot@users.noreply.github.com'
-          git add js/wx-grid.js js/gauges.js js/snow.js
-          git diff --staged --quiet || git commit -m "data: refresh forecast $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
-          git push
+        run: bash tools/ci-commit-data.sh
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      # A scheduled run with nothing new has nothing to publish.
+      - uses: actions/configure-pages@v6
+        if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
         with:
           path: .
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
+        if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
