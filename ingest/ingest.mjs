@@ -48,14 +48,31 @@ async function getJSON(url, { tries = 4, label = 'request' } = {}) {
   for (let attempt = 1; attempt <= tries; attempt++) {
     try {
       const res = await fetch(url, { headers: { 'User-Agent': 'OmniGuide/1.0 (ingest)' } });
-      if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
+      if (res.status === 429) {
+        /* The body says which limit: per minute, per hour or per day.
+           Only the first is worth waiting for. */
+        let reason = '';
+        try { reason = (await res.json()).reason || ''; } catch (e) { /* no body */ }
+        const err = new Error(`HTTP 429${reason ? ' - ' + reason : ''}`);
+        err.limit = /hour/i.test(reason) ? 'hour' : /dai|day/i.test(reason) ? 'day' : 'minute';
+        throw err;
+      }
+      if (res.status >= 500) throw new Error(`HTTP ${res.status}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.json();
       if (body && body.error) throw new Error(body.reason || 'API error');
       return body;
     } catch (err) {
       if (attempt === tries) throw new Error(`${label} failed after ${tries} tries: ${err.message}`);
-      const wait = 2000 * attempt * attempt;   // the public tier rate-limits per minute
+      /* An hourly or daily limit will not clear while this job is alive. */
+      if (err.limit === 'hour' || err.limit === 'day') {
+        throw new Error(`${label}: ${err.message}. Not retrying - the next scheduled run will.`);
+      }
+      /* A per-minute limit clears when the minute does, so that is how
+         long to wait. This used to back off 2, 8 and 18 seconds - 28 in
+         all - and give up, having never once waited out the window it
+         was told about. */
+      const wait = err.limit === 'minute' ? 62000 : 2000 * attempt * attempt;
       console.warn(`  ${label}: ${err.message}; retrying in ${wait / 1000}s`);
       await sleep(wait);
     }
@@ -99,8 +116,28 @@ async function ingestForecast() {
   const lat = [], lon = [], elev = [];
   let t0 = null;
 
-  const BATCH = 120;
+  /* PACING.
+
+     Open-Meteo's open tier counts every location in a request as a
+     call and allows 600 a minute. This grid is 987 points, and the
+     loop used to send them 120 at a time with 1.2 seconds between -
+     all of it inside fifteen seconds. Measured: the first five
+     requests are answered and the sixth is refused with "Minutely API
+     request limit exceeded. Please try again in one minute."
+
+     Whether the job then survived came down to luck. The limit resets
+     on the clock minute, so a run that happened to straddle one got
+     through and a run that did not failed after its 28 seconds of
+     retries. It passed four times on the 7th and failed twice on the
+     8th, and the site sat a day stale behind it.
+
+     Sixteen seconds between the start of one request and the next is
+     450 points a minute, which leaves room for whoever else is behind
+     the same address on a shared runner. The whole grid takes a little
+     over two minutes, three times a day. */
+  const BATCH = 120, GAP_MS = 16000;
   for (let b = 0; b < pts.length; b += BATCH) {
+    const began = Date.now();
     const slice = pts.slice(b, b + BATCH);
     const url = 'https://api.open-meteo.com/v1/forecast' +
       `?latitude=${slice.map((p) => p[0]).join(',')}` +
@@ -108,7 +145,7 @@ async function ingestForecast() {
       `&hourly=${hourly}&forecast_days=${DAYS}` +
       '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=GMT';
 
-    const batch = await getJSON(url, { label: `forecast batch ${b / BATCH + 1}` });
+    const batch = await getJSON(url, { label: `forecast batch ${b / BATCH + 1}`, tries: 6 });
     const rows = Array.isArray(batch) ? batch : [batch];
 
     for (const p of rows) {
@@ -127,7 +164,7 @@ async function ingestForecast() {
       }
     }
     console.log(`  ${Math.min(b + BATCH, pts.length)}/${pts.length}`);
-    await sleep(1200);                 // stay under the per-minute limit
+    if (b + BATCH < pts.length) await sleep(Math.max(0, GAP_MS - (Date.now() - began)));
   }
 
   if (lat.length !== pts.length) {
