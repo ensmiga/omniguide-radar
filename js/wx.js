@@ -28,9 +28,18 @@
 
   function available() { return !!G && STEPS > 0; }
 
+  /* How long ago the forecast was pulled.
+
+     This measured from T0, which is the first hour the forecast covers:
+     midnight GMT on the day it was pulled. So a forecast fetched at five
+     in the afternoon was already "17 hours old", and by evening the map
+     said the refresh was overdue and might have failed - on a day when
+     it had run twice. The file carries the time it was fetched. */
+  var FETCHED = G && G.fetched ? Date.parse(G.fetched) : NaN;
+
   function staleHours() {
     if (!G) return null;
-    return (Date.now() - T0) / 3600000;
+    return (Date.now() - (FETCHED === FETCHED ? FETCHED : T0)) / 3600000;
   }
 
   /* Midnight today, local to the point being queried, expressed in UTC ms.

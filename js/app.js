@@ -103,9 +103,10 @@
     if (!W || !W.available()) return 'Synthetic forecast - no live feed in this build.';
     var h = W.staleHours();
     var age = h < 1 ? 'under an hour' : h < 48 ? Math.round(h) + ' hours' : Math.round(h / 24) + ' days';
-    /* Stale enough to be worth saying out loud: the refresh runs every
-       eight hours, so much past that means a job failed. */
-    return 'Model run captured ' + age + ' ago' + (h > 20 ? ' - overdue, a refresh may have failed.' : '.');
+    /* Stale enough to be worth saying out loud: the refresh pulls once
+       the forecast is six hours old and the job itself fails at twenty,
+       so past that something has gone wrong. */
+    return 'Forecast pulled ' + age + ' ago' + (h > 20 ? ' - overdue, a refresh may have failed.' : '.');
   };
 
   /* t carries a time of day, so the day is the floor of it, never the round. */
@@ -441,11 +442,17 @@
       { n: 'USGS The National Map', u: 'https://www.usgs.gov/programs/national-geospatial-program/national-map',
         d: 'Shaded relief, topographic and aerial basemaps.', l: 'Public domain' }
     ] },
-    { group: 'Species records', items: [
+    { group: 'Species range and records', items: [
+      { n: 'USGS Gap Analysis Project', u: 'https://doi.org/10.5066/F7Q81B3R',
+        d: 'Species Range Maps CONUS_2001 (2018). Where elk live: every sub-watershed in the country marked ' +
+           'by state range data and expert review, 2008 to 2014. Wandering animals and historical range are ' +
+           'left out. Three herds released since are added from the state agencies that released them: ' +
+           'Black River State Forest in Wisconsin, Peck Ranch in Missouri and Tomblin WMA in West Virginia.',
+        l: 'Public domain' },
       { n: 'GBIF', u: 'https://www.gbif.org/', gbif: true,
         d: 'Occurrence records 2015-2025 for 30 taxa, counted in full through the GBIF maps and statistics ' +
            'services - about 20.6 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +
-           'decide whether a species is in range, when waterfowl normally arrive and how many are normally ' +
+           'decide whether a species other than elk is in range, when waterfowl normally arrive and how many are normally ' +
            'present by date, and the species mix in the decoy advice. They do not decide how good a place is.',
         l: 'CC BY 4.0 and CC0 1.0', lu: CC_BY }
     ] },
@@ -547,7 +554,9 @@
       ob.appendChild(el('div', 'gate-h', 'Outside the ' + App.speciesName(st.species).toLowerCase() + ' range'));
       var why = sc.outReason === 'habitat'
         ? 'The terrain and land cover here do not support this species.'
-        : 'Occurrence records show this species is effectively absent here.';
+        : sc.outReason === 'range'
+          ? 'This is outside where the species is known to live.'
+          : 'Occurrence records show this species is effectively absent here.';
       ob.appendChild(el('div', 'gate-b', why +
         ' OmniGuide does not produce an opportunity score where the species does not live.'));
       root.appendChild(ob);
@@ -2348,7 +2357,7 @@
              ducks: every blank cell was the habitat floor and not one was
              a missing season record, so the old wording named two causes
              that were not happening and missed the one that was. */
-          : 'Blank ground is where the species is not modelled at all - no habitat and no records. ' +
+          : 'Blank ground is outside the species\u2019 known range, or has no habitat for it. ' +
             'It is not the same as poor hunting, which still gets a score.'));
     }
     legendCredit(lg);

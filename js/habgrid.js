@@ -90,8 +90,10 @@
      show as habitat rather than as a scatter of trailheads.
 
      What this cannot find is a herd nobody has logged under an open
-     licence: the Cimarron grassland elk and the north-west Minnesota
-     herd have no records at all and stay blank. */
+     licence, and what it cannot tell apart is a herd and a photograph.
+     For elk both failures were on the map at once, so elk no longer
+     come through here at all - see PUBLISHED RANGE below. The numbers
+     for elk are kept only as the fallback if that plane fails to load. */
   var RANGE_KNEE = {
     elk: 0.50, moose: 0.50, whitetail: 0.25, muledeer: 0.25, pronghorn: 0.25,
     turkey: 0.10, upland: 0.15, waterfowl: 0.10, trout: 0.25
@@ -158,8 +160,48 @@
     return r[iy * PG.nlon + ix];
   }
 
+  /* ---------- published range ----------
+
+     Where USGS has mapped a species' range, that is the range and
+     the records are not asked. ingest/usgs-range.mjs has the whole
+     story; the short version, for elk, is that the record gate drew
+     3,500 square miles of range round a single photograph in five
+     places and left out every herd in North Dakota.
+
+     The plane holds the share of each cell that lies inside the
+     range. Read bilinearly, so the edge is a slope and not a
+     staircase, and counted in full once half the cell is in. */
+  var rangeRaw = global.US_RANGE || null;
+  var pubPlanes = {};
+  var RANGE_FULL = 0.5;
+
+  function publishedAt(sp, lon, lat) {
+    if (!rangeRaw || !rangeRaw.sp || !rangeRaw.sp[sp]) return null;
+    var p = pubPlanes[sp];
+    if (p === undefined) {
+      try {
+        var bin = global.atob(rangeRaw.sp[sp]);
+        var a = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+        p = a;
+      } catch (e) { p = null; }
+      pubPlanes[sp] = p;
+    }
+    if (!p) return null;
+    var RG = rangeRaw.grid;
+    var fx = (lon - RG.lon0) / RG.d - 0.5, fy = (lat - RG.lat0) / RG.d - 0.5;
+    var x0 = Math.floor(fx), y0 = Math.floor(fy);
+    if (x0 < 0 || y0 < 0 || x0 + 1 >= RG.nlon || y0 + 1 >= RG.nlat) return null;
+    var tx = fx - x0, ty = fy - y0, k = y0 * RG.nlon + x0;
+    var v = ((p[k] * (1 - tx) + p[k + 1] * tx) * (1 - ty) +
+             (p[k + RG.nlon] * (1 - tx) + p[k + RG.nlon + 1] * tx) * ty) / 255;
+    return v >= RANGE_FULL ? 1 : v / RANGE_FULL;
+  }
+
   /* 0 out of range, 1 in it. */
   function rangeAt(sp, lon, lat) {
+    var pub = publishedAt(sp, lon, lat);
+    if (pub != null) return pub;
     var pres = presenceAt(sp, lon, lat);
     if (pres == null) return null;
     var knee = RANGE_KNEE[sp] == null ? 0.25 : RANGE_KNEE[sp];
@@ -190,9 +232,7 @@
     var bot = a[i01] * (1 - tx) + a[i11] * tx;
     var suit = (top * (1 - ty) + bot * ty) / 255;
 
-    /* Combine with presence here rather than at build time. */
-    var pres = presenceAt(sp, lon, lat);
-    if (pres == null) return suit;
+    /* Combine with range here rather than at build time. */
     var inRange = rangeAt(sp, lon, lat);
     return inRange == null ? suit : suit * inRange;
   }
@@ -530,6 +570,9 @@
   global.OG = global.OG || {};
   global.OG.habgrid = {
     at: at, presenceAt: presenceAt, regionalAt: regionalAt, rangeAt: rangeAt,
+    publishedAt: publishedAt,
+    rangeMeta: rangeRaw ? { source: rangeRaw.source, built: rangeRaw.built, added: rangeRaw.added,
+                            species: Object.keys(rangeRaw.sp || {}) } : null,
     RANGE_KNEE: RANGE_KNEE, RANGE_REGION: RANGE_REGION,
     ready: !!G,
     meta: raw ? { source: raw.source, note: raw.note, built: raw.built, d: raw.grid.d } : null,

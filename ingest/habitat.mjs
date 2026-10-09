@@ -92,6 +92,9 @@ const SUIT = {
    woody cover too, and no whitetail recorded in it. */
 const SATURATE = { whitetail: 7, turkey: 5, waterfowl: 4, trout: 30 };
 
+/* Elk and open ground - see where it is applied. */
+const ELK_REFUGE = { forest: 0.125, relief: [60, 300], low: 0.30 };
+
 /* Elevation preference in feet: [zero below, full above, full below, zero
    above]. A sanity bound, not the model.
 
@@ -1103,6 +1106,46 @@ async function main() {
          inside the cell, full value under 250 feet and nothing by
          1100. */
       if (sp === 'pronghorn') s *= 1 - clamp01((ev.reliefFt[k] - 250) / 850);
+      /* Elk on open ground need somewhere to go.
+
+         Grass is 0.80 in the table above, and for elk that is right on
+         a mountain park or in the breaks and wrong on a wheat-and-
+         shortgrass plain, which land cover cannot tell apart. It did
+         not matter while occurrence records set the range, because
+         nobody photographs elk at Burlington, Colorado. The USGS range
+         does include the plains - a few elk do live along the rivers
+         there - and the flat prairie came up at 40 out of 100.
+
+         So the open classes count in full only where the cell also
+         has timber or broken ground: full at an eighth forest or 300
+         feet of relief, down to three tenths of their value on a
+         treeless flat. Set from what real herds stand on, measured in
+         this grid as share of forest and feet of relief:
+
+             Fort Riley, Kansas          12%    59 ft   kept in full
+             Theodore Roosevelt NP       28%    86 ft   kept in full
+             Pine Ridge, Nebraska        16%   174 ft   kept in full
+             north-west Colorado sage     4%   325 ft   kept in full
+             Glass Mountains, Texas       4%   301 ft   kept in full
+             Owens Valley tule elk        0%   203 ft   0.52 to 0.38
+             Red Desert, Wyoming          0%    90 ft   0.64 to 0.25
+             Cimarron Grassland           0%    65 ft   0.42 to 0.13
+             Burlington, Colorado         0%    38 ft   0.29 to 0.09
+
+         The last three are the point: desert and grassland elk exist,
+         thinly, and now read thin. Timber itself is untouched, so the
+         flat aspen parkland of north-west Minnesota (48% forest, 7
+         feet of relief) and the Michigan and Wisconsin herds keep
+         every point. */
+      if (sp === 'elk') {
+        const tot = lc.total[k];
+        const part = (c) => { const arr = lc.counts.get(c); return arr ? arr[k] / tot : 0; };
+        const forest = part(41) + part(42) + part(43) + part(90);
+        const open = 0.80 * part(71) + 0.62 * part(52) + 0.40 * part(81) + 0.15 * part(82);
+        const refuge = clamp01(Math.max(forest / ELK_REFUGE.forest,
+          (ev.reliefFt[k] - ELK_REFUGE.relief[0]) / (ELK_REFUGE.relief[1] - ELK_REFUGE.relief[0])));
+        s -= open * (1 - ELK_REFUGE.low) * (1 - refuge);
+      }
       if (ducks) s = ducks[k] * elevFactor(ev.meanFt[k], band);
       else {
         s *= elevFactor(ev.meanFt[k], band);

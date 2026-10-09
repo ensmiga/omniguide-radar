@@ -33,32 +33,94 @@
 
   var T = {
     elk: {
+      /* Rewritten when elk range moved from occurrence records to the
+         USGS map. The old list was 25 places and 6, and the record gate
+         scored 22 and 6 on it - which looked fine and was hiding that it
+         had no elk anywhere in North Dakota and 3,500 square miles of
+         them round a single photograph in five places. An easy list
+         flatters whatever it is pointed at. This one is every herd I
+         could name with a state agency behind it, and for the negatives
+         the cities and farm country inside or beside elk range, plus the
+         fenced herds: elk live at White Horse Hill, Land Between the
+         Lakes and Lone Elk Park, behind a fence, and that is not range.
+
+         The record gate scored 73 of 87 and 41 of 55 on it. The two
+         positives still missed are real gaps in the USGS map: the
+         Niobrara, which elk have spread into since 2014, and Tejon. */
       yes: [
-        ['White River CO', -107.60, 40.00], ['Gunnison CO', -106.93, 38.55],
-        ['Bitterroot MT', -114.09, 46.10], ['Jackson WY', -110.70, 43.55],
-        ['Gila NM', -108.40, 33.30], ['Blue Mountains OR', -118.40, 45.10],
-        ['Olympic Pen. WA', -123.60, 47.70], ['Benezette PA', -78.35, 41.32],
-        ['Buffalo River AR', -93.05, 35.98], ['SE Kentucky', -83.30, 37.10],
-        /* The first version of this table listed ten elk positives, all
-           of them obvious western country plus two reintroductions, and
-           scored 8/10 - which looked respectable and was hiding that the
-           model missed ten of the eighteen established herds outside the
-           Rockies. Elk are in far more states than a mountain-shaped
-           intuition suggests. Every one of these has a herd and a
-           season. */
-        ['Fort Riley KS', -96.80, 39.10], ['Cimarron Grassland KS', -101.90, 37.10],
-        ['Black Hills SD', -103.70, 43.90], ['Custer SP SD', -103.40, 43.75],
-        ['Pigeon River MI', -84.45, 45.10], ['Clam Lake WI', -90.90, 46.15],
-        ['NW Minnesota', -96.40, 48.60], ['Peck Ranch MO', -91.15, 37.20],
-        ['Wichita Mts OK', -98.70, 34.73], ['Cookson Hills OK', -94.85, 35.70],
-        ['Glass Mts TX', -103.10, 30.55], ['Buchanan Co VA', -82.05, 37.25],
-        ['Tomblin WMA WV', -81.95, 37.85], ['N Cumberland TN', -84.15, 36.45],
-        ['Cataloochee NC', -83.10, 35.62]
+        ['ND Badlands (T. Roosevelt NP)', -103.45, 46.95],
+        ['ND Killdeer Mts', -102.90, 47.45], ['ND Pembina Hills', -98.00, 48.90],
+        ['ND Turtle Mts', -100.00, 48.90], ['MN Kittson Co', -96.60, 48.80],
+        ['MN Grygla', -95.60, 48.30], ['NE Pine Ridge', -103.00, 42.70],
+        ['NE Wildcat Hills', -103.70, 41.70], ['NE Niobrara (Valentine)', -100.50, 42.80],
+        ['SD Black Hills', -103.70, 44.00], ['KS Cimarron Grassland', -101.90, 37.10],
+        ['KS Fort Riley', -96.80, 39.20], ['WY Red Desert', -108.80, 42.00],
+        ['WY Jackson', -110.60, 43.60], ['WY Bighorns', -107.30, 44.50],
+        ['WY Laramie Peak', -105.40, 42.30], ['WY Sierra Madre', -107.00, 41.20],
+        ['MT Missouri Breaks', -108.00, 47.60], ['MT Bull Mts', -108.30, 46.40],
+        ['MT Bitterroot', -114.00, 46.00], ['MT Gallatin', -111.20, 45.30],
+        ['MT Rocky Mtn Front', -112.60, 47.80], ['MT Yaak', -115.70, 48.80],
+        ['AZ Flagstaff', -111.60, 35.20], ['AZ White Mts', -109.50, 33.90],
+        ['AZ Hualapai Mts', -113.90, 35.10], ['NM Gila', -108.30, 33.30],
+        ['NM Valles Caldera', -106.50, 35.90], ['NM Sacramento Mts', -105.70, 32.90],
+        ['NM Raton', -104.40, 36.90], ['NM Mt Taylor', -107.60, 35.20],
+        ['TX Davis Mts', -104.00, 30.70], ['TX Glass Mts', -103.20, 30.40],
+        ['TX Guadalupe Mts', -104.86, 31.90], ['UT Book Cliffs', -109.70, 39.50],
+        ['UT Boulder Mtn', -111.50, 38.10], ['UT Wasatch', -111.20, 40.30],
+        ['UT Pahvant', -112.20, 38.80], ['NV Jarbidge', -115.40, 41.80],
+        ['NV Schell Creek', -114.60, 39.30], ['NV Monitor Range', -116.50, 38.80],
+        ['NV Spring Mts', -115.70, 36.30], ['NV Lincoln Co', -114.40, 38.00],
+        ['CA Redwood NP', -124.00, 41.30], ['CA Cache Creek', -122.40, 39.00],
+        ['CA Owens Valley', -118.30, 37.00], ['CA La Panza', -120.20, 35.40],
+        ['CA Tejon', -118.70, 34.90], ['CA Mendocino', -123.30, 39.50],
+        ['CA Siskiyou', -122.50, 41.50], ['CA Modoc', -120.40, 41.50],
+        ['OR Coast Range', -123.60, 45.20], ['OR Cascades', -122.00, 44.20],
+        ['OR Blue Mts', -118.30, 45.30], ['OR Ochocos', -120.30, 44.40],
+        ['OR Southwest', -123.20, 42.50], ['WA Olympics', -123.80, 47.80],
+        ['WA St Helens', -122.30, 46.30], ['WA Yakima', -120.90, 46.80],
+        ['WA Blue Mts', -117.80, 46.20], ['WA Selkirks', -117.30, 48.70],
+        ['WA Nooksack', -122.00, 48.60], ['ID Clearwater', -115.50, 46.50],
+        ['ID Salmon', -114.00, 45.00], ['ID Panhandle', -116.30, 47.80],
+        ['ID Southeast', -111.50, 42.70], ['CO White River', -107.50, 40.00],
+        ['CO San Juans', -107.30, 37.60], ['CO Estes Park', -105.50, 40.40],
+        ['CO Gunnison', -106.90, 38.50], ['CO Sangre de Cristo', -105.50, 37.90],
+        ['CO Trinidad', -104.90, 37.20], ['CO Northwest sage', -108.20, 40.60],
+        ['PA Benezette', -78.37, 41.31], ['KY Hazard', -83.20, 37.25],
+        ['TN N Cumberland', -84.30, 36.30], ['VA Buchanan Co', -82.10, 37.25],
+        ['NC Cataloochee', -83.10, 35.63], ['WV Logan Co', -82.00, 37.80],
+        ['WI Clam Lake', -90.90, 46.20], ['WI Black River', -90.70, 44.30],
+        ['MI Pigeon River', -84.40, 45.20], ['MO Peck Ranch', -91.20, 37.00],
+        ['AR Boxley', -93.40, 36.00], ['OK Wichita Mts', -98.70, 34.75],
+        ['OK Cookson Hills', -94.90, 35.70], ['OK Pushmataha', -95.30, 34.50]
       ],
       no: [
-        ['Central Florida', -81.50, 28.50], ['Coastal Georgia', -82.00, 31.50],
-        ['Iowa farmland', -93.60, 41.90], ['New Jersey', -74.60, 40.20],
-        ['Delmarva', -75.70, 38.80], ['Mississippi delta', -90.80, 33.40]
+        ['Seattle', -122.33, 47.61], ['Portland', -122.67, 45.52],
+        ['WA Columbia Basin', -119.30, 47.10], ['ID Snake River Plain', -114.50, 42.60],
+        ['Boise', -116.20, 43.60], ['San Francisco', -122.44, 37.76],
+        ['Sacramento', -121.50, 38.58], ['Fresno', -119.80, 36.75],
+        ['Los Angeles', -118.25, 34.05], ['San Diego', -117.15, 32.72],
+        ['Mojave (Barstow)', -117.00, 34.90], ['Las Vegas', -115.15, 36.17],
+        ['Phoenix', -112.07, 33.45], ['Tucson', -110.97, 32.22], ['Yuma', -114.60, 32.70],
+        ['UT West Desert', -113.50, 40.70], ['Denver', -104.99, 39.74],
+        ['CO Eastern Plains', -102.60, 39.30], ['W Kansas', -100.50, 38.50],
+        ['Iowa', -93.60, 42.00], ['Illinois', -89.00, 40.00], ['Ohio', -82.90, 40.00],
+        ['New York', -75.50, 43.00], ['Maine', -69.00, 45.20], ['Georgia', -83.50, 32.50],
+        ['N Georgia Mts', -84.00, 34.80], ['Florida', -81.50, 28.50],
+        ['Alabama', -86.80, 32.80], ['Louisiana', -92.00, 31.00],
+        ['Dallas', -96.80, 32.80], ['Houston', -95.37, 29.76], ['Austin', -97.74, 30.27],
+        ['San Antonio', -98.49, 29.42], ['San Marcos TX', -97.94, 29.88],
+        ['TX Hill Country (Kerrville)', -99.14, 30.05], ['E South Dakota', -98.00, 44.40],
+        ['Fargo', -96.80, 46.88], ['Devils Lake ND', -98.87, 48.11],
+        ['Minneapolis', -93.27, 44.98], ['Madison', -89.40, 43.07],
+        ['Lansing', -84.55, 42.73], ['Greenville SC', -82.40, 34.85],
+        ['Knoxville', -83.92, 35.96], ['Asheville', -82.55, 35.60],
+        ['Charleston WV', -81.63, 38.35], ['Pittsburgh', -80.00, 40.44],
+        ['Harrisburg', -76.88, 40.27], ['Cape Girardeau MO', -89.52, 37.31],
+        ['Amarillo', -101.83, 35.20], ['Manhattan KS town', -96.57, 39.18],
+        ['Topeka', -95.68, 39.05], ['Grand Island NE', -98.34, 40.92],
+        ['White Horse Hill preserve ND (fenced)', -98.97, 47.98],
+        ['Land Between the Lakes KY (fenced)', -88.07, 36.78],
+        ['Lone Elk Park MO (fenced)', -90.54, 38.53]
       ]
     },
     muledeer: {

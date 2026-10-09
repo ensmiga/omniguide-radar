@@ -28,7 +28,18 @@
      with sharp range edges, gently for the ones found nearly everywhere.
      Cells where the query failed or records were too thin return null and no
      adjustment is made at all. */
-  var D = global.US_DIST || null;
+  /* NO LONGER SHIPPED, AND NEVER APPLIED.
+
+     The index was a file built once, by hand, before this project kept
+     only openly licensed records, and nothing in the repository can
+     rebuild it or show what licence its inputs carried. It was also
+     loaded after this file read it, so D has been null in every browser
+     and distAt has returned null for every score ever drawn. Removing
+     the file changes no number. The species still carry distWeight and
+     rangeFloor, which do nothing while D is null; if an index is ever
+     wanted again it should be built from the licensed counts in
+     ingest/habitat.mjs and loaded before this file. */
+  var D = null;
 
   function distAt(lon, lat, key) {
     if (!D || !D.sp[key]) return null;
@@ -623,7 +634,7 @@
   var CAL = {
     'ducks':        [1.4, 46.9],
     'canada-goose': [1.6, 48.0],
-    'elk':          [10.1, 78.2],
+    'elk':          [8.5, 78.2],
     'whitetail':    [11.9, 81.1],
     'muledeer':     [16.5, 76.9],
     'moose':        [7.9, 72.4],
@@ -761,6 +772,16 @@
     var outOfRange = null;
     if (habModel < habFloor) outOfRange = 'habitat';
     else if (dIdx != null && dIdx < rangeFloor) outOfRange = 'records';
+    /* Say which it was. Habitat here is suitability times the range
+       gate, so ground that fails the floor may be perfectly good
+       country the species simply does not occupy, and telling someone
+       in the Adirondacks that the terrain will not support elk is
+       wrong twice. */
+    if (outOfRange === 'habitat') {
+      var hgR = global.OG.habgrid;
+      var gate = hgR && hgR.rangeAt ? hgR.rangeAt(sp.habKey, lon, lat) : null;
+      if (gate != null && gate < 0.05) outOfRange = 'range';
+    }
 
     if (outOfRange) {
       return {
