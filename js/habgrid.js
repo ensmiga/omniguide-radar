@@ -198,10 +198,35 @@
     return v >= RANGE_FULL ? 1 : v / RANGE_FULL;
   }
 
+  /* MAP AND RECORDS TOGETHER.
+
+     For elk and moose the published map is the range and that is the
+     end of it. Whitetail are different in both directions. Their
+     records are plentiful and good where people are, and nearly
+     absent across the northern plains: read alone they left a third
+     of both Dakotas and eastern Montana blank, the Milk and the
+     Yellowstone included, in states that sell a whitetail tag for
+     every county. And the map alone marks whole watersheds, which
+     put the Red Desert at 65 out of 100 on its sagebrush.
+
+     So a whitetail is in range where either says so, and what the
+     ground is worth depends on which. With records, the land cover
+     is taken as it stands. On the map alone, the shrub class is left
+     out: there the deer are in the hay and the cottonwoods, not the
+     sage. That second surface is the "unrecorded" plane. */
+  var RANGE_WITH_RECORDS = { whitetail: 1 };
+
   /* 0 out of range, 1 in it. */
   function rangeAt(sp, lon, lat) {
     var pub = publishedAt(sp, lon, lat);
-    if (pub != null) return pub;
+    if (pub != null && !RANGE_WITH_RECORDS[sp]) return pub;
+    var rec = recordedAt(sp, lon, lat);
+    if (pub == null) return rec;
+    return rec == null || pub > rec ? pub : rec;
+  }
+
+  /* The range as the occurrence records alone have it. */
+  function recordedAt(sp, lon, lat) {
     var pres = presenceAt(sp, lon, lat);
     if (pres == null) return null;
     var knee = RANGE_KNEE[sp] == null ? 0.25 : RANGE_KNEE[sp];
@@ -211,6 +236,22 @@
     var share = regionalAt(sp, lon, lat);
     var round = share <= band[0] ? 0 : share >= band[1] ? 1 : (share - band[0]) / (band[1] - band[0]);
     return here > round ? here : round;
+  }
+
+  var leanPlanes = {};
+
+  function leanPlane(sp) {
+    if (!raw || !raw.unrecorded || !raw.unrecorded[sp]) return null;
+    var p = leanPlanes[sp];
+    if (p !== undefined) return p;
+    try {
+      var bin = global.atob(raw.unrecorded[sp]);
+      var a = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      p = a;
+    } catch (e) { p = null; }
+    leanPlanes[sp] = p;
+    return p;
   }
 
   function at(sp, lon, lat) {
@@ -231,6 +272,18 @@
     var top = a[i00] * (1 - tx) + a[i10] * tx;
     var bot = a[i01] * (1 - tx) + a[i11] * tx;
     var suit = (top * (1 - ty) + bot * ty) / 255;
+
+    if (RANGE_WITH_RECORDS[sp]) {
+      var pub = publishedAt(sp, lon, lat);
+      if (pub != null) {
+        var rec = recordedAt(sp, lon, lat) || 0;
+        var b = leanPlane(sp) || a;
+        var lean = ((b[i00] * (1 - tx) + b[i10] * tx) * (1 - ty) +
+                    (b[i01] * (1 - tx) + b[i11] * tx) * ty) / 255;
+        var recorded = suit * rec, mapped = lean * pub;
+        return recorded > mapped ? recorded : mapped;
+      }
+    }
 
     /* Combine with range here rather than at build time. */
     var inRange = rangeAt(sp, lon, lat);
@@ -570,7 +623,7 @@
   global.OG = global.OG || {};
   global.OG.habgrid = {
     at: at, presenceAt: presenceAt, regionalAt: regionalAt, rangeAt: rangeAt,
-    publishedAt: publishedAt,
+    publishedAt: publishedAt, recordedAt: recordedAt,
     rangeMeta: rangeRaw ? { source: rangeRaw.source, built: rangeRaw.built, added: rangeRaw.added,
                             species: Object.keys(rangeRaw.sp || {}) } : null,
     RANGE_KNEE: RANGE_KNEE, RANGE_REGION: RANGE_REGION,

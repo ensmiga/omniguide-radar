@@ -92,6 +92,20 @@ const SUIT = {
    woody cover too, and no whitetail recorded in it. */
 const SATURATE = { whitetail: 7, turkey: 5, waterfowl: 4, trout: 30 };
 
+/* MAPPED BUT NOT RECORDED.
+
+   Whitetail range is the occurrence records and the USGS map together
+   (see ingest/usgs-range.mjs for why). Where there are records, the
+   land cover table is taken at face value, shrub included, because
+   the brush country of south Texas is shrub and is the best whitetail
+   ground there is. Where only the map says they are present - the
+   western Dakotas, the Montana river valleys, the Bighorn Basin - the
+   deer are in the hay, the grain and the cottonwoods, and the sage
+   round them is empty. Land cover cannot tell mesquite from sagebrush,
+   so for that ground the classes listed here are left out, and the
+   result is written as a second plane. */
+const UNRECORDED_SKIP = { whitetail: [52] };
+
 /* Elk and open ground - see where it is applied. */
 const ELK_REFUGE = { forest: 0.125, relief: [60, 300], low: 0.30 };
 
@@ -1074,7 +1088,7 @@ async function main() {
   /* Share of game records, so a cell watched by a thousand birders and a
      cell watched by one are judged the same way. */
   const effortS = smooth(effort, 3);
-  const out = {}, presOut = {};
+  const out = {}, presOut = {}, unrecordedOut = {};
   const report = [];
   for (const sp of SPECIES) {
     const occS = smooth(occ[sp], 3);
@@ -1091,6 +1105,8 @@ async function main() {
     const band = ELEV[sp], suit = SUIT[sp], satK = SATURATE[sp] || 0;
     const suitPairs = Object.keys(suit).map((c) => [+c, suit[c]]);
     const vals = new Uint8Array(NCELL);
+    const skip = UNRECORDED_SKIP[sp] || null;
+    const lean = skip ? new Uint8Array(NCELL) : null;
     const ducks = sp === 'waterfowl' ? waterfowlSuit(lc, rice) : null;
     for (let k = 0; k < NCELL; k++) {
       if (!lc.total[k]) continue;
@@ -1176,8 +1192,21 @@ async function main() {
          Trout keeps its coldwater term here because that is a
          property of the water rather than of the records. */
       vals[k] = Math.round(clamp01(sp === 'trout' ? s * cold[k] : s) * 255);
+
+      if (lean) {
+        let t = 0;
+        for (let q = 0; q < suitPairs.length; q++) {
+          if (skip.indexOf(suitPairs[q][0]) >= 0) continue;
+          const arr = lc.counts.get(suitPairs[q][0]);
+          if (arr) t += suitPairs[q][1] * (arr[k] / lc.total[k]);
+        }
+        t *= elevFactor(ev.meanFt[k], band);
+        if (satK) t = 1 - Math.exp(-satK * t);
+        lean[k] = Math.round(clamp01(t) * 255);
+      }
     }
     out[sp] = Buffer.from(vals).toString('base64');
+    if (lean) unrecordedOut[sp] = Buffer.from(lean).toString('base64');
 
     /* Presence, downsampled by taking the strongest value in each
        coarse cell rather than the mean: a range edge should not be
@@ -1269,6 +1298,10 @@ async function main() {
        GBIF's map service, not a sample. */
     harvest: harvest,
     sp: out,
+
+    /* Suitability for ground a species is mapped on but not recorded
+       on - see UNRECORDED_SKIP. */
+    unrecorded: unrecordedOut,
 
     /* Occurrence presence, separate from suitability so the runtime
        can weight them per species. */

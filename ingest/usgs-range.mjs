@@ -107,6 +107,86 @@ const SPECIES = {
       { name: 'Peck Ranch, Missouri', lon: -91.18, lat: 37.05, km: 20, released: '2011-13', by: 'Missouri Department of Conservation' },
       { name: 'Tomblin WMA, West Virginia', lon: -82.00, lat: 37.80, km: 20, released: '2016-18', by: 'West Virginia DNR' }
     ]
+  },
+
+  /* MOOSE.
+
+     The record gate had the same two faults as for elk, on a smaller
+     scale. Against 32 places moose are and 32 they are not it scored
+     26 and 29: no moose in the Turtle Mountains, the Pembina Hills,
+     the Yaak, the Rocky Mountain Front or at Agassiz, and a block of
+     range in the Nebraska panhandle on thirty photographs of what is,
+     by every account, one wandering animal and its successors. That
+     last is why records cannot be rescued by counting them: the lone
+     moose near Harrisburg has thirty records over five years and the
+     whole population of the Upper Peninsula has two.
+
+     The USGS map scores 31 and 31. It has two shapes, known native
+     range and the introduced herds of Colorado and southern Wyoming,
+     checked the same way as for elk, and both are kept.
+
+     What it lacks is the prairie. Moose have moved out of the Turtle
+     Mountains onto the farmland of north-west North Dakota since it
+     was compiled, and the state draws moose licences there. Added as
+     the three hunting units North Dakota Game and Fish describes round
+     that country, from the written boundaries in its 2026 moose guide:
+     M10 is everything north of US 2 and west of ND 256 and US 83; M11
+     runs from US 2 south to ND 200, west of the Missouri; M9 lies
+     between US 83 and ND 1, north of ND 200. Highways are not straight
+     and these are boxes, so the edges are good to a cell or so.
+
+     M6 is left out, and that is a judgement rather than a measurement.
+     It is the whole southern half of the state in one unit, the
+     Department's page of licence numbers by unit would not load, and
+     the records are no help - two in M6, two in M10, none in M11. Half
+     a state is more than a unit line on its own will carry. */
+  moose: {
+    item: '59f5e2abe4b063d5d307dfe7',
+    name: 'Moose (Alces americanus) mMOOSx_CONUS_2001v1 Range Map',
+    shapes: [147709,35901],
+    keep: [1, 2],
+    added: [
+      { name: 'Unit M10, North Dakota', box: [-104.05, 48.20, -101.30, 49.00], by: 'North Dakota Game and Fish Department' },
+      { name: 'Unit M11, North Dakota', box: [-103.60, 47.35, -101.20, 48.20], by: 'North Dakota Game and Fish Department' },
+      { name: 'Unit M11, North Dakota, north-west corner', box: [-104.05, 47.85, -103.60, 48.20], by: 'North Dakota Game and Fish Department' },
+      { name: 'Unit M9, North Dakota', box: [-101.30, 47.45, -98.40, 49.00], by: 'North Dakota Game and Fish Department' }
+    ]
+  },
+  /* WHITETAIL.
+
+     Not a replacement this time but a second opinion. The record gate
+     is right wherever there are people to do the recording, and it
+     kept whitetail out of the Great Basin and the Mojave without
+     help. What it could not see was the northern plains: it had 62
+     percent of Montana in range, 67 of North Dakota and 64 of South
+     Dakota, in states that sell a whitetail tag for every county.
+     The Milk, the Musselshell, the Yellowstone and the Cheyenne were
+     blank.
+
+     The USGS map has those, and on its own it has too much: it marks
+     whole sub-watersheds, and the habitat table credits shrub, so the
+     Red Desert came up at 65 out of 100. So the two are used together
+     - in range where either says so, and ground the map alone vouches
+     for is credited without the shrub class. See RANGE_WITH_RECORDS
+     in js/habgrid.js and UNRECORDED_SKIP in ingest/habitat.mjs.
+     Against 47 places whitetail are and 20 they are not: 47 and 19,
+     from 43 and 20. The one now wrong is the Great Divide Basin, at 4
+     out of 100. Montana reads 96 percent, the Dakotas 100 and 93.
+
+     One shape, known native range.
+
+     NOT HERE, ON PURPOSE. Mule deer, pronghorn and turkey were put
+     through the same test and their record gates need no help: 35 of
+     35 and 22 of 22, 28 of 28 and 22 of 23, 41 of 41 and 9 of 12. The
+     USGS maps scored 35 and 21, 27 and 23, 40 and 9 - no better, and
+     each missing somewhere real (Parker Mountain for pronghorn, the
+     Clearwater for turkey). */
+  whitetail: {
+    item: '59f5e284e4b063d5d307df0f',
+    name: 'White-tailed Deer (Odocoileus virginianus) mWTDEx_CONUS_2001v1 Range Map',
+    shapes: [199008],
+    keep: [1],
+    added: []
   }
 };
 
@@ -234,8 +314,16 @@ function rasterise(shp, sp) {
   return inside;
 }
 
-function addCircles(inside, list) {
+/* Additions are a circle round a release site, or a box where the state
+   describes a hunting unit by the highways round it. */
+function addAreas(inside, list) {
   for (const c of list) {
+    if (c.box) {
+      for (let j = Math.max(0, Math.floor((c.box[1] - LAT0) / d)); j < Math.min(H, Math.ceil((c.box[3] - LAT0) / d)); j++) {
+        for (let i = Math.max(0, Math.floor((c.box[0] - LON0) / d)); i < Math.min(W, Math.ceil((c.box[2] - LON0) / d)); i++) inside[j * W + i] = 1;
+      }
+      continue;
+    }
     const dLat = c.km / 111.2, dLon = dLat / Math.cos(c.lat * RAD);
     for (let j = Math.floor((c.lat - dLat - LAT0) / d); j <= Math.ceil((c.lat + dLat - LAT0) / d); j++) {
       for (let i = Math.floor((c.lon - dLon - LON0) / d); i <= Math.ceil((c.lon + dLon - LON0) / d); i++) {
@@ -266,7 +354,7 @@ function toCells(inside) {
 const out = {
   source: 'U.S. Geological Survey Gap Analysis Project, Species Range Maps CONUS_2001 (2018), https://doi.org/10.5066/F7Q81B3R',
   note: 'Share of each cell inside the known range, 0-255. Vagrant and historical range left out. ' +
-        'Herds released since the map was compiled are added as circles and listed under added.',
+        'Ground added from state agencies since the map was compiled is listed under added.',
   built: new Date().toISOString().slice(0, 10),
   grid: { lon0: LON0, lat0: LAT0, d: D, nlon: NX, nlat: NY },
   sp: {},
@@ -277,11 +365,11 @@ for (const [id, sp] of Object.entries(SPECIES)) {
   const zip = await fetchArchive(sp);
   const inside = rasterise(unzip(zip, /\.shp$/i), sp);
   const mapped = toCells(inside).touched;
-  addCircles(inside, sp.added);
+  addAreas(inside, sp.added);
   const r = toCells(inside);
   out.sp[id] = Buffer.from(r.cells).toString('base64');
-  out.added[id] = sp.added.map((c) => ({ name: c.name, released: c.released, by: c.by }));
-  console.log(id + ': ' + mapped + ' cells from the USGS map, ' + (r.touched - mapped) + ' more from ' + sp.added.length + ' later releases');
+  out.added[id] = sp.added.map((c) => ({ name: c.name, released: c.released || null, by: c.by }));
+  console.log(id + ': ' + mapped + ' cells from the USGS map, ' + (r.touched - mapped) + ' more from ' + sp.added.length + ' additions');
 }
 
 writeFileSync(join(ROOT, 'js', 'range-grid.js'), 'window.US_RANGE=' + JSON.stringify(out) + ';\n');

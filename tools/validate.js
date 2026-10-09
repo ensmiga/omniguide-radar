@@ -124,63 +124,216 @@
       ]
     },
     muledeer: {
+      /* Lengthened when every species was put through the test elk failed.
+         The record gate got all of it, so mule deer stay on records. */
       yes: [
         ['W Colorado', -108.00, 39.20], ['Red Desert WY', -108.20, 41.80],
         ['Book Cliffs UT', -109.60, 39.40], ['Kaibab AZ', -112.20, 36.40],
-        ['E Oregon', -118.60, 43.60], ['SW Idaho', -116.20, 43.00]
+        ['E Oregon', -118.60, 43.60], ['SW Idaho', -116.20, 43.00],
+        ['WY Wyoming Range', -110.60, 42.60], ['AZ Kaibab', -112.20, 36.50],
+        ['AZ Strip', -113.20, 36.60], ['AZ desert (Gila Bend)', -112.80, 33.00],
+        ['NM Jicarilla', -107.20, 36.60], ['NM Gila', -108.30, 33.30],
+        ['TX Trans-Pecos', -103.50, 30.60], ['TX Canadian breaks', -101.00, 35.90],
+        ['OK Panhandle', -102.50, 36.80], ['W Kansas', -101.30, 38.80],
+        ['NE Sandhills west', -101.80, 42.00], ['NE Pine Ridge', -103.00, 42.70],
+        ['W South Dakota', -102.50, 44.50], ['ND Badlands', -103.40, 47.00],
+        ['E Montana', -106.00, 46.80], ['MT Missouri Breaks', -108.00, 47.60],
+        ['ID Salmon', -114.00, 45.00], ['ID Owyhee', -116.60, 42.60],
+        ['ID Southeast', -111.50, 42.70], ['UT Book Cliffs', -109.70, 39.50],
+        ['UT Paunsaugunt', -112.20, 37.50], ['NV Rubies', -115.40, 40.60],
+        ['NV central', -116.90, 39.20], ['CA Sierra east side', -118.60, 37.60],
+        ['CA Modoc', -120.50, 41.30], ['CA Mendocino blacktail', -123.30, 39.50],
+        ['CA San Diego backcountry', -116.60, 32.90], ['OR W blacktail', -123.40, 44.50],
+        ['WA W blacktail', -122.50, 46.80], ['WA Okanogan', -119.60, 48.40],
+        ['OR Steens', -118.70, 42.70], ['MT Bitterroot', -114.00, 46.00],
+        ['CO Gunnison', -106.90, 38.50]
       ],
       no: [
         ['Ohio', -82.90, 40.20], ['Georgia', -83.50, 32.80],
         ['Pennsylvania', -77.80, 40.90], ['Mississippi', -89.80, 32.40],
-        ['Illinois', -89.20, 40.10]
+        ['Illinois', -89.20, 40.10], ['Iowa', -93.60, 42.00], ['Illinois', -89.00, 40.00],
+        ['Missouri', -92.50, 38.50], ['E Texas', -95.00, 31.50],
+        ['Louisiana', -92.00, 31.00], ['Arkansas', -92.50, 34.80],
+        ['Minnesota central', -93.50, 46.00], ['Wisconsin', -89.80, 44.50],
+        ['Michigan', -84.60, 44.00], ['Ohio', -82.90, 40.00],
+        ['Pennsylvania', -77.50, 41.00], ['New York', -75.50, 43.00],
+        ['Georgia', -83.50, 32.50], ['Florida', -81.50, 28.50],
+        ['E Oklahoma', -95.50, 35.50], ['E Kansas', -95.50, 38.50],
+        ['E Nebraska', -96.50, 41.00], ['E North Dakota', -97.20, 47.50],
+        ['Houston', -95.37, 29.76], ['Dallas', -96.80, 32.80],
+        ['Tennessee', -86.50, 35.80], ['Maine', -69.00, 45.20]
       ]
     },
     whitetail: {
+      /* Lengthened when every species was put through the test elk failed.
+         The western Dakotas and the Montana river valleys are here because
+         the first list had none of them and the record gate was missing a
+         third of each state. Whitetail range is records and the USGS map
+         together - see RANGE_WITH_RECORDS in js/habgrid.js. */
       yes: [
         ['Iowa', -93.60, 41.90], ['Buffalo Co WI', -91.75, 44.37],
         ['Texas Hill Country', -99.10, 30.30], ['S Georgia', -83.40, 31.40],
         ['Pennsylvania', -77.80, 40.90], ['Milk River MT', -107.90, 48.40],
-        ['E Colorado bottoms', -102.60, 40.60], ['N Idaho', -116.50, 47.80]
+        ['E Colorado bottoms', -102.60, 40.60], ['N Idaho', -116.50, 47.80],
+        ['ID Panhandle', -116.50, 47.50], ['MT Northwest', -114.50, 48.30],
+        ['WA Northeast', -117.60, 48.50], ['MT Milk River', -107.50, 48.40],
+        ['MT Yellowstone River', -105.00, 46.70], ['WY Black Hills', -104.30, 44.50],
+        ['WY North Platte', -104.20, 42.00], ['CO South Platte', -103.20, 40.60],
+        ['CO Arkansas River', -102.60, 38.10], ['AZ Coues sky islands', -110.70, 31.80],
+        ['AZ Chiricahuas', -109.30, 31.90], ['TX South', -98.50, 27.50],
+        ['IL Pike County', -90.90, 39.60], ['SE Kansas', -95.20, 37.50],
+        ['Iowa', -93.00, 41.00], ['MI Northern Lower', -84.50, 44.80],
+        ['Pennsylvania', -77.80, 41.20], ['NY Southern Tier', -77.00, 42.20],
+        ['Maine', -69.50, 44.80], ['Georgia', -83.50, 32.50],
+        ['AL Black Belt', -87.30, 32.40], ['Mississippi', -90.00, 32.80],
+        ['FL Panhandle', -85.50, 30.60], ['FL Big Cypress', -81.20, 26.00],
+        ['SE Ohio', -81.80, 39.60], ['W Kentucky', -87.50, 37.30],
+        ['Louisiana', -92.20, 31.50], ['Oklahoma', -96.50, 35.50],
+        ['NE Missouri River', -96.50, 42.00], ['SD James River', -98.00, 44.40],
+        ['North Dakota', -98.50, 47.00], ['OR Roseburg (Columbian)', -123.30, 43.30],
+        ['OR Northeast', -117.50, 45.50], ['Missouri Ozarks', -91.50, 37.30],
+        ['Virginia', -78.50, 37.50], ['Minnesota', -94.50, 46.50],
+        ['SD Cheyenne River', -102.00, 44.50], ['ND Little Missouri', -103.40, 47.00],
+        ['MT Musselshell', -108.00, 46.50], ['WY Bighorn Basin (Basin)', -108.05, 44.38],
+        ['NE Sandhills (Loup)', -100.50, 42.00], ['KS Smoky Hill', -100.50, 38.80],
+        ['TX Panhandle', -101.50, 35.20], ['CO Republican River', -102.30, 40.05],
+        ['ND Missouri River', -100.80, 46.80]
       ],
       no: [
         ['Nevada Great Basin', -116.50, 39.50], ['Utah west desert', -113.00, 39.50],
-        ['Mojave CA', -116.20, 34.80], ['Central AZ desert', -112.60, 33.20]
+        ['Mojave CA', -116.20, 34.80], ['Central AZ desert', -112.60, 33.20],
+        ['UT central', -112.50, 39.00], ['CA Central Valley', -120.50, 37.00],
+        ['CA Sierra', -119.50, 37.80], ['Los Angeles', -118.25, 34.05],
+        ['AZ Sonoran floor (Gila Bend)', -112.70, 32.95], ['Mojave', -116.00, 35.00],
+        ['WA Olympics', -123.80, 47.80], ['OR coast', -123.90, 45.00],
+        ['OR Great Basin', -119.50, 43.00], ['WY Red Desert', -108.80, 41.80],
+        ['AZ Kaibab', -112.20, 36.50], ['NM San Juan Basin', -108.20, 36.40],
+        ['Las Vegas', -115.15, 36.17], ['UT West Desert', -113.50, 40.70],
+        ['San Francisco', -122.44, 37.76], ['WY Great Divide Basin', -108.00, 42.10],
+        ['NM White Sands', -106.30, 32.80], ['AZ Painted Desert', -110.50, 35.50],
+        ['CO San Luis Valley floor', -105.90, 37.70]
       ]
     },
     moose: {
+      /* Lengthened when every species was put through the test elk failed.
+         The record gate scored 26 of 32 and 29 of 32 on this; moose range is
+         the USGS map now. Harrisburg and Wheaton are here because a
+         wandering moose is the thing a record gate cannot tell from a herd. */
       yes: [
         ['N Maine', -69.30, 46.30], ['Adirondacks NY', -74.30, 44.10],
         ['N Minnesota', -91.60, 47.90], ['NW Montana', -114.20, 48.40],
         ['Jackson WY', -110.70, 43.55], ['Uintas UT', -110.40, 40.70],
-        ['North Park CO', -106.30, 40.70]
+        ['North Park CO', -106.30, 40.70], ['ME Moosehead', -69.60, 45.60],
+        ['ME Allagash', -69.20, 46.60], ['ME Rangeley', -70.70, 45.00],
+        ['NH Pittsburg', -71.30, 45.10], ['VT Northeast Kingdom', -71.80, 44.80],
+        ['NY Adirondacks', -74.40, 44.30], ['MA Quabbin', -72.30, 42.45],
+        ['MI Upper Peninsula west', -88.00, 46.60], ['MN Arrowhead', -91.00, 47.80],
+        ['MN Agassiz', -95.90, 48.30], ['ND Turtle Mts', -100.00, 48.90],
+        ['ND Pembina Hills', -98.00, 48.90], ['ND Kenmare prairie', -102.10, 48.70],
+        ['MT Yaak', -115.70, 48.80], ['MT Big Hole', -113.40, 45.60],
+        ['MT Rocky Mtn Front', -112.60, 47.80], ['MT Centennial Valley', -111.80, 44.65],
+        ['ID Panhandle', -116.50, 48.30], ['ID Island Park', -111.30, 44.50],
+        ['ID Southeast', -111.30, 42.60], ['WY Jackson', -110.60, 43.70],
+        ['WY Bighorns', -107.20, 44.60], ['WY Snowy Range', -106.30, 41.30],
+        ['WY Pinedale', -110.00, 42.90], ['UT Uintas north slope', -110.50, 40.90],
+        ['UT Wasatch', -111.50, 40.70], ['UT Cache', -111.60, 41.80],
+        ['CO Grand Mesa', -108.00, 39.05], ['CO Creede', -106.90, 37.85],
+        ['WA Selkirks', -117.50, 48.60], ['WA Mt Spokane', -117.10, 47.90]
       ],
       no: [
-        ['Kansas', -98.50, 38.50], ['Texas', -97.50, 31.50],
-        ['Georgia', -83.50, 32.80], ['Nebraska', -99.00, 41.00],
-        ['Ohio', -82.90, 40.20]
+        ['Kansas', -98.50, 38.50], ['Texas', -97.50, 31.50], ['Georgia', -83.50, 32.80],
+        ['Nebraska', -99.00, 41.00], ['Ohio', -82.90, 40.20],
+        ['Pennsylvania', -77.50, 41.00], ['Ohio', -82.90, 40.00],
+        ['Illinois', -89.00, 40.00], ['Iowa', -93.60, 42.00], ['Missouri', -92.50, 38.50],
+        ['Harrisburg NE', -103.74, 41.55], ['Nebraska Sandhills', -100.50, 42.00],
+        ['Texas', -99.00, 31.00], ['Oklahoma', -97.50, 35.50],
+        ['Flagstaff AZ', -111.60, 35.20], ['California Sierra', -120.50, 39.50],
+        ['W Oregon', -123.00, 44.00], ['WA Olympics', -123.80, 47.80],
+        ['ID Snake River Plain', -114.50, 42.60], ['Las Vegas', -115.15, 36.17],
+        ['Georgia', -83.50, 32.50], ['Florida', -81.50, 28.50],
+        ['Tennessee', -86.50, 35.80], ['Kentucky', -84.50, 37.80],
+        ['Virginia', -78.50, 37.50], ['West Virginia', -80.50, 38.60],
+        ['Madison WI', -89.40, 43.07], ['Lansing MI', -84.55, 42.73],
+        ['Wheaton MN', -96.50, 45.80], ['S Minnesota', -94.00, 44.20],
+        ['Pierre SD', -100.30, 44.40], ['Denver', -104.99, 39.74],
+        ['UT West Desert', -113.50, 40.70], ['New Jersey', -74.60, 40.20],
+        ['Maryland', -76.80, 39.20], ['Long Island', -73.00, 40.80]
       ]
     },
     pronghorn: {
+      /* Lengthened when every species was put through the test elk failed.
+         The record gate got 28 of 28 and 22 of 23; pronghorn stay on records. */
       yes: [
         ['Red Desert WY', -108.20, 41.80], ['E Montana', -105.80, 46.40],
         ['NE New Mexico', -104.20, 36.10], ['W Nebraska', -103.40, 41.60],
-        ['SE Oregon', -118.80, 42.60], ['W Texas', -102.90, 31.40]
+        ['SE Oregon', -118.80, 42.60], ['W Texas', -102.90, 31.40],
+        ['WY Red Desert', -108.50, 41.80], ['WY Thunder Basin', -105.20, 43.60],
+        ['WY Shirley Basin', -106.30, 42.20], ['E Montana', -106.50, 46.50],
+        ['MT Malta', -107.90, 48.20], ['CO Northeast', -104.00, 40.80],
+        ['CO Southeast', -103.50, 37.70], ['CO Northwest', -108.20, 40.60],
+        ['NM plains', -104.50, 34.50], ['NM Northeast', -104.50, 36.50],
+        ['TX Marfa', -104.00, 30.30], ['TX Panhandle', -102.30, 35.90],
+        ['W Kansas', -101.60, 38.80], ['W Nebraska', -103.30, 41.90],
+        ['W South Dakota', -102.80, 44.80], ['SW North Dakota', -103.30, 46.30],
+        ['OR Hart Mountain', -119.60, 42.50], ['NV Sheldon', -119.20, 41.80],
+        ['CA Modoc', -120.30, 41.60], ['ID Craters', -113.50, 43.20],
+        ['ID Lemhi', -113.60, 44.60], ['UT Parker Mountain', -111.80, 38.30],
+        ['UT West Desert', -113.60, 39.50], ['UT Uinta Basin', -109.60, 40.20],
+        ['AZ Chino Valley', -112.50, 34.80], ['AZ Anderson Mesa', -111.40, 35.00],
+        ['AZ Sonoita', -110.60, 31.70], ['OK Panhandle', -102.30, 36.80]
       ],
       no: [
-        ['Ohio', -82.90, 40.20], ['Alabama', -86.80, 32.60],
-        ['Missouri', -92.50, 38.50], ['Maine', -69.30, 45.30],
-        ['Florida', -81.50, 28.50]
+        ['Ohio', -82.90, 40.20], ['Alabama', -86.80, 32.60], ['Missouri', -92.50, 38.50],
+        ['Maine', -69.30, 45.30], ['Florida', -81.50, 28.50], ['Seattle', -122.33, 47.61],
+        ['WA Olympics', -123.80, 47.80], ['W Oregon', -123.00, 44.00],
+        ['San Francisco', -122.44, 37.76], ['Los Angeles', -118.25, 34.05],
+        ['Iowa', -93.60, 42.00], ['Minnesota', -94.50, 46.50], ['Illinois', -89.00, 40.00],
+        ['E Texas', -95.00, 31.50], ['Houston', -95.37, 29.76],
+        ['E Kansas', -95.50, 38.50], ['E Nebraska', -96.50, 41.00],
+        ['E South Dakota', -97.00, 44.00], ['ID Panhandle', -116.30, 47.80],
+        ['MT Northwest', -114.50, 48.30], ['CO San Juans high', -107.60, 37.80],
+        ['CA Sierra', -119.50, 37.80], ['Phoenix', -112.07, 33.45],
+        ['Las Vegas', -115.15, 36.17], ['Georgia', -83.50, 32.50],
+        ['Pennsylvania', -77.50, 41.00]
       ]
     },
     turkey: {
+      /* Lengthened when every species was put through the test elk failed.
+         The record gate got 41 of 41 and 9 of 12; turkey stay on records. */
       yes: [
         ['Missouri', -92.50, 38.50], ['Pennsylvania', -77.80, 40.90],
         ['Alabama', -86.80, 32.60], ['Texas Hill Country', -99.10, 30.30],
-        ['Black Hills SD', -103.70, 43.90], ['New York', -75.50, 42.60]
+        ['Black Hills SD', -103.70, 43.90], ['New York', -75.50, 42.60],
+        ['SD Black Hills', -103.70, 44.00], ['WY Northeast', -104.50, 44.50],
+        ['MT Southeast', -105.50, 45.60], ['CO Southwest', -107.90, 37.30],
+        ['NM Lincoln NF', -105.60, 33.00], ['NM Gila', -108.30, 33.30],
+        ['AZ Mogollon Rim', -111.00, 34.40], ['AZ Kaibab', -112.20, 36.60],
+        ['ID Clearwater', -116.30, 46.20], ['WA Northeast', -117.80, 48.30],
+        ['WA Klickitat', -121.20, 45.80], ['OR Southwest', -123.30, 43.00],
+        ['CA Sierra foothills', -120.80, 38.50], ['CA Coast Range', -122.80, 38.80],
+        ['NE Niobrara', -100.00, 42.80], ['Kansas', -98.00, 38.50],
+        ['OK west', -99.50, 35.50], ['TX Hill Country', -99.20, 30.30],
+        ['TX South', -98.30, 28.30], ['TX Rolling Plains', -100.20, 33.50],
+        ['FL Osceola', -81.20, 27.60], ['Georgia', -83.50, 32.50],
+        ['Alabama', -87.30, 32.40], ['Mississippi', -90.00, 32.80],
+        ['MO Ozarks', -91.50, 37.30], ['Iowa', -93.00, 41.00],
+        ['WI Southwest', -90.60, 43.20], ['MI Northern Lower', -84.50, 44.80],
+        ['Pennsylvania', -77.80, 41.20], ['Vermont', -72.80, 43.80],
+        ['Maine south', -70.30, 44.20], ['SE Ohio', -81.80, 39.60],
+        ['Kentucky', -84.50, 37.80], ['Tennessee', -86.50, 35.80],
+        ['Virginia', -78.50, 37.50], ['Arkansas', -92.50, 34.80],
+        ['Louisiana', -92.20, 31.50], ['MN Southeast', -92.00, 44.00],
+        ['ND Missouri River', -100.80, 46.80], ['UT South', -112.50, 37.60]
       ],
       no: [
         ['Mojave CA', -116.20, 34.80], ['Nevada interior', -116.50, 39.50],
-        ['Sonoran AZ', -113.40, 33.00]
+        ['Sonoran AZ', -113.40, 33.00], ['NV central', -116.50, 39.00],
+        ['UT West Desert', -113.50, 40.50], ['Mojave', -116.00, 35.00],
+        ['Yuma', -114.60, 32.70], ['WY Red Desert', -108.80, 41.80],
+        ['CO Sawatch alpine', -106.40, 39.10], ['OR Alvord', -118.50, 42.50],
+        ['Death Valley', -116.90, 36.40], ['Everglades', -80.80, 25.60],
+        ['Las Vegas', -115.15, 36.17], ['Los Angeles', -118.25, 34.05],
+        ['Bonneville flats', -113.80, 40.75]
       ]
     },
     upland: {
@@ -213,16 +366,57 @@
       ]
     },
     trout: {
+      /* Lengthened when every species was put through the test elk failed,
+         and this is the one that fails it worst: about half of these
+         waters come up blank, the Yakima, the Truckee, the South Holston
+         and most of the East among them. It is not a range problem and a
+         range map will not fix it. Trout habitat here is read from the
+         rivers large enough to be on a continental map, and a trout
+         stream is mostly not that. It needs a real stream network. Left
+         failing on purpose, so the number is there to be moved. */
       yes: [
         ['Madison MT', -111.60, 45.30], ['Au Sable MI', -84.71, 44.66],
         ['Penns Creek PA', -77.32, 40.88], ['Battenkill VT', -73.10, 43.08],
         ['White R AR', -92.56, 36.37], ['Frying Pan CO', -106.82, 39.36],
         ['Davidson NC', -82.78, 35.28], ['Salmon R NY', -76.13, 43.52],
-        ['Driftless WI', -90.80, 43.55]
+        ['Driftless WI', -90.80, 43.55], ['Driftless WI', -90.90, 43.60],
+        ['Au Sable MI', -84.50, 44.70], ['Pere Marquette MI', -86.00, 43.90],
+        ['Brule WI', -91.60, 46.60], ['North Shore MN', -91.20, 47.50],
+        ['White River AR', -92.50, 36.40], ['Norfork AR', -92.24, 36.25],
+        ['Taneycomo MO', -93.20, 36.65], ['Current River MO', -91.50, 37.40],
+        ['South Holston TN', -82.10, 36.50], ['Smokies TN', -83.50, 35.60],
+        ['Davidson NC', -82.70, 35.30], ['Chattahoochee GA', -84.10, 34.10],
+        ['Cumberland KY', -85.10, 36.87], ['Shenandoah VA', -78.40, 38.50],
+        ['Elk River WV', -80.30, 38.50], ['Savage MD', -79.10, 39.50],
+        ['Gunpowder MD', -76.70, 39.60], ['Letort PA', -77.20, 40.20],
+        ['Penns Creek PA', -77.40, 40.85], ['Spring Creek PA', -77.80, 40.85],
+        ['Erie tributaries PA', -80.20, 42.00], ['Beaverkill NY', -74.90, 41.95],
+        ['West Branch Delaware NY', -75.30, 42.00], ['Ausable NY', -73.80, 44.40],
+        ['Salmon River NY', -76.00, 43.50], ['Battenkill VT', -73.20, 43.10],
+        ['White Mountains NH', -71.40, 44.20], ['Rangeley ME', -70.70, 45.00],
+        ['Guadalupe TX', -98.20, 29.87], ['Lower Mountain Fork OK', -94.70, 34.10],
+        ['San Juan NM', -107.70, 36.80], ['Lees Ferry AZ', -111.60, 36.87],
+        ['Green River UT', -109.40, 40.90], ['Provo UT', -111.55, 40.40],
+        ['Madison MT', -111.60, 45.00], ['Bighorn MT', -107.90, 45.30],
+        ['Missouri at Craig MT', -112.00, 47.10], ['Henrys Fork ID', -111.30, 44.30],
+        ['Silver Creek ID', -114.10, 43.30], ['Deschutes OR', -121.20, 44.80],
+        ['Yakima WA', -120.50, 46.90], ['McCloud CA', -122.10, 41.10],
+        ['Truckee CA', -120.20, 39.40], ['Owens CA', -118.50, 37.50],
+        ['South Platte Deckers CO', -105.20, 39.25], ['North Platte WY', -106.70, 42.20],
+        ['Spearfish SD', -103.85, 44.40]
       ],
       no: [
         ['Phoenix AZ', -112.07, 33.45], ['Houston TX', -95.37, 29.76],
-        ['Kansas prairie', -98.50, 38.50], ['S Florida', -80.90, 25.90]
+        ['Kansas prairie', -98.50, 38.50], ['S Florida', -80.90, 25.90],
+        ['Florida', -81.50, 28.50], ['S Louisiana', -91.00, 29.80],
+        ['Dallas', -96.80, 32.80], ['S Georgia', -83.30, 31.20],
+        ['S Alabama', -87.50, 31.20], ['Mississippi delta', -90.80, 33.40],
+        ['Yuma', -114.60, 32.70], ['Mojave', -116.00, 35.00], ['W Kansas', -100.50, 38.50],
+        ['W Oklahoma', -99.50, 35.50], ['S Texas', -98.50, 27.50],
+        ['Iowa farmland', -93.60, 42.00], ['Illinois', -89.00, 40.00],
+        ['W Ohio', -84.00, 40.30], ['Red River valley ND', -97.00, 47.50],
+        ['E South Dakota', -98.00, 44.40], ['E Nebraska', -96.80, 41.00],
+        ['CA Central Valley floor', -120.50, 36.80], ['E Kansas', -95.50, 38.50]
       ]
     }
   };
