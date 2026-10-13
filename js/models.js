@@ -309,7 +309,11 @@
       freezeLock: true,
       pressureSens: 0.13,
       distWeight: 0.20,
-      habFloor: 0.02, rangeFloor: 0.015,
+      /* Was 0.02, which let through whatever water the land cover found
+         in the Wind Rivers above treeline (0.06) and in Canyonlands
+         (0.06). The lowest real duck water on the test list is the
+         Texas playas at 0.12. */
+      habFloor: 0.08, rangeFloor: 0.015,
       weights: { hab: 0.26, move: 0.30, mig: 0.28, wx: 0.16 },
       blurb: 'All duck species together - dabblers and divers, early teal through late mallards. ' +
              'The chronology is deliberately broad because the group is.',
@@ -347,15 +351,18 @@
     },
     {
       id: 'canada-goose', name: 'Canada goose', group: 'waterfowl', pursuit: 'hunt',
-      chronTaxa: ['Branta canadensis', 'Anser caerulescens'],
+      chronTaxa: ['Branta canadensis', 'Anser caerulescens', 'Anser albifrons'],
       distKey: 'goose',
-      migratory: true, migPeak: 322, migWidth: 40, habKey: 'waterfowl',
+      migratory: true, migPeak: 322, migWidth: 40, habKey: 'goose',
       freezeLock: true,
       pressureSens: 0.12,
       distWeight: 0.20,
-      habFloor: 0.02, rangeFloor: 0.015,
+      /* Set between the thinnest real goose ground on the test list
+         (Merrymeeting Bay, 0.09) and the Everglades (0.06). */
+      habFloor: 0.07, rangeFloor: 0.015,
       weights: { hab: 0.24, move: 0.36, mig: 0.22, wx: 0.18 },
-      blurb: 'Field feeder. Reads snow cover and feed availability more than freeze.',
+      blurb: 'Field feeder, scored on grain and pasture within reach of roost water. Reads snow cover and ' +
+             'feed availability more than freeze. Snow and white-fronted geese are named where the records show them.',
       movement: function (wx, hab) {
         var c = duckCommon(wx, hab);
         return blend([
@@ -365,7 +372,7 @@
           { w: 1.4, v: clamp01(wx.snowDepth * 1.8), hi: 'Snow cover concentrating birds on exposed grain', lo: null },
           { w: 1.0, v: c.front.v, hi: 'Frontal passage overhead' },
           { w: 0.9, v: c.press.v, hi: 'Favorable pressure change', lo: 'Stagnant high pressure' },
-          { w: 1.0, v: clamp01(hab.openness * 0.7 + hab.waterfowl * 0.6), hi: 'Open agricultural ground next to roost water', lo: 'Little field feed near roost water' },
+          { w: 1.0, v: clamp01(hab.goose * 1.3), hi: 'Feed fields within a morning flight of roost water', lo: 'Little field feed near roost water' },
           /* Geese need the roost to stay liquid as much as ducks do, and
              a late-season flock will sit on a tailwater and fly grain for
              weeks after every pond in the county has locked up. Weighted
@@ -557,9 +564,14 @@
       migratory: false, habKey: 'upland',
       pressureSens: 0.09,
       distWeight: 0.30,
-      habFloor: 0.02, rangeFloor: 0.025,
+      /* Some upland bird is recorded nearly everywhere, so the records
+         cannot be what says no; the cover has to. Set between the
+         thinnest real ground on the test list (south Florida flatwoods,
+         0.22) and the salt pan at Badwater (0.15). */
+      habFloor: 0.18, rangeFloor: 0.025,
       weights: { hab: 0.40, move: 0.36, mig: 0, wx: 0.24 },
-      blurb: 'Pheasant, quail and grouse together. Scenting conditions for the dog drive most of it.',
+      blurb: 'Pheasant, partridge, quail, grouse and chukar together, each place scored on the bird its cover ' +
+             'fits. Scenting conditions for the dog drive most of the rest.',
       movement: function (wx, hab, doy) {
         /* Scent holds in cool, damp, lightly moving air and dies in hot, dry,
            windy conditions. For a dog hunter that matters more than the birds. */
@@ -570,9 +582,9 @@
         return blend([
           { w: 1.9, v: scent, hi: 'Cool damp air holding scent well for the dog',
             lo: 'Hot, dry or windy - scenting conditions will be poor' },
-          { w: 1.5, v: clamp01(hab.upland * 1.3), hi: 'Strong cover and grain edge', lo: 'Little holding cover here' },
+          { w: 1.5, v: clamp01(hab.upland * 1.3), hi: 'Good cover for the birds recorded here', lo: 'Little holding cover here' },
           { w: 1.2, v: 0.25 + 0.75 * season, hi: 'Inside the normal upland season window',
-            lo: 'Early - crops are likely still standing and birds are scattered' },
+            lo: 'Early in the fall - cover is still heavy and birds are scattered' },
           { w: 1.1, v: 1 - clamp01(ramp(wx.windSpd, 14, 32)),
             hi: 'Manageable wind', lo: 'Heavy wind pushes birds into the thickest cover and makes them run' },
           { w: 1.0, v: clamp01(wx.snowDepth * 1.5 + 0.35),
@@ -634,15 +646,15 @@
      below the same basin in September. Regenerate with tools/calibrate.js
      after changing any species model. */
   var CAL = {
-    'ducks':        [1.4, 46.9],
-    'canada-goose': [1.6, 48.0],
+    'ducks':        [2.6, 48.5],
+    'canada-goose': [3.2, 47.4],
     'elk':          [8.5, 78.2],
     'whitetail':    [11.1, 81.1],
     'muledeer':     [16.5, 76.9],
     'moose':        [8.1, 71.9],
     'pronghorn':    [9.5, 76.6],
     'turkey':       [19.8, 77.6],
-    'upland':       [10.5, 82.7],
+    'upland':       [23.1, 81.8],
     'trout':        [14.6, 81.1]
   };
   var CAL_LO = 8, CAL_HI = 94;   // the scores those two anchors map to

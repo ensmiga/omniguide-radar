@@ -209,6 +209,9 @@
 
   var habCache = new Map();
 
+  var KIND_DEFINITE = { rice: 1, coastal: 1, marsh: 1, reservoir: 1 };
+  var REGION_KEEPS = { pothole: 1, playa: 1, timber: 1 };
+
   function habitat(lon, lat) {
     var key = (Math.round(lon * 40) * 4096 + Math.round(lat * 40));
     var hit = habCache.get(key);
@@ -312,9 +315,13 @@
        tailwater, and nothing else. */
     var hg = global.OG && global.OG.habgrid;
     var realSrc = {};
+    /* Geese are scored on field feed within reach of a roost, not on the
+       duck surface. null until the raster answers; falls back below. */
+    var goose = null;
     if (hg && hg.ready) {
       var r;
       if ((r = hg.at('waterfowl', lon, lat)) != null) { wf = r; realSrc.waterfowl = true; }
+      if ((r = hg.at('goose', lon, lat)) != null) { goose = r; realSrc.goose = true; }
       if ((r = hg.at('elk', lon, lat)) != null) { elk = r; realSrc.elk = true; }
       if ((r = hg.at('whitetail', lon, lat)) != null) { whitetail = r; realSrc.whitetail = true; }
       if ((r = hg.at('muledeer', lon, lat)) != null) { muledeer = r; realSrc.muledeer = true; }
@@ -323,10 +330,23 @@
       if ((r = hg.at('upland', lon, lat)) != null) { upland = r; realSrc.upland = true; }
       if ((r = hg.at('pronghorn', lon, lat)) != null) { pronghorn = r; realSrc.pronghorn = true; }
       if ((r = hg.at('trout', lon, lat)) != null) { trout = r; realSrc.trout = true; }
+      /* The kind of water, from land cover. The regions above were the
+         only source, and outside them everywhere read as "any reliable
+         open water". Inside one, land cover still wins where it reads
+         something definite - the Sacramento Valley region had Suisun
+         Marsh down as rice, and the Texas rice prairie had Matagorda
+         Bay - but not over the three kinds a region knows better:
+         potholes and playas, which land cover has no name for, and
+         flooded timber, which it sees as the rice round it. Nor does
+         it get to call a region timber: it read the pocosin round
+         Lake Mattamuskeet and Currituck Sound that way. */
+      var kind = hg.waterKindAt ? hg.waterKindAt(lon, lat) : null;
+      if (kind && (!region || (KIND_DEFINITE[kind] && !REGION_KEEPS[cls]))) cls = kind;
     }
+    if (goose == null) goose = wf;
 
     var out = {
-      elev: elev, waterfowl: wf, trout: trout, elk: elk,
+      elev: elev, waterfowl: wf, goose: goose, trout: trout, elk: elk,
       whitetail: whitetail, muledeer: muledeer, moose: moose,
       turkey: turkey, upland: upland, pronghorn: pronghorn,
       cls: cls, region: region, water: tw, waterCls: tcls,

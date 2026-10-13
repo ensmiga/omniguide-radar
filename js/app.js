@@ -458,11 +458,12 @@
            'range, from agency surveys. One of the things that says where trout are. Stocking records, ' +
            'which are most of that database, are not used.', l: 'Public domain' },
       { n: 'GBIF', u: 'https://www.gbif.org/', gbif: true,
-        d: 'Occurrence records 2015-2025 for 30 taxa, counted in full through the GBIF maps and statistics ' +
-           'services - about 20.6 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +
+        d: 'Occurrence records 2015-2025 for 44 taxa, counted in full through the GBIF maps and statistics ' +
+           'services - about 25.9 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +
            'decide whether a species is in range - except elk and moose, which use the USGS map, and whitetail, ' +
            'which use both - and when waterfowl normally arrive, how many are normally ' +
-           'present by date, and the species mix in the decoy advice. They do not decide how good a place is.',
+           'present by date, and which birds the decoy, goose and upland advice names. They do not decide ' +
+           'how good a place is, except that for upland birds they say which bird\'s cover to judge it by.',
         l: 'CC BY 4.0 and CC0 1.0', lu: CC_BY }
     ] },
     { group: 'Regulations', items: [

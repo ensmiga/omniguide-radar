@@ -72,6 +72,8 @@ const SUIT = {
   turkey:    { 41: 1.00, 43: 0.95, 42: 0.70, 81: 0.62, 82: 0.56, 52: 0.42, 90: 0.55, 21: 0.30 },
   upland:    { 82: 0.88, 71: 0.90, 81: 0.80, 52: 0.70, 41: 0.30, 90: 0.30, 21: 0.15 },
   waterfowl: { 95: 1.00, 90: 0.86, 11: 0.80, 82: 0.70, 81: 0.45, 71: 0.30, 12: 0.05 },
+  /* Not used as a table - see gooseSuit - but a species needs a row to exist. */
+  goose:     { 82: 1.00, 81: 0.70, 71: 0.30, 95: 0.30 },
   /* A fish only cares about one class. Everything else here is the
      riparian margin that tells you a stream runs through the cell even
      when the stream itself is narrower than a pixel. */
@@ -144,6 +146,7 @@ const ELEV = {
   turkey:    [-400, -300, 9500, 11000],
   upland:    [-400, -300, 10500, 12000],
   waterfowl: [-400, -300, 9500, 11800],
+  goose:     [-400, -300, 9300, 10300],
   trout:     null
 };
 
@@ -156,16 +159,38 @@ const TAXA = {
   moose:     ['Alces alces'],
   pronghorn: ['Antilocapra americana'],
   turkey:    ['Meleagris gallopavo'],
+  /* Sixteen birds, not nine. The first list was the birds of the plains
+     and the Great Lakes, and left out the quail of the Southwest and
+     the grouse of the western mountains entirely: with no Gambel's
+     quail in it, the records round Tucson came out 88 percent pheasant,
+     on a handful of released birds, and the advice followed. */
   upland:    ['Phasianus colchicus', 'Colinus virginianus', 'Tympanuchus phasianellus',
               'Centrocercus urophasianus', 'Bonasa umbellus', 'Callipepla californica',
-              'Alectoris chukar', 'Perdix perdix', 'Tympanuchus cupido'],
+              'Alectoris chukar', 'Perdix perdix', 'Tympanuchus cupido',
+              'Callipepla gambelii', 'Callipepla squamata', 'Cyrtonyx montezumae',
+              'Oreortyx pictus', 'Dendragapus obscurus', 'Dendragapus fuliginosus',
+              'Canachites canadensis'],
   waterfowl: ['Anas platyrhynchos', 'Anas acuta', 'Mareca americana', 'Spatula discors',
               'Aythya affinis', 'Aythya valisineria', 'Anas crecca', 'Mareca strepera',
               'Branta canadensis', 'Anser caerulescens',
               /* The bird the Bighorn check said was missing: 1056
                  records there against 279 pintail, and the one you
                  would actually decoy on a cold tailwater. */
-              'Bucephala clangula'],
+              'Bucephala clangula',
+              /* And the ones the South and the East said were missing.
+                 Wood ducks are most of the early bag from Maine to
+                 Louisiana, ringnecks are Florida's duck, black ducks
+                 the Northeast's, mottled ducks the Gulf's, redheads
+                 the Laguna Madre's - and with none of them in the
+                 list, the spread for the ACE Basin was blue-winged
+                 teal. Specklebellies for the same reason on the
+                 goose side. */
+              'Aix sponsa', 'Aythya collaris', 'Anas rubripes', 'Anas fulvigula',
+              'Aythya americana', 'Spatula clypeata', 'Anser albifrons'],
+  /* Geese on their own as well, because where a goose is hunted is not
+     where a duck is: see gooseSuit. The same records as above, counted
+     once - the downloads are shared. */
+  goose:     ['Branta canadensis', 'Anser caerulescens', 'Anser albifrons'],
   trout:     ['Oncorhynchus mykiss', 'Salmo trutta', 'Salvelinus fontinalis',
               'Oncorhynchus clarkii']
 };
@@ -195,7 +220,7 @@ const COMPOSITION = ['waterfowl', 'upland'];
    to freeze-up, and blue-winged teal - all over the north in June,
    gone before most openers - get recommended in North Dakota in
    November. Everything else here is resident and keeps every month. */
-const SEASON_MONTHS = { waterfowl: [9, 10, 11, 12, 1] };
+const SEASON_MONTHS = { waterfowl: [9, 10, 11, 12, 1], goose: [9, 10, 11, 12, 1] };
 
 /* Groups that migrate, and so need a calendar. */
 const CHRON_GROUPS = ['waterfowl'];
@@ -728,22 +753,24 @@ function loadNormals() {
   return win.US_NORMALS || null;
 }
 
-function coldwaterGrid(meanFt) {
+/* Mean air temperature over a run of weeks, degrees F, at every cell:
+   the three nearest stations by inverse distance, each moved to the
+   cell's own elevation. NaN where there is nothing to go on. */
+function normalsGrid(meanFt, week0, week1) {
   const N = loadNormals();
-  const out = new Float32Array(NCELL);
-  if (!N) { out.fill(0.5); return out; }
+  const out = new Float32Array(NCELL).fill(NaN);
+  if (!N) return out;
   const MISSING = -9999, LAPSE = 0.00357;
 
-  /* July mean per station, once. */
-  const julyF = new Float32Array(N.n);
+  const meanF = new Float32Array(N.n);
   for (let i = 0; i < N.n; i++) {
     let sum = 0, c = 0;
-    for (let w = 27; w <= 31; w++) {
+    for (let w = week0; w <= week1; w++) {
       const o = i * 52 + w;
       if (N.TX[o] === MISSING || N.TN[o] === MISSING) continue;
       sum += (N.TX[o] + N.TN[o]) / 20; c++;
     }
-    julyF[i] = c ? sum / c : NaN;
+    meanF[i] = c ? sum / c : NaN;
   }
 
   for (let iy = 0; iy < NLAT; iy++) {
@@ -755,7 +782,7 @@ function coldwaterGrid(meanFt) {
       /* Three nearest stations, inverse distance. */
       let b0 = [1e9, -1], b1 = [1e9, -1], b2 = [1e9, -1];
       for (let i = 0; i < N.n; i++) {
-        if (!isFinite(julyF[i])) continue;
+        if (!isFinite(meanF[i])) continue;
         const dx = (N.lon[i] - lon) * cosLat, dy = N.lat[i] - lat;
         const d2 = dx * dx + dy * dy;
         if (d2 < b0[0]) { b2 = b1; b1 = b0; b0 = [d2, i]; }
@@ -767,22 +794,31 @@ function coldwaterGrid(meanFt) {
         if (b[1] < 0) continue;
         const w = 1 / (b[0] + 0.02);
         const lapse = (N.elev[b[1]] - (isFinite(meanFt[k]) ? meanFt[k] : N.elev[b[1]])) * LAPSE;
-        num += (julyF[b[1]] + lapse) * w; den += w;
+        num += (meanF[b[1]] + lapse) * w; den += w;
       }
-      if (!den) { out[k] = 0.5; continue; }
-      const t = num / den;
-      /* Full below 68 F, nothing above 80 F.
-
-         Calibrated against real fisheries, not against water temperature
-         directly: a stream runs well below the July air mean because of
-         groundwater, shade and because the mean includes hot afternoons.
-         A first cut at 58-72 F scored Penns Creek 0.03 and the Madison
-         0.34, which would have wiped out trout almost everywhere outside
-         the high Rockies. At 68-80 the Madison and the Au Sable come out
-         full, Penns Creek 0.70, the Battenkill 0.88, and Phoenix and
-         Houston still zero. */
-      out[k] = Math.max(0, Math.min(1, (80 - t) / 12));
+      if (den) out[k] = num / den;
     }
+  }
+  return out;
+}
+
+function coldwaterGrid(meanFt) {
+  const july = normalsGrid(meanFt, 27, 31);
+  const out = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    const t = july[k];
+    if (!isFinite(t)) { out[k] = 0.5; continue; }
+    /* Full below 68 F, nothing above 80 F.
+
+       Calibrated against real fisheries, not against water temperature
+       directly: a stream runs well below the July air mean because of
+       groundwater, shade and because the mean includes hot afternoons.
+       A first cut at 58-72 F scored Penns Creek 0.03 and the Madison
+       0.34, which would have wiped out trout almost everywhere outside
+       the high Rockies. At 68-80 the Madison and the Au Sable come out
+       full, Penns Creek 0.70, the Battenkill 0.88, and Phoenix and
+       Houston still zero. */
+    out[k] = Math.max(0, Math.min(1, (80 - t) / 12));
   }
   return out;
 }
@@ -1229,6 +1265,216 @@ function waterfowlSuit(lc, rice) {
   return out;
 }
 
+/* ---------- upland, bird by bird ----------
+
+   "Upland birds" was one row of the table: grain, grass and brush good,
+   timber bad. That is a pheasant. Applied to everything, it scored the
+   ruffed grouse woods of northern Wisconsin 37 out of 100 and northern
+   Maine 14, and the quail plantations round Albany, Georgia 7 - piney
+   woods being, to a pheasant, no cover at all - while a wheat field in
+   Kansas scored 79.
+
+   Each bird gets its own row, and a cell is as good as the best bird
+   that is actually there. "Actually there" is from the records: a bird
+   with a quarter of the upland records round a cell counts in full, and
+   less than that counts in proportion. Not a weighted average, because
+   the records lean toward birds near roads and towns - at Farson,
+   Wyoming more than half are pheasants from the hay meadows, and an
+   average would have marked the sage grouse country round them down for
+   being poor pheasant ground.
+
+   Two numbers a bird, kept apart. The row is how well each kind of
+   cover fits it, and settles which bird a cell is about. The worth is
+   how much a cell that fits it should count for, and is a judgement:
+   with every bird at full worth, plain sagebrush came out the best
+   upland ground in the country on the strength of sage grouse, which
+   are thin on the ground and closed or permit-only across much of
+   their range, and of valley quail, which live along its creeks and
+   not across it.
+
+   Chukar need the ground to be steep as well as brushy. */
+const UPLAND_BIRDS = {
+  'Phasianus colchicus':       { 71: 1.00, 82: 0.95, 81: 0.78, 95: 0.67, 52: 0.28, 21: 0.11 },
+  'Perdix perdix':             { 82: 1.00, 71: 0.95, 81: 0.70, 52: 0.35 },
+  'Tympanuchus phasianellus':  { 71: 1.00, 52: 0.65, 81: 0.60, 82: 0.45, 41: 0.25 },
+  'Tympanuchus cupido':        { 71: 1.00, 81: 0.60, 82: 0.50 },
+  'Centrocercus urophasianus': { 52: 1.00, 71: 0.45 },
+  'Colinus virginianus':       { 71: 1.00, 52: 0.95, 82: 0.60, 42: 0.53, 81: 0.47, 43: 0.35, 41: 0.18 },
+  'Callipepla californica':    { 52: 1.00, 90: 0.85, 71: 0.65, 43: 0.65, 82: 0.50, 81: 0.50, 41: 0.50, 42: 0.40 },
+  'Callipepla gambelii':       { 52: 1.00, 90: 0.60, 71: 0.50, 42: 0.30, 82: 0.30 },
+  'Callipepla squamata':       { 71: 1.00, 52: 0.95, 81: 0.35 },
+  'Cyrtonyx montezumae':       { 42: 1.00, 71: 1.00, 43: 0.90, 52: 0.85, 41: 0.80 },
+  'Oreortyx pictus':           { 52: 1.00, 43: 0.80, 42: 0.75, 41: 0.60 },
+  'Alectoris chukar':          { 52: 1.00, 71: 0.85, 31: 0.45 },
+  'Bonasa umbellus':           { 43: 1.00, 41: 0.95, 52: 0.90, 90: 0.85, 42: 0.55 },
+  'Dendragapus obscurus':      { 42: 1.00, 43: 1.00, 41: 0.85, 52: 0.65, 71: 0.45 },
+  'Dendragapus fuliginosus':   { 42: 1.00, 43: 1.00, 52: 0.65, 41: 0.60 },
+  'Canachites canadensis':     { 42: 1.00, 90: 0.90, 43: 0.70 }
+};
+const UPLAND_WORTH = {
+  'Phasianus colchicus': 0.90, 'Perdix perdix': 0.85, 'Tympanuchus phasianellus': 1.00, 'Tympanuchus cupido': 1.00,
+  'Centrocercus urophasianus': 0.55, 'Colinus virginianus': 0.85, 'Callipepla californica': 0.60,
+  'Callipepla gambelii': 0.80, 'Callipepla squamata': 0.85, 'Cyrtonyx montezumae': 0.70, 'Oreortyx pictus': 0.75,
+  'Alectoris chukar': 0.90, 'Bonasa umbellus': 0.90, 'Dendragapus obscurus': 0.75, 'Dendragapus fuliginosus': 0.75,
+  'Canachites canadensis': 0.50
+};
+const UPLAND_COUNTS_IN_FULL = 0.25;       // share of the upland records round a cell
+const UPLAND_ROUND = 4;                   // cells either way the records are pooled over
+const CHUKAR_STEEP = [120, 450];          // feet of relief inside the cell
+
+/* Ruffed grouse do best where winter is long: the aspen and birch
+   country of the Lake States and the north-east. Land cover cannot tell
+   that from an oak ridge in West Virginia - both are deciduous forest -
+   and scored the oak ridge higher, because it has fewer lakes and bogs
+   in it. January mean air temperature can: full worth at 18 F or
+   colder, down to about two thirds at 28 F or warmer. This is a stand-in
+   for the kind of forest, chosen for that reason, and not a measurement
+   of grouse. */
+const GROUSE_WINTER = [18, 28], GROUSE_SOUTH = 0.65;
+
+function uplandSuit(lc, reliefFt, perTaxon, januaryF) {
+  const names = Object.keys(UPLAND_BIRDS).filter((n) => perTaxon[n]);
+  const near = {}, total = new Float32Array(NCELL);
+  for (const n of names) {
+    near[n] = smooth(perTaxon[n], UPLAND_ROUND);
+    for (let k = 0; k < NCELL; k++) total[k] += near[n][k];
+  }
+  const rows = names.map((n) => [n, Object.keys(UPLAND_BIRDS[n]).map((c) => [lc.counts.get(+c), UPLAND_BIRDS[n][c]])]);
+  const bareArr = lc.counts.get(31);
+  const out = new Float32Array(NCELL), lead = new Uint8Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k] || total[k] <= 0) continue;
+    const bare = bareArr ? bareArr[k] / lc.total[k] : 0;
+    let best = 0, bestFit = 0, who = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const n = rows[i][0], pairs = rows[i][1];
+      const share = near[n][k] / total[k];
+      if (share <= 0) continue;
+      let fit = 0;
+      for (const [arr, w] of pairs) if (arr) fit += w * arr[k] / lc.total[k];
+      if (n === 'Alectoris chukar') {
+        fit *= clamp01(((isFinite(reliefFt[k]) ? reliefFt[k] : 0) - CHUKAR_STEEP[0]) / (CHUKAR_STEEP[1] - CHUKAR_STEEP[0]));
+      } else {
+        /* Brush mapped beside bare playa, dune or salt pan is the
+           thinnest brush there is, and it was counting the same as a
+           brushy foothill. Rock is cover to a chukar and to nothing
+           else here, so chukar keep their own term above. */
+        fit *= (1 - bare) * (1 - bare);
+      }
+      fit *= Math.min(1, share / UPLAND_COUNTS_IN_FULL);
+      let worth = UPLAND_WORTH[n];
+      if (n === 'Bonasa umbellus' && januaryF && isFinite(januaryF[k])) {
+        worth *= GROUSE_SOUTH + (1 - GROUSE_SOUTH) *
+          clamp01((GROUSE_WINTER[1] - januaryF[k]) / (GROUSE_WINTER[1] - GROUSE_WINTER[0]));
+      }
+      if (fit > bestFit) { bestFit = fit; who = i + 1; }
+      if (fit * worth > best) best = fit * worth;
+    }
+    out[k] = best; lead[k] = who;
+  }
+  /* The bird the cover fits best is kept as well: it is the one the
+     advice should be about on this ground. */
+  return { val: out, lead: lead, names: [''].concat(names) };
+}
+
+/* ---------- geese ----------
+
+   Geese were scored on the duck surface, which is water and marsh with
+   some credit for feed beside it. A goose hunt is the other way up: it
+   happens in a field, and the water matters as somewhere to roost within
+   a morning's flight. So the Front Range of Colorado - reservoirs in
+   winter wheat and corn, and as much Canada goose hunting as anywhere in
+   the country - read 0.30, and peaked at 51 out of 100.
+
+   Feed is what is in the cell and the ones beside it: grain first, then
+   hay and pasture. Range grass and marsh count for very little - at
+   three tenths each they made goose ground of the Chihuahuan desert
+   grassland, the tundra of the Wind Rivers and the Everglades.
+
+   Roost is open water or marsh within about fifteen miles, and it adds
+   to the value rather than being required for it. It was required, and
+   the land cover here is twenty-five samples a cell, which does not see
+   a stock tank or a four-hundred-acre lake: Knox City, Texas showed 2
+   samples of water in 625 and Middle Creek, Pennsylvania 3, the same as
+   Death Valley. Grain with no water in sight keeps half. */
+const GOOSE_FEED = { 82: 1.00, 81: 0.70, 71: 0.05, 95: 0.10 };
+const GOOSE_FEED_K = 2.4, GOOSE_ROOST = 0.02, GOOSE_NO_ROOST = 0.5;
+
+function gooseSuit(lc, rice) {
+  const frac = (cls, k) => { const a = lc.counts.get(cls); return a ? a[k] / lc.total[k] : 0; };
+  const feed = new Float32Array(NCELL), roost = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    const paddy = rice ? rice[k] : 0;
+    feed[k] = GOOSE_FEED[82] * frac(82, k) + GOOSE_FEED[81] * frac(81, k) + GOOSE_FEED[71] * frac(71, k) +
+              GOOSE_FEED[95] * frac(95, k) + 0.30 * paddy;
+    roost[k] = frac(11, k) + frac(95, k) + 0.5 * paddy;
+  }
+  const nearFeed = smooth(feed, 1), nearRoost = smooth(roost, 2);
+  const out = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    const built = frac(22, k) + frac(23, k) + frac(24, k);
+    out[k] = clamp01(0.95 * (1 - Math.exp(-GOOSE_FEED_K * nearFeed[k])) * (GOOSE_NO_ROOST + (1 - GOOSE_NO_ROOST) * clamp01(nearRoost[k] / GOOSE_ROOST))) * Math.pow(1 - built, 1.5);
+  }
+  /* For checking the rule against places whose answer is known: point
+     GOOSE_DEBUG at a JSON file of { "name": [lon, lat] }. */
+  if (process.env.GOOSE_DEBUG) {
+    const probe = JSON.parse(readFileSync(process.env.GOOSE_DEBUG, 'utf8'));
+    for (const [name, p] of Object.entries(probe)) {
+      const k = cellIdx(Math.floor((p[0] - LON0) / D), Math.floor((p[1] - LAT0) / D));
+      console.log('GOOSE ' + name.padEnd(28) + ' feed ' + feed[k].toFixed(3) + '  round ' + nearFeed[k].toFixed(3) +
+        '  roost ' + roost[k].toFixed(4) + '  round ' + nearRoost[k].toFixed(4) +
+        '  built ' + (frac(22, k) + frac(23, k) + frac(24, k)).toFixed(2) + '  value ' + out[k].toFixed(2));
+    }
+  }
+  return out;
+}
+
+/* ---------- what kind of duck water ----------
+
+   The advice names the water - flooded timber, rice, marsh, big water -
+   and it got the name from a list of twenty-nine regions drawn by hand.
+   Outside them it said "any reliable open water", which is what it said
+   at Cheyenne Bottoms, the ACE Basin, the Mobile Delta, Merrymeeting
+   Bay and the Skagit. The land cover knows better than that. One code a
+   cell, from what is in it and the eight round it. The regions still
+   have the say where they cover a place; this fills in the rest.
+
+   A wooded swamp is only "flooded timber" in the south. The first cut
+   called Merrymeeting Bay in Maine and Montezuma in New York flooded
+   timber, because both have wooded wetland round them, and what is
+   meant by the words is bottomland hardwood. North of TIMBER_NORTH it
+   is alder, maple and tamarack and is hunted like a marsh. */
+const TIMBER_NORTH = 38.5;
+const WATER_KINDS = ['', 'rice', 'timber', 'coastal', 'marsh', 'reservoir', 'pothole', 'river'];
+
+function waterKinds(lc, rice, meanFt) {
+  const own = (cls) => {
+    const a = lc.counts.get(cls), o = new Float32Array(NCELL);
+    if (a) for (let k = 0; k < NCELL; k++) if (lc.total[k]) o[k] = a[k] / lc.total[k];
+    return smooth(o, 1);
+  };
+  const open = own(11), marsh = own(95), swamp = own(90), crops = own(82), grass = own(71), hay = own(81);
+  const paddy = rice ? smooth(rice, 1) : new Float32Array(NCELL);
+  const out = new Uint8Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    const low = isFinite(meanFt[k]) && meanFt[k] < 15;
+    const lat = LAT0 + (Math.floor(k / NLON) + 0.5) * D;
+    let kind = 0;
+    if (paddy[k] >= 0.06) kind = 1;
+    else if (low && open[k] >= 0.20) kind = 3;
+    else if (swamp[k] >= 0.12 && swamp[k] >= marsh[k] && lat < TIMBER_NORTH) kind = 2;
+    else if (marsh[k] >= 0.06 || swamp[k] >= 0.12) kind = 4;
+    else if (open[k] >= 0.20) kind = 5;
+    else if (open[k] + marsh[k] >= 0.02 && crops[k] + grass[k] + hay[k] >= 0.5) kind = 6;
+    else if (open[k] >= 0.01) kind = 7;
+    out[k] = kind;
+  }
+  return out;
+}
+
 /* 1-2-1 in each direction, on a grid of any size. */
 function blur3(src, nx, ny) {
   const tmp = new Float64Array(src.length), out = new Float64Array(src.length);
@@ -1306,7 +1552,7 @@ async function main() {
   }
   process.stderr.write('  cold water raised by a gauge in ' + coldByGauge + ' cells, by a named water in ' + coldByName + String.fromCharCode(10));
   const nasTrout = await nasEstablished();
-  let troutSure = null, troutCount = null;
+  let troutSure = null, troutCount = null, uplandTaxa = null, uplandBest = null;
 
   process.stderr.write('occurrences...\n');
   const occ = {}, effort = new Float32Array(NCELL);
@@ -1349,7 +1595,8 @@ async function main() {
       perTaxon[name] = S.grid;
       for (let k = 0; k < NCELL; k++) occ[sp][k] += S.grid[k];
       total += S.placed;
-      harvest.push({ name: name, records: S.placed, months: months ? months.join(',') : 'all' });
+      /* Geese are in the waterfowl count already. */
+      if (sp !== 'goose') harvest.push({ name: name, records: S.placed, months: months ? months.join(',') : 'all' });
       process.stderr.write('  ' + sp + ' / ' + name + ': ' + S.placed + ' records in ' +
         S.bins + ' squares' + (months ? ', months ' + months.join(',') : '') + '\n');
     }
@@ -1363,7 +1610,8 @@ async function main() {
     let tot = 0;
     for (let k = 0; k < NCELL; k++) tot += occ[sp][k];
     if (tot > 0) for (let k = 0; k < NCELL; k++) occ[sp][k] /= tot;
-    for (let k = 0; k < NCELL; k++) effort[k] += occ[sp][k];
+    if (sp !== 'goose') for (let k = 0; k < NCELL; k++) effort[k] += occ[sp][k];
+    if (sp === 'upland') uplandTaxa = perTaxon;
   }
 
   /* Share of game records, so a cell watched by a thousand birders and a
@@ -1389,7 +1637,9 @@ async function main() {
     const vals = new Uint8Array(NCELL);
     const skip = UNRECORDED_SKIP[sp] || null;
     const lean = skip ? new Uint8Array(NCELL) : null;
-    const ducks = sp === 'waterfowl' ? waterfowlSuit(lc, rice) : null;
+    const ducks = sp === 'waterfowl' ? waterfowlSuit(lc, rice) : sp === 'goose' ? gooseSuit(lc, rice) : null;
+    const birds = sp === 'upland' && uplandTaxa
+      ? (uplandBest = uplandSuit(lc, ev.reliefFt, uplandTaxa, normalsGrid(ev.meanFt, 0, 3))).val : null;
     for (let k = 0; k < NCELL; k++) {
       if (!lc.total[k]) continue;
       let s = 0;
@@ -1445,6 +1695,7 @@ async function main() {
         s -= open * (1 - ELK_REFUGE.low) * (1 - refuge);
       }
       if (ducks) s = ducks[k] * elevFactor(ev.meanFt[k], band);
+      else if (birds) s = birds[k] * elevFactor(ev.meanFt[k], band);
       else {
         s *= elevFactor(ev.meanFt[k], band);
         if (satK) s = 1 - Math.exp(-satK * s);
@@ -1598,6 +1849,11 @@ async function main() {
        GBIF's map service, not a sample. */
     harvest: harvest,
     sp: out,
+
+    /* What kind of duck water each cell is - see waterKinds. */
+    waterKind: { names: WATER_KINDS, cells: Buffer.from(waterKinds(lc, rice, ev.meanFt)).toString('base64') },
+    /* Which upland bird each cell was scored on - see uplandSuit. */
+    uplandLead: uplandBest ? { names: uplandBest.names, cells: Buffer.from(uplandBest.lead).toString('base64') } : null,
 
     /* Suitability for ground a species is mapped on but not recorded
        on - see UNRECORDED_SKIP. */

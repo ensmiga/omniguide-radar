@@ -132,7 +132,13 @@
     'Anas crecca': { name: 'green-wing teal', why: 'common here' },
     'Mareca strepera': { name: 'gadwall', why: 'well represented here' },
     'Branta canadensis': { name: 'honker floaters', why: 'geese use this water too' },
-    'Bucephala clangula': { name: 'goldeneye decoys', why: 'divers hold on this water late' }
+    'Bucephala clangula': { name: 'goldeneye decoys', why: 'divers hold on this water late' },
+    'Aix sponsa': { name: 'wood ducks', why: 'the local bird on timber and creeks' },
+    'Aythya collaris': { name: 'ringneck decoys', why: 'ringnecks are a real share here' },
+    'Anas rubripes': { name: 'black ducks', why: 'this is black duck water' },
+    'Anas fulvigula': { name: 'mottled ducks', why: 'the resident duck on this coast' },
+    'Aythya americana': { name: 'redhead decoys', why: 'redheads winter on this water' },
+    'Spatula clypeata': { name: 'shovelers', why: 'well represented here' }
   };
 
   /* The mix among ducks only, and how much of the water is geese.
@@ -145,7 +151,7 @@
      on the outside. Geese are taken out before ducks are ranked, and
      offered back as an extra where they are a large part of what is
      there. */
-  var GEESE = { 'Branta canadensis': 1, 'Anser caerulescens': 1 };
+  var GEESE = { 'Branta canadensis': 1, 'Anser caerulescens': 1, 'Anser albifrons': 1 };
 
   function duckMix(sc) {
     var hg = global.OG.habgrid;
@@ -319,6 +325,114 @@
     };
   }
 
+  /* ---------- Goose strategy ----------
+
+     Geese were handed the duck plan: hunt the lee shoreline, set the
+     landing pocket off the blind, mind the fetch. A goose hunt is in a
+     field. The birds roost on water and fly out to feed, and the whole of
+     it is being where they fed yesterday with the wind right.
+
+     Which goose matters too, and the records know: a spread for Canada
+     geese is a few dozen decoys in family groups, and a spread for snow
+     geese is several hundred of anything white. */
+  var GOOSE_NAMES = { 'Branta canadensis': 'Canada geese', 'Anser caerulescens': 'snow geese',
+                      'Anser albifrons': 'specklebellies' };
+
+  function gooseMix(sc) {
+    var hg = global.OG.habgrid;
+    if (!hg || !hg.compReady) return null;
+    var comp = hg.composition('waterfowl', sc.lon, sc.lat);
+    if (!comp) return null;
+    var out = [], sum = 0;
+    for (var i = 0; i < comp.length; i++) {
+      if (!GOOSE_NAMES[comp[i].taxon]) continue;
+      var now = 1;
+      if (sc.doy != null && hg.seasonalPresence) {
+        var sp1 = hg.seasonalPresence([comp[i].taxon], sc.lat, sc.doy);
+        if (sp1 != null) now = 0.1 + 0.9 * sp1;
+      }
+      var sh = comp[i].share * now;
+      out.push({ taxon: comp[i].taxon, share: sh }); sum += sh;
+    }
+    if (sum <= 0) return null;
+    out.forEach(function (o) { o.share /= sum; });
+    out.sort(function (a, b) { return b.share - a.share; });
+    return out;
+  }
+
+  function goosePlan(sc, legal, win) {
+    var wx = sc.wx;
+    var windFromName = env.dirName(wx.windFrom);
+    var downwindName = env.dirName(wx.windFrom + 180);
+    var mix = gooseMix(sc);
+    var lead = mix ? mix[0] : null;
+    var snows = lead && lead.taxon === 'Anser caerulescens' && lead.share > 0.5;
+    var rec = [];
+
+    rec.push('Hunt the field, not the water. Find where geese fed yesterday evening and be set there before ' +
+      'first light, and leave the roost alone so the birds stay in the country.');
+    rec.push('Wind is out of the ' + windFromName + ' at ' + Math.round(wx.windSpd) +
+      (wx.gust > wx.windSpd * 1.4 ? '-' + Math.round(wx.gust) : '') + ' mph. Geese land into it, so put it at ' +
+      'your back or over a shoulder and leave an open hole in the spread ' + downwindName + ' of the blinds.');
+    if (mix) {
+      rec.push(snows
+        ? 'Snow geese are most of the geese recorded here at this time of year. They come to numbers, not ' +
+          'realism - several hundred white decoys and as much motion as you can make.'
+        : 'Mostly ' + GOOSE_NAMES[lead.taxon] + ' in the records here at this time of year' +
+          (mix[1] && mix[1].share > 0.2 ? ', with ' + GOOSE_NAMES[mix[1].taxon] + ' behind them.' : '.'));
+      /* The season this page shows is the Canada goose season. The other
+         geese are set separately, so say so wherever one is named. */
+      if (mix.some(function (m) { return m.taxon !== 'Branta canadensis' && m.share > 0.2; })) {
+        rec.push('The season shown here is for Canada geese. Snow and white-fronted geese have their own ' +
+          'seasons and limits. Check them with the state agency before you hunt.');
+      }
+    }
+    if (wx.snowDepth > 0.25) rec.push('Snow is covering feed. Birds will go to fields that are blown clear or ' +
+      'still showing grain, and a white cover over the blind matters more than anything else today.');
+    if (wx.freeze > 0.5 || wx.tempF < 20) rec.push('In hard cold, geese sit on the roost until mid-morning and ' +
+      'may feed only once. Do not give up on a late flight.');
+    if (sc.newBird > 60) rec.push('New birds are likely arriving. They have not seen this field or this spread, ' +
+      'and they work far better than the locals.');
+    if (sc.pressure > 62) rec.push('These birds have been hunted. Fewer decoys set loose, a better hide, and ' +
+      'stop calling and flagging once they are coming.');
+
+    var n = snows ? 300 : 36;
+    if (!snows) {
+      if (sc.newBird > 65) n = Math.round(n * 1.35);
+      if (sc.pressure > 60) n = Math.round(n * 0.68);
+      n = clamp(n, 12, 72);
+    }
+    var spread = snows
+      ? ['300 or more white decoys - windsocks and rags count', 'Set them thick upwind and thin toward the hole, as feeding birds are',
+         'Motion: flags, flyers or a rotary machine where it is legal']
+      : [Math.round(n * 0.8) + '-' + Math.round(n * 1.2) + ' full-body or shell decoys',
+         'Family groups of 4-7 with real gaps between them',
+         wx.windSpd > 18 ? 'Tighten the spread in this wind; geese bunch up when it blows'
+                         : 'Loose and relaxed - feeding birds, some resting'];
+    if (!snows && lead && lead.taxon === 'Anser albifrons') {
+      spread.push('Specklebelly decoys in their own small group, off to one side of any Canadas');
+    }
+
+    return {
+      headline: rec[0],
+      recommendation: rec,
+      setup: [
+        { k: 'Field', v: ['Harvested grain, winter wheat or pasture within a few miles of roost water',
+                          'The spot they fed last, not the field beside it'] },
+        { k: 'Wind', v: windFromName + ' ' + Math.round(wx.windSpd) + '-' + Math.round(wx.gust) + ' mph' },
+        { k: 'Spread', v: spread },
+        { k: 'Landing hole', v: 'Open ground 15-25 yards ' + downwindName + ' of the blinds' },
+        { k: 'Calling', v: sc.pressure > 62
+            ? 'Flag at a distance, then very little. Clucks and moans only, and nothing once they are locked.'
+            : 'Flag to be seen at a distance. Call when they waver or slide, and ease off as they commit.' },
+        { k: 'Concealment', v: wx.snowDepth > 0.4
+            ? ['White covers over the layout blinds', 'No dark shapes and no tracks through the spread']
+            : ['Layout blinds brushed with stubble from this field, not carried in',
+               'Dig them in or use a fold in the ground; a blind standing proud of the field flares geese'] }
+      ]
+    };
+  }
+
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
                 'September', 'October', 'November', 'December'];
   /* Day of year, possibly past 365, as "20 January". */
@@ -473,41 +587,184 @@
     };
   }
 
-  /* ---------- Upland strategy ---------- */
+  /* ---------- Upland strategy ----------
+
+     There was one plan for "upland birds" and it was a pheasant hunt:
+     grass beside grain, cattail sloughs in the snow, a blocker at the end
+     of the field. That is what it told someone standing in the grouse
+     woods of northern Maine, on a chukar slope in Nevada, and in the
+     piney woods of south Georgia.
+
+     The records say which bird it mostly is - the same species mix the
+     duck spread is built from - and the plan follows that bird. */
+  var UPLAND_NAME = {
+    'Phasianus colchicus': 'pheasant', 'Perdix perdix': 'Hungarian partridge',
+    'Tympanuchus phasianellus': 'sharp-tailed grouse', 'Tympanuchus cupido': 'prairie chicken',
+    'Centrocercus urophasianus': 'sage grouse', 'Colinus virginianus': 'bobwhite quail',
+    'Callipepla californica': 'California quail', 'Callipepla gambelii': 'Gambel\'s quail',
+    'Callipepla squamata': 'scaled quail', 'Oreortyx pictus': 'mountain quail',
+    'Cyrtonyx montezumae': 'Mearns quail', 'Alectoris chukar': 'chukar',
+    'Bonasa umbellus': 'ruffed grouse', 'Canachites canadensis': 'spruce grouse',
+    'Dendragapus obscurus': 'dusky grouse', 'Dendragapus fuliginosus': 'sooty grouse'
+  };
+  var UPLAND_KIND = {
+    'Phasianus colchicus': 'field', 'Perdix perdix': 'field',
+    'Tympanuchus phasianellus': 'prairie', 'Tympanuchus cupido': 'prairie',
+    'Centrocercus urophasianus': 'sage', 'Colinus virginianus': 'bobwhite',
+    'Callipepla californica': 'desert', 'Callipepla gambelii': 'desert',
+    'Callipepla squamata': 'desert', 'Oreortyx pictus': 'desert', 'Cyrtonyx montezumae': 'mearns',
+    'Alectoris chukar': 'chukar', 'Bonasa umbellus': 'woods', 'Canachites canadensis': 'woods',
+    'Dendragapus obscurus': 'mountain', 'Dendragapus fuliginosus': 'mountain'
+  };
+
+  /* The birds worth naming here. First the one this ground was scored
+     on - the bird whose cover it is, among those recorded round here -
+     and then the others by how often they are recorded. Most recorded
+     is not the same thing: the records lean toward birds near roads
+     and towns, and in sage country they can be mostly pheasants from
+     the hay meadows. */
+  function uplandBirds(sc) {
+    var hg = global.OG.habgrid;
+    if (!hg || !hg.compReady) return null;
+    var comp = hg.composition('upland', sc.lon, sc.lat);
+    if (!comp) return null;
+    var out = comp.filter(function (c) { return c.share >= 0.12 && UPLAND_NAME[c.taxon]; }).slice(0, 3);
+    var lead = hg.uplandLeadAt ? hg.uplandLeadAt(sc.lon, sc.lat) : null;
+    if (lead && UPLAND_NAME[lead]) {
+      var rest = out.filter(function (c) { return c.taxon !== lead; });
+      var own = comp.filter(function (c) { return c.taxon === lead; })[0];
+      out = [{ taxon: lead, share: own ? own.share : 0 }].concat(rest).slice(0, 3);
+    }
+    /* Never open with spruce grouse where there is another bird to
+       name: it is protected in much of the East and the Lake States. */
+    if (out.length > 1 && out[0].taxon === 'Canachites canadensis') out.push(out.shift());
+    return out.length ? out : null;
+  }
+
+  var UPLAND_PLAYS = {
+    field: {
+      first: 'Work cover into the wind so the dog takes scent on the approach, and push toward a hard edge ' +
+        'the birds cannot run past.',
+      cover: ['Grass and weedy edge next to standing or harvested grain',
+              'Heavy cover on cold days, lighter edge cover when mild'],
+      timing: 'Mid-morning once the dew burns off, and the last two hours into roost cover'
+    },
+    prairie: {
+      first: 'Cover ground. Prairie grouse are spread thin over big grass, so walk the ridges and the brushy ' +
+        'heads of draws with the wind in the dog\'s face.',
+      cover: ['Native grass on the higher ground', 'Brushy draws and shelterbelts in the heat of the day, or in snow'],
+      timing: 'Early and late where they feed; midday in shade or brush when it is warm'
+    },
+    sage: {
+      first: 'Hunt the sagebrush itself, on flats and benches within reach of water or a green meadow edge, ' +
+        'and work it into the wind.',
+      cover: ['Big sagebrush flats and benches', 'Near springs, stock tanks and wet meadows early in the season'],
+      timing: 'First thing, when birds are walking to and from water'
+    },
+    bobwhite: {
+      first: 'Hunt the edges, where one kind of cover meets another: field borders, fencerows, plum and briar ' +
+        'thickets, open piney woods with grass under them.',
+      cover: ['Brushy field edges, fencerows and thickets',
+              'Open pine or broomsedge with bare ground underneath, not rank cover a bird cannot walk through'],
+      timing: 'Early and late, when coveys move out to feed; they hold in the thick stuff through midday'
+    },
+    desert: {
+      first: 'Hunt the brushy washes and draws, and the cover within reach of water. These quail run before ' +
+        'they fly, so push a covey hard until it breaks, then work the singles.',
+      cover: ['Brushy washes, draws and the edges of thick cover', 'Near water in dry country, most of all early in the season'],
+      timing: 'Morning, before the heat; coveys loaf in shade through the middle of the day'
+    },
+    mearns: {
+      first: 'Hunt the grassy slopes under the oaks. These quail sit tight and flush close, which makes this ' +
+        'a pointing dog\'s bird more than any other.',
+      cover: ['Oak-grassland hillsides with tall grass under the trees', 'Look for fresh digging - they scratch for tubers'],
+      timing: 'Mid-morning on, once scent has had time to lie'
+    },
+    chukar: {
+      first: 'Get above them before you start. Chukar run uphill and fly down, so climb first and hunt along ' +
+        'the contour or down the slope, never up at them.',
+      cover: ['Steep slopes of cheatgrass and bunchgrass broken by rock', 'Rimrock and talus above a creek or a spring'],
+      timing: 'Morning near water in dry weather; south-facing slopes once there is snow'
+    },
+    woods: {
+      first: 'Hunt young, thick woods: aspen and alder regrowth, old cuts, and the edges where that meets a ' +
+        'trail or older timber. Walk, stop, and walk again - the pause is what makes a grouse flush.',
+      cover: ['Aspen and alder ten to twenty years old, too thick to see far in',
+              'Edges of trails, clearings and creek bottoms'],
+      timing: 'Any time of day; birds feed along trails early and late'
+    },
+    mountain: {
+      first: 'Hunt the ridges and the edges of timber at elevation. These grouse use open conifer with grass ' +
+        'and berries early, and move up into the firs as the season goes on.',
+      cover: ['Ridgelines and the edges of mountain parks', 'Open timber with a berry and grass understory'],
+      timing: 'Morning and evening on the edges; in the timber through the day'
+    }
+  };
 
   function uplandPlan(sc, legal, win) {
     var wx = sc.wx;
     var scentGood = sc.movement > 62;
+    var birds = uplandBirds(sc);
+    var lead = birds ? birds[0].taxon : null;
+    var kind = (lead && UPLAND_KIND[lead]) || 'field';
+    var play = UPLAND_PLAYS[kind];
+    var windName = env.dirName(wx.windFrom);
     var rec = [];
-    rec.push('Work cover into the ' + env.dirName(wx.windFrom) + ' wind so the dog takes scent on the approach, ' +
-      'and push toward a hard edge the birds cannot run past.');
+
+    if (birds) {
+      var names = birds.map(function (b) { return UPLAND_NAME[b.taxon]; });
+      rec.push('This is ' + names[0] + ' ground' +
+        (names.length > 1 ? ', with ' + names.slice(1).join(' and ') + ' recorded here too.' : '.') + ' ' + play.first);
+      /* Seasons are set bird by bird, and several of these are closed
+         or permit-only in places. Say so wherever a bird is named. */
+      rec.push('Seasons and limits are set bird by bird, and not every bird named here is legal to take in ' +
+        'every state. Check each one with the state agency before you hunt.');
+      if (names.indexOf('sage grouse') >= 0) rec.push('Sage grouse seasons are short, permit-only or closed ' +
+        'across much of their range.');
+      if (names.indexOf('spruce grouse') >= 0) rec.push('Spruce grouse are protected in several states and ' +
+        'easy to mistake for a ruffed grouse. Be sure of the bird before you shoot.');
+    } else {
+      rec.push(play.first);
+    }
+    rec.push('Wind is out of the ' + windName + ' at ' + Math.round(wx.windSpd) + ' mph. Hunt into it where the ' +
+      'ground allows, so the dog takes scent on the approach.');
     rec.push(scentGood
       ? 'Scenting conditions are good: cool, damp air holds scent close to the ground. The dog will handle ' +
         'birds at distance today.'
       : 'Scenting conditions are poor today. Slow down, work closer, and expect bumped birds - ' +
         (wx.tempF > 60 ? 'warm dry air carries scent away' : 'wind is stripping scent off the cover') + '.');
-    if (wx.snowDepth > 0.25) rec.push('Snow has birds concentrated in the heaviest cover - cattail sloughs, ' +
-      'shelterbelts and plum thickets. Skip the thin grass entirely.');
-    if (wx.windSpd > 18) rec.push('Heavy wind makes birds run rather than hold. Block the end of the cover ' +
-      'before you walk it.');
+    if (wx.snowDepth > 0.25) rec.push(kind === 'field'
+      ? 'Snow has birds concentrated in the heaviest cover - cattail sloughs, shelterbelts and plum thickets. ' +
+        'Skip the thin grass entirely.'
+      : kind === 'chukar' ? 'Snow pushes chukar onto south-facing slopes and bare ground. Hunt the sunny side.'
+      : kind === 'woods' ? 'With snow down, grouse sit in conifers and thick cover and feed on buds. Look up as ' +
+        'well as down.'
+      : 'Snow concentrates birds in the heaviest cover there is, and on ground the wind has blown clear.');
+    if (wx.windSpd > 18) rec.push(kind === 'field'
+      ? 'Heavy wind makes birds run rather than hold. Block the end of the cover before you walk it.'
+      : 'In this wind birds flush wild and far out. Hunt the lee side of hills and cover, where they sit tighter.');
     if (wx.tempF > 65) rec.push('Warm for dog work at ' + Math.round(wx.tempF) + ' degrees. Carry water and ' +
       'rotate dogs on short runs.');
 
-    return {
-      headline: rec[0],
-      recommendation: rec,
-      setup: [
-        { k: 'Cover', v: ['Grass and weedy edge next to standing or harvested grain',
-                          'Heavy cover on cold days, lighter edge cover when mild'] },
-        { k: 'Direction', v: 'Into the ' + env.dirName(wx.windFrom) + ' wind, pushing toward a hard edge' },
-        { k: 'Dog work', v: scentGood ? 'Let the dog range - scent is holding'
-                                      : 'Keep the dog close and quarter tight' },
-        { k: 'Blockers', v: wx.windSpd > 18 || wx.tempF > 55
-            ? 'Post a blocker at the end of the field - birds will run today'
-            : 'Blockers optional; birds should hold for a point' },
-        { k: 'Timing', v: 'Mid-morning once the dew burns off, and the last two hours into roost cover' }
-      ]
-    };
+    var setup = [
+      { k: 'Cover', v: play.cover },
+      { k: 'Direction', v: kind === 'chukar' ? 'Along the contour or downhill, with the wind in your face where you can'
+                                              : 'Into the ' + windName + ' wind' +
+                                                (kind === 'field' ? ', pushing toward a hard edge' : '') },
+      { k: 'Dog work', v: scentGood ? 'Let the dog range - scent is holding'
+                                    : 'Keep the dog close and quarter tight' }
+    ];
+    if (kind === 'field') {
+      setup.push({ k: 'Blockers', v: wx.windSpd > 18 || wx.tempF > 55
+          ? 'Post a blocker at the end of the field - birds will run today'
+          : 'Blockers optional; birds should hold for a point' });
+    }
+    if (kind === 'bobwhite' || kind === 'desert') {
+      setup.push({ k: 'Coveys', v: 'Mark where the covey goes down, then work the singles' });
+    }
+    setup.push({ k: 'Timing', v: play.timing });
+
+    return { headline: rec[0], recommendation: rec, setup: setup, birds: birds };
   }
 
   /* ---------- Elk strategy ---------- */
@@ -866,10 +1123,21 @@
     }
 
     if (sp.id === 'upland') {
-      if (grass > 0.3 && crops > 0.2) out.push('Grass next to grain is exactly the mix that holds birds. ' +
-        'Work the grass and push toward the crop edge.');
-      else if (crops > 0.7) out.push('Nearly all cultivated. Once it is harvested there is little cover ' +
-        'here; find the grass, the slough edge or the shelterbelt.');
+      /* What the cover means depends on the bird. */
+      var ub = uplandBirds(sc);
+      var uk = ub ? UPLAND_KIND[ub[0].taxon] : 'field';
+      if (uk === 'woods' || uk === 'mountain') {
+        if (forest > 0.5) out.push('Mostly timber, which is right for grouse. Look for the young, thick part ' +
+          'of it - regrowth after a cut, alder along a creek - rather than open mature woods.');
+        else out.push('Not much timber in this sample. Grouse will be in whatever thick woody cover there is.');
+      } else if (uk === 'chukar' || uk === 'sage' || uk === 'desert') {
+        if (shrub + grass > 0.5) out.push('Brush and grass dominate, which is the right country for these birds.');
+      } else {
+        if (grass > 0.3 && crops > 0.2) out.push('Grass next to grain is exactly the mix that holds birds. ' +
+          'Work the grass and push toward the crop edge.');
+        else if (crops > 0.7) out.push('Nearly all cultivated. Once it is harvested there is little cover ' +
+          'here; find the grass, the slough edge or the shelterbelt.');
+      }
     }
 
     if ((sp.id === 'muledeer' || sp.id === 'pronghorn') && shrub > 0.4) {
@@ -960,7 +1228,8 @@
       : bio;
 
     var body;
-    if (sp.group === 'waterfowl') body = waterfowlPlan(sc, legalRes, legalWin);
+    if (sp.id === 'canada-goose') body = goosePlan(sc, legalRes, legalWin);
+    else if (sp.group === 'waterfowl') body = waterfowlPlan(sc, legalRes, legalWin);
     else if (sp.group === 'biggame') body = bigGamePlan(sc, legalRes, legalWin, doy);
     else if (sp.group === 'turkey') body = turkeyPlan(sc, legalRes, legalWin, doy);
     else if (sp.group === 'upland') body = uplandPlan(sc, legalRes, legalWin);

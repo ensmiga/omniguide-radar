@@ -337,32 +337,178 @@
       ]
     },
     upland: {
+      /* Sixteen birds, so the list is by bird: the places each is known
+         for. The short list this replaces passed in full while northern
+         Maine read 14 out of 100 and the quail country round Albany,
+         Georgia read 7, because all it asked was whether a place was in
+         range, and nearly everywhere is in range of something.
+
+         Three of the first points were wrong and were moved, not tuned
+         round. Albany and Thomasville, Georgia sat within three
+         kilometres of the middle of each town; they are now on the
+         plantation country beside them. The Death Valley point sat on
+         the fan below the Panamints, where chukar are 22% of the upland
+         records, and is now on the salt pan at Badwater. */
       yes: [
-        ['E South Dakota', -97.80, 44.20], ['C Kansas', -98.50, 38.50],
-        ['TX Panhandle', -101.40, 35.20], ['S Georgia', -83.40, 31.40],
-        ['SW Idaho chukar', -116.80, 43.40], ['NV chukar', -117.20, 40.60],
-        /* Ruffed grouse are abundant through the Adirondacks. This was
-           listed as an absence in the first draft of this table, which
-           was my mistake and not the model's - the table is only worth
-           anything if its own errors get corrected rather than tuned
-           against. */
-        ['Adirondacks NY grouse', -74.30, 44.10]
+        ['Pheasant: Mitchell SD', -98.00, 43.70], ['Pheasant: Winner SD', -99.85, 43.38],
+        ['Pheasant: Aberdeen SD', -98.50, 45.50], ['Pheasant: Mott ND', -102.30, 46.37],
+        ['Pheasant: Colby KS', -101.05, 39.40], ['Pheasant: Holyoke CO', -102.30, 40.50],
+        ['Pheasant: McCook NE', -100.60, 40.20], ['Pheasant: Spencer IA', -95.15, 43.15],
+        ['Pheasant: Marshall MN', -95.80, 44.45], ['Pheasant: Plentywood MT', -104.55, 48.78],
+        ['Pheasant: Palouse WA', -118.00, 46.90],
+        ['Pheasant: Sacramento Valley', -121.90, 39.30],
+        ['Pheasant: TX Panhandle', -102.00, 34.80], ['Pheasant: Michigan Thumb', -83.20, 43.60],
+        ['Bobwhite: Thomasville GA', -84.10, 30.72], ['Bobwhite: Albany GA', -84.35, 31.40],
+        ['Bobwhite: Brooks Co TX', -98.20, 27.00], ['Bobwhite: Albany TX', -99.30, 32.70],
+        ['Bobwhite: W Oklahoma', -99.40, 35.60], ['Bobwhite: Flint Hills KS', -96.20, 37.80],
+        ['Bobwhite: N Missouri', -93.00, 40.20], ['Bobwhite: Ames TN', -89.20, 35.10],
+        ['Bobwhite: AL Black Belt', -87.50, 32.30],
+        ['Bobwhite: SC coastal plain', -79.50, 34.20], ['Bobwhite: Babcock FL', -81.70, 26.85],
+        ['Ruffed grouse: Park Falls WI', -90.45, 45.93],
+        ['Ruffed grouse: Grand Rapids MN', -93.53, 47.24],
+        ['Ruffed grouse: Gaylord MI', -84.67, 45.03], ['Ruffed grouse: N Maine', -69.30, 46.30],
+        ['Ruffed grouse: N NH', -71.30, 44.90], ['Ruffed grouse: Adirondacks NY', -74.30, 44.10],
+        ['Ruffed grouse: PA north central', -77.80, 41.50],
+        ['Ruffed grouse: WV highlands', -79.80, 38.60],
+        ['Sharptail and Hun: Malta MT', -107.87, 48.36],
+        ['Sharptail and Hun: Lewistown MT', -109.40, 47.06],
+        ['Sharptail: Williston ND', -103.60, 48.15],
+        ['Sharptail: Fort Pierre SD', -100.40, 44.20],
+        ['Sharptail and chicken: Valentine NE', -100.55, 42.87],
+        ['Prairie chicken: Flint Hills KS', -96.60, 38.40],
+        ['Sage grouse: Farson WY', -109.40, 42.10], ['Sage grouse: Rawlins WY', -107.20, 41.80],
+        ['Sage grouse: Craig CO', -107.55, 40.50], ['Sage grouse: Elko NV', -115.80, 41.50],
+        ['Sage grouse: Hart Mtn OR', -119.60, 42.50],
+        ['Chukar: Hells Canyon ID', -116.80, 45.30], ['Chukar: Santa Rosa NV', -117.60, 41.50],
+        ['Chukar: John Day OR', -119.60, 44.80], ['Chukar: Snake breaks WA', -117.20, 46.50],
+        ['Chukar: UT West Desert ranges', -112.90, 40.30],
+        ['California quail: Coast Range CA', -121.00, 36.20],
+        ['California quail: Yakima WA', -120.50, 46.60],
+        ['Gambels quail: Oracle AZ', -110.80, 32.60],
+        ['Gambels quail: Phoenix foothills', -111.50, 33.80],
+        ['Scaled quail: SE New Mexico', -104.00, 32.50],
+        ['Scaled quail: W Texas', -102.80, 31.00], ['Mearns quail: Sonoita AZ', -110.60, 31.60],
+        ['Dusky grouse: Colorado', -106.50, 39.50],
+        ['Dusky grouse: Wyoming Range', -110.60, 42.60],
+        ['Sooty grouse: Cascades WA', -121.50, 47.30],
+        ['Mountain quail: Sierra foothills', -120.30, 38.30], ['E South Dakota', -97.80, 44.20],
+        ['C Kansas', -98.50, 38.50], ['TX Panhandle east', -101.40, 35.20],
+        ['S Georgia', -83.40, 31.40], ['SW Idaho', -116.80, 43.40],
+        ['NV chukar', -117.20, 40.60]
       ],
       no: [
-        ['Everglades sawgrass FL', -80.90, 25.90]
+        ['Everglades FL', -80.90, 25.90], ['Miami', -80.25, 25.78],
+        ['Louisiana coastal marsh', -91.00, 29.40], ['Okefenokee interior GA', -82.30, 30.80],
+        ['Atchafalaya swamp LA', -91.60, 30.00], ['New York City', -73.95, 40.75],
+        ['Los Angeles', -118.25, 34.05], ['Chicago', -87.65, 41.85], ['Houston', -95.37, 29.76],
+        ['Bonneville flats UT', -113.80, 40.75], ['Imperial dunes CA', -115.00, 32.90],
+        ['Black Rock playa NV', -119.00, 40.90], ['Mississippi River Delta LA', -89.40, 29.20],
+        ['White Sands NM', -106.30, 32.80], ['Badwater salt pan', -116.83, 36.25]
       ]
     },
     ducks: {
+      /* Refuges, marshes and river bottoms known for ducks in every
+         flyway, against desert and ground above treeline. Death Valley
+         fails: the land cover has water or wetland in that cell, and
+         nothing here says it is salt. */
       yes: [
-        ['Stuttgart AR', -91.55, 34.50], ['Devils Lake ND', -98.86, 48.11],
-        ['Bear River UT', -112.26, 41.44], ['Sacramento Valley CA', -121.80, 39.10],
-        ['Horicon WI', -88.63, 43.45], ['Chesapeake MD', -76.20, 38.60],
-        ['SW Louisiana', -92.70, 30.00], ['Katy Prairie TX', -95.90, 29.80],
-        ['Mississippi', -90.40, 31.50], ['Reelfoot TN', -89.39, 36.37]
+        ['Devils Lake ND', -98.86, 48.11], ['J Clark Salyer ND', -100.90, 48.60],
+        ['Sand Lake SD', -98.25, 45.80], ['Lake Andes SD', -98.50, 43.15],
+        ['Rainwater Basin NE', -98.00, 40.60], ['Platte River NE', -99.00, 40.70],
+        ['Cheyenne Bottoms KS', -98.65, 38.47], ['Quivira KS', -98.50, 38.15],
+        ['Loess Bluffs MO', -95.25, 40.07], ['Grand Pass MO', -93.30, 39.25],
+        ['Swan Lake MO', -93.20, 39.60], ['Mingo MO', -90.10, 37.00],
+        ['Illinois River (Chautauqua)', -90.10, 40.38], ['Carlyle Lake IL', -89.30, 38.70],
+        ['Reelfoot TN', -89.39, 36.37], ['Stuttgart AR', -91.55, 34.50],
+        ['Bayou Meto AR', -91.50, 34.20], ['Cache River AR', -91.30, 35.10],
+        ['Mississippi Delta MS', -90.60, 33.50], ['Catahoula Lake LA', -92.10, 31.50],
+        ['SW Louisiana', -92.70, 30.00], ['Mississippi River Delta LA', -89.40, 29.30],
+        ['Texas rice prairie', -96.30, 29.60], ['Matagorda TX', -96.00, 28.70],
+        ['Laguna Madre TX', -97.40, 27.30], ['Playa Lakes TX', -101.80, 34.50],
+        ['Hackberry Flat OK', -99.00, 34.30], ['Salt Plains OK', -98.20, 36.75],
+        ['Bear River UT', -112.26, 41.44], ['Farmington Bay UT', -112.00, 41.00],
+        ['Klamath Basin', -121.60, 41.95], ['Sacramento Valley CA', -121.80, 39.10],
+        ['Suisun Marsh CA', -122.00, 38.15], ['Grasslands CA', -120.80, 37.10],
+        ['Salton Sea CA', -115.65, 33.20], ['Cibola AZ', -114.70, 33.30],
+        ['Columbia Basin WA', -119.30, 46.98], ['Skagit WA', -122.40, 48.35],
+        ['Sauvie Island OR', -122.80, 45.70], ['Malheur OR', -118.85, 43.25],
+        ['Freezout Lake MT', -112.05, 47.67], ['Bowdoin MT', -107.60, 48.40],
+        ['American Falls ID', -112.80, 42.90], ['Stillwater NV', -118.50, 39.55],
+        ['Ruby Marshes NV', -115.45, 40.20], ['Bosque del Apache NM', -106.88, 33.80],
+        ['Monte Vista CO', -106.10, 37.50], ['Jackson Lake CO', -104.10, 40.40],
+        ['Torrington WY', -104.20, 42.07], ['Horicon WI', -88.63, 43.45],
+        ['Mississippi Pool 8 WI', -91.25, 43.70], ['Lac qui Parle MN', -95.90, 45.02],
+        ['Thief Lake MN', -95.95, 48.50], ['Saginaw Bay MI', -83.52, 43.72],
+        ['Lake St Clair MI', -82.75, 42.55], ['Lake Erie marshes OH', -83.10, 41.60],
+        ['Montezuma NY', -76.75, 43.00], ['Blackwater MD', -76.10, 38.45],
+        ['Susquehanna Flats MD', -76.05, 39.50], ['Bombay Hook DE', -75.45, 39.27],
+        ['Forsythe NJ', -74.42, 39.45], ['Great South Bay NY', -73.00, 40.68],
+        ['Missisquoi VT', -73.15, 44.97], ['Merrymeeting Bay ME', -69.85, 44.00],
+        ['Mattamuskeet NC', -76.20, 35.50], ['Currituck NC', -75.95, 36.40],
+        ['Santee SC', -80.10, 33.50], ['ACE Basin SC', -80.45, 32.60],
+        ['Altamaha GA', -81.45, 31.35], ['Lake Okeechobee FL', -80.85, 27.00],
+        ['Merritt Island FL', -80.70, 28.65], ['Mobile Delta AL', -87.95, 30.75],
+        ['Wheeler AL', -86.95, 34.60], ['Kentucky Lake', -88.10, 36.60],
+        ['Ballard KY', -89.05, 37.15], ['Chesapeake MD', -76.20, 38.60],
+        ['Katy Prairie TX', -95.90, 29.80], ['Mississippi', -90.40, 31.50]
       ],
       no: [
-        ['W Texas desert', -104.00, 30.50], ['Nevada interior', -116.50, 39.50],
-        ['Sawatch alpine CO', -106.35, 38.80], ['Mojave CA', -116.20, 34.80]
+        ['Mojave CA', -116.20, 34.80], ['Death Valley', -116.90, 36.30],
+        ['W Texas desert', -104.00, 30.50], ['Big Bend TX', -103.30, 29.30],
+        ['White Sands NM', -106.30, 32.80], ['Chihuahuan desert NM', -107.50, 32.30],
+        ['Sonoran desert AZ', -113.20, 32.80], ['Painted Desert AZ', -110.50, 35.50],
+        ['Canyonlands UT', -110.00, 38.30], ['Bonneville flats UT', -113.80, 40.75],
+        ['Black Rock Desert NV', -119.00, 40.90], ['Nevada interior', -116.50, 39.50],
+        ['Owyhee desert', -117.00, 42.30], ['Sawatch alpine CO', -106.35, 38.80],
+        ['Wind Rivers alpine WY', -109.60, 43.10], ['Sierra crest CA', -118.60, 37.00],
+        ['Edwards Plateau dry TX', -100.50, 30.30], ['Guadalupe Mts TX', -104.86, 31.90]
+      ]
+    },
+    'canada-goose': {
+      /* Field country within reach of roost water. One fails: Bosque del
+         Apache is a narrow irrigated valley through desert, and a cell
+         eleven kilometres across reads it as desert. */
+      yes: [
+        ['Front Range CO (Windsor)', -104.90, 40.50], ['Jackson Lake CO', -104.10, 40.40],
+        ['Lamar CO', -102.60, 38.10], ['Torrington WY', -104.20, 42.07],
+        ['Rochester MN', -92.55, 43.95], ['Lac qui Parle MN', -95.90, 45.02],
+        ['Fergus Falls MN', -96.08, 46.28], ['Pierre SD', -100.35, 44.37],
+        ['Sand Lake SD', -98.25, 45.80], ['Devils Lake ND', -98.86, 48.11],
+        ['Bismarck ND', -100.60, 46.90], ['Rainwater Basin NE', -98.00, 40.60],
+        ['Lake McConaughy NE', -101.70, 41.25], ['Cheyenne Bottoms KS', -98.65, 38.47],
+        ['Loess Bluffs MO', -95.25, 40.07], ['Swan Lake MO', -93.20, 39.60],
+        ['S Illinois (Union Co)', -89.35, 37.40], ['Ballard KY', -89.05, 37.15],
+        ['Horicon WI', -88.63, 43.45], ['Stuttgart AR', -91.55, 34.50],
+        ['NE Arkansas', -90.90, 35.80], ['SW Louisiana', -92.70, 30.00],
+        ['Texas rice prairie', -96.30, 29.60], ['TX Panhandle (Dumas)', -101.97, 35.86],
+        ['Knox City TX', -99.80, 33.40], ['Playa Lakes TX', -101.80, 34.50],
+        ['Salt Plains OK', -98.20, 36.75], ['Sacramento Valley CA', -121.90, 39.30],
+        ['Klamath Basin', -121.60, 41.95], ['Skagit WA', -122.40, 48.35],
+        ['Columbia Basin WA', -119.30, 46.98], ['Willamette Valley OR', -123.10, 44.60],
+        ['American Falls ID', -112.80, 42.90], ['Bear River UT', -112.26, 41.44],
+        ['Yellowstone valley MT', -108.30, 45.85], ['Freezout Lake MT', -112.05, 47.67],
+        ['Bosque del Apache NM', -106.88, 33.80], ['Chestertown MD', -76.00, 39.20],
+        ['Easton MD', -76.08, 38.77], ['Bombay Hook DE', -75.50, 39.27],
+        ['Middle Creek PA', -76.23, 40.27], ['Montezuma NY', -76.75, 42.95],
+        ['Dead Creek VT', -73.35, 44.07], ['Mattamuskeet NC', -76.20, 35.50],
+        ['Pungo NC', -76.55, 35.72], ['Fish Point MI', -83.52, 43.72],
+        ['Allegan MI', -85.95, 42.58], ['Killdeer Plains OH', -83.30, 40.72],
+        ['Mosquito Creek OH', -80.77, 41.38], ['Long Island east end NY', -72.50, 40.95],
+        ['Connecticut valley MA', -72.60, 42.35], ['Salem Co NJ', -75.40, 39.60],
+        ['Merrymeeting Bay ME', -69.85, 44.00]
+      ],
+      no: [
+        ['Mojave CA', -116.20, 34.80], ['Death Valley', -116.90, 36.30],
+        ['W Texas desert', -104.00, 30.50], ['Big Bend TX', -103.30, 29.30],
+        ['White Sands NM', -106.30, 32.80], ['Chihuahuan desert NM', -107.50, 32.30],
+        ['Sonoran desert AZ', -113.20, 32.80], ['Painted Desert AZ', -110.50, 35.50],
+        ['Canyonlands UT', -110.00, 38.30], ['Bonneville flats UT', -113.80, 40.75],
+        ['Black Rock Desert NV', -119.00, 40.90], ['Nevada interior', -116.50, 39.50],
+        ['Owyhee desert', -117.00, 42.30], ['Sawatch alpine CO', -106.35, 38.80],
+        ['Wind Rivers alpine WY', -109.60, 43.10], ['Sierra crest CA', -118.60, 37.00],
+        ['Guadalupe Mts TX', -104.86, 31.90], ['Everglades FL', -80.90, 25.90],
+        ['Big Cypress FL', -81.10, 26.00], ['Great Smokies crest', -83.50, 35.60],
+        ['Selway wilderness ID', -115.00, 46.00], ['Olympic interior WA', -123.70, 47.80]
       ]
     },
     trout: {
@@ -449,7 +595,7 @@
       var sc = OG.models.scoreAt(p[1], p[2], t, doy, sp);
       if (sc.inRange) y++;
       else misses.push('MISSING ' + p[0] + ' (hab ' +
-        Math.round(OG.env.habitat(p[1], p[2])[sp === 'ducks' ? 'waterfowl' : sp] * 100) + ')');
+        Math.round(OG.env.habitat(p[1], p[2])[OG.models.byId(sp).habKey] * 100) + ')');
     });
     set.no.forEach(function (p) {
       var sc = OG.models.scoreAt(p[1], p[2], t, doy, sp);

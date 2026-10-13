@@ -96,7 +96,7 @@
      for elk are kept only as the fallback if that plane fails to load. */
   var RANGE_KNEE = {
     elk: 0.50, moose: 0.50, whitetail: 0.25, muledeer: 0.25, pronghorn: 0.25,
-    turkey: 0.10, upland: 0.15, waterfowl: 0.10, trout: 0.25
+    turkey: 0.10, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25
   };
   var RANGE_REGION = {
     elk:       [0.30, 0.50],   // high, to keep the eastern herds as islands
@@ -624,6 +624,35 @@
     return out;
   }
 
+  /* ---------- names, one a cell ----------
+
+     What kind of duck water a cell is, and which upland bird it was
+     scored on, both worked out in the raster build - see waterKinds
+     and uplandSuit in ingest/habitat.mjs. Nearest cell, not
+     interpolated: these are names, not amounts. */
+  var nameCells = {};
+
+  function nameAt(field, lon, lat) {
+    if (!G || !raw[field]) return null;
+    var cells = nameCells[field];
+    if (cells === undefined) {
+      try {
+        var bin = global.atob(raw[field].cells);
+        var a = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+        cells = a;
+      } catch (e) { cells = null; }
+      nameCells[field] = cells;
+    }
+    if (!cells) return null;
+    var ix = Math.floor((lon - G.lon0) / G.d), iy = Math.floor((lat - G.lat0) / G.d);
+    if (ix < 0 || iy < 0 || ix >= G.nlon || iy >= G.nlat) return null;
+    return raw[field].names[cells[iy * G.nlon + ix]] || null;
+  }
+
+  function waterKindAt(lon, lat) { return nameAt('waterKind', lon, lat); }
+  function uplandLeadAt(lon, lat) { return nameAt('uplandLead', lon, lat); }
+
   global.OG = global.OG || {};
   global.OG.habgrid = {
     at: at, presenceAt: presenceAt, regionalAt: regionalAt, rangeAt: rangeAt,
@@ -645,6 +674,8 @@
     seasonalPresence: seasonalPresence,
     chronReady: !!(raw && raw.chronology && raw.chronology.sp),
     composition: composition,
+    waterKindAt: waterKindAt,
+    uplandLeadAt: uplandLeadAt,
     compReady: !!(raw && raw.composition && raw.composition.sp)
   };
 })(window);
