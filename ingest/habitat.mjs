@@ -827,74 +827,343 @@ function pressureGrid(counts, total) {
   return out;
 }
 
-/* ---------- tailwaters ----------
+/* ---------- trout water ----------
 
-   The coldwater index above is climate, and climate says no to some
-   of the best trout water in the country. The White River below Bull
-   Shoals scores 0.00 on July air temperature and runs 57 F in
-   October, because it is drawn from the bottom of a reservoir. The
-   Norfork reads 53 F, Taneycomo 55 F. A trout map built on air
-   temperature alone blanks the Ozarks and the Tennessee Valley.
+   THE TROUT MAP USED TO BE A LIST. Twenty rivers drawn as ovals in
+   env.js, and nothing outside them: of 57 well-known trout waters the
+   app found 27. This plane existed the whole time and was never read,
+   and would not have done much better if it had been, for two reasons
+   that are both fixed below.
 
-   USGS names its sites descriptively, so "WHITE RIVER BELOW BULL
-   SHOALS DAM" and "TAILRACE" are in the record. Naming is a
-   structural fact about the river rather than a reading, which
-   matters here: keying off live water temperature instead would mark
-   every river in Minnesota as trout water in January.
+   IT WANTED TO SEE THE WATER. Suitability was the share of the cell
+   mapped as open water, and a trout stream is narrower than a pixel.
+   Penns Creek, the Beaverkill and every creek in the Driftless read
+   zero. Mapped water still counts - a river wide enough to map is a
+   bigger fishery - but it is a bonus on top of TROUT_STREAM now, not
+   the condition. In country cold enough for trout there is a stream.
 
-   Folded into the coldwater grid BEFORE the occurrence gate, not
-   applied on top of the finished surface, so a cold tailwater with no
-   trout ever recorded in it still comes out empty. */
+   IT GUESSED AT TAILWATERS. A gauge with DAM in its name and either a
+   decent flow or a cold reading on the day of the build was taken for
+   a cold release. In October every river is cold, and a navigation
+   dam on the Ohio has plenty of flow. The measurement exists: USGS
+   publishes monthly mean water temperature for every gauge that
+   records it, about 2,800 of them. The mean for July and August is
+   what a trout has to live through, and it finds the tailwaters, the
+   spring creeks and the high freestones without being told which is
+   which - 11 C on the Chattahoochee below Buford Dam, in Georgia.
 
-function tailwaterGrid() {
-  const out = new Float32Array(NCELL);
-  let raw = null;
+   So, for each cell:
+
+     cold      the warmer-month air temperature (as before), or a gauge
+               nearby that measures cold water in summer, or a named
+               tailwater or spring creek from js/trout-waters.js,
+               whichever says coldest
+     occupied  trout recorded there (GBIF, open licences), or a
+               self-sustaining population in the USGS Nonindigenous
+               Aquatic Species database, or a named water
+
+   Only "established" NAS records are used. Most of that database is
+   stocking records, and a pond stocked for a winter fishing derby in
+   Ames is not trout water. */
+
+/* What a cell with trout seen in it is worth with no water mapped in it
+   at all. Mapped water adds the rest - but only river-sized water. A
+   cell that is mostly open water is a lake, a reservoir or the sea:
+   Seattle scored 91 on the strength of Puget Sound. A river two hundred
+   yards wide is under 2 percent of a cell, so the bonus fades out
+   between TROUT_LAKE[0] and TROUT_LAKE[1] of the cell under water.
+
+   And a city is not good trout water whatever has been photographed in
+   it. Pavement is what ends a trout stream, and it is also where the
+   people with cameras are. Built-up ground takes up to TROUT_CITY[2] off
+   a cell, fading in between the first two numbers as a share of the
+   cell - except on a named water, because the Lower Sacramento runs
+   through the middle of Redding and is none the worse for it. */
+const TROUT_STREAM = 0.6;
+const TROUT_LAKE = [0.08, 0.30];
+const TROUT_CITY = [0.15, 0.50, 0.65];
+
+/* Degrees C, July and August mean: full credit at or below, none at or above. */
+const SUMMER_COLD = 18, SUMMER_WARM = 23;
+const SUMMER_SINCE = 2005, SUMMER_REACH_KM = 20, SUMMER_PLATEAU_KM = 8;
+
+const NAS_TAXA = [['Salmo', 'trutta'], ['Oncorhynchus', 'mykiss'], ['Salvelinus', 'fontinalis'], ['Oncorhynchus', 'clarkii']];
+
+function loadWindow(file, name) {
   try {
     const win = {};
-    new Function('window', readFileSync(resolve(HERE, '..', 'js', 'gauges.js'), 'utf8'))(win);
-    raw = win.US_GAUGES;
-  } catch (e) { /* no gauge file - the climate index stands alone */ }
-  if (!raw || !raw.sites) return out;
+    new Function('window', readFileSync(resolve(HERE, '..', 'js', file), 'utf8'))(win);
+    return win[name] || null;
+  } catch (e) { return null; }
+}
 
-  const TW = /\b(TAILRACE|TAILWATER|POWERHOUSE|PWRHSE)\b|\b(BL|BLW|BELOW|DS)\b[^,]{0,40}\bDAM\b/i;
-  const REACH_KM = 28;
-  let n = 0;
+/* Mean July-August water temperature at every gauge that has one. */
+async function summerWater() {
+  const raw = loadWindow('gauges.js', 'US_GAUGES');
+  if (!raw || !raw.sites) return [];
+  const sites = raw.sites.filter((g) => typeof g[4] === 'number' && typeof g[2] === 'number' && typeof g[3] === 'number');
+  const means = await cached('nwis-summer-water-' + sites.length, 120, async () => {
+    const out = {};
+    for (let i = 0; i < sites.length; i += 10) {
+      const ids = sites.slice(i, i + 10).map((g) => g[0]);
+      let text = '';
+      for (let attempt = 0; attempt < 4 && !text; attempt++) {
+        try {
+          const r = await fetch('https://waterservices.usgs.gov/nwis/stat/?format=rdb&sites=' + ids.join(',') +
+            '&statReportType=monthly&statTypeCd=mean&parameterCd=00010', { headers: { 'User-Agent': 'OmniGuide/ingest' }, signal: AbortSignal.timeout(60000) });
+          if (r.status === 404) { text = '#'; break; }          // none of these ten has statistics
+          if (r.ok) text = await r.text(); else await sleep(2500 * (attempt + 1));
+        } catch (e) { await sleep(2500 * (attempt + 1)); }
+      }
+      if (!text) throw new Error('USGS statistics service would not answer for ' + ids.join(','));
+      const acc = {};
+      for (const line of text.split('\n')) {
+        if (!line || line[0] === '#') continue;
+        const c = line.split('\t');
+        if (c[0] !== 'USGS') continue;
+        const year = +c[5], month = +c[6], v = parseFloat(c[7]);
+        if (year < SUMMER_SINCE || (month !== 7 && month !== 8) || !isFinite(v)) continue;
+        const a = acc[c[1]] || (acc[c[1]] = [0, 0]);
+        a[0] += v; a[1]++;
+      }
+      for (const id of Object.keys(acc)) if (acc[id][1] >= 2) out[id] = [Math.round(acc[id][0] / acc[id][1] * 10) / 10, acc[id][1]];
+      if (i % 500 === 0) process.stderr.write('    summer water ' + i + '/' + sites.length + String.fromCharCode(13));
+      await sleep(120);
+    }
+    return out;
+  });
+  const list = [];
+  for (const g of sites) if (means[g[0]]) list.push({ id: g[0], name: g[1], lat: g[2], lon: g[3], c: means[g[0]][0], n: means[g[0]][1] });
+  process.stderr.write('  ' + list.length + ' gauges with a July-August water temperature' + String.fromCharCode(10));
+  return list;
+}
 
-  for (const site of raw.sites) {
-    const lat = site[2], lon = site[3], tempC = site[4], cfs = site[5];
-    if (typeof lat !== 'number' || typeof lon !== 'number') continue;
-    if (!TW.test(site[1] || '')) continue;
-
-    /* Many "below dam" sites in the network are trickles behind farm
-       ponds. Require real flow, or a temperature cold enough to be a
-       bottom release. */
-    const bigFlow = typeof cfs === 'number' && cfs >= 150;
-    const coldRead = typeof tempC === 'number' && tempC <= 17;   // 63 F
-    if (!bigFlow && !coldRead) continue;
-    n++;
-
-    const strength = coldRead ? 1.0 : 0.8;
-    const kmPerLon = 111.32 * Math.cos(lat * Math.PI / 180);
-    const dLat = REACH_KM / 111.32, dLon = REACH_KM / kmPerLon;
-    const iy0 = Math.max(0, Math.floor((lat - dLat - LAT0) / D));
-    const iy1 = Math.min(NLAT - 1, Math.ceil((lat + dLat - LAT0) / D));
-    const ix0 = Math.max(0, Math.floor((lon - dLon - LON0) / D));
-    const ix1 = Math.min(NLON - 1, Math.ceil((lon + dLon - LON0) / D));
-    for (let iy = iy0; iy <= iy1; iy++) {
-      const cy = LAT0 + (iy + 0.5) * D;
-      for (let ix = ix0; ix <= ix1; ix++) {
-        const cx = LON0 + (ix + 0.5) * D;
-        const ex = (cx - lon) * kmPerLon, ey = (cy - lat) * 111.32;
-        const d = Math.sqrt(ex * ex + ey * ey);
-        if (d > REACH_KM) continue;
-        const v = strength * (1 - d / REACH_KM);
+function summerColdGrid(list) {
+  const out = new Float32Array(NCELL);
+  for (const g of list) {
+    const score = clamp01((SUMMER_WARM - g.c) / (SUMMER_WARM - SUMMER_COLD));
+    if (score <= 0) continue;
+    const kmPerLon = 111.32 * Math.cos(g.lat * Math.PI / 180);
+    const dLat = SUMMER_REACH_KM / 111.32, dLon = SUMMER_REACH_KM / kmPerLon;
+    for (let iy = Math.max(0, Math.floor((g.lat - dLat - LAT0) / D)); iy <= Math.min(NLAT - 1, Math.ceil((g.lat + dLat - LAT0) / D)); iy++) {
+      for (let ix = Math.max(0, Math.floor((g.lon - dLon - LON0) / D)); ix <= Math.min(NLON - 1, Math.ceil((g.lon + dLon - LON0) / D)); ix++) {
+        const ex = (LON0 + (ix + 0.5) * D - g.lon) * kmPerLon, ey = (LAT0 + (iy + 0.5) * D - g.lat) * 111.32;
+        const dist = Math.sqrt(ex * ex + ey * ey);
+        if (dist > SUMMER_REACH_KM) continue;
+        const v = score * (dist <= SUMMER_PLATEAU_KM ? 1 : 1 - (dist - SUMMER_PLATEAU_KM) / (SUMMER_REACH_KM - SUMMER_PLATEAU_KM));
         const k = cellIdx(ix, iy);
         if (v > out[k]) out[k] = v;
       }
     }
   }
-  process.stderr.write('  ' + n + ' qualifying tailwater gauges' + String.fromCharCode(10));
   return out;
+}
+
+/* Cells inside a named water, and whether that water is cold by kind. */
+function namedTroutGrid() {
+  const waters = loadWindow('trout-waters.js', 'US_TROUT_WATERS') || [];
+  const named = new Uint8Array(NCELL), cold = new Float32Array(NCELL);
+  for (const w of waters) {
+    for (let iy = Math.max(0, Math.floor((w.lat - w.ry - LAT0) / D)); iy <= Math.min(NLAT - 1, Math.ceil((w.lat + w.ry - LAT0) / D)); iy++) {
+      for (let ix = Math.max(0, Math.floor((w.lon - w.rx - LON0) / D)); ix <= Math.min(NLON - 1, Math.ceil((w.lon + w.rx - LON0) / D)); ix++) {
+        const ex = (LON0 + (ix + 0.5) * D - w.lon) / w.rx, ey = (LAT0 + (iy + 0.5) * D - w.lat) / w.ry;
+        if (ex * ex + ey * ey > 1) continue;
+        const k = cellIdx(ix, iy);
+        named[k] = 1;
+        if (w.cls !== 'freestone') cold[k] = 1;
+      }
+    }
+  }
+  process.stderr.write('  ' + waters.length + ' named trout waters' + String.fromCharCode(10));
+  return { named, cold };
+}
+
+/* Self-sustaining trout populations, from the USGS Nonindigenous Aquatic
+   Species database. Public domain. */
+async function nasEstablished() {
+  const grid = new Float32Array(NCELL);
+  let used = 0, seen = 0;
+  for (const [genus, species] of NAS_TAXA) {
+    const rows = await cached('nas-established-' + genus + '-' + species, 120, async () => {
+      const all = [];
+      for (let offset = 0; ; offset += 1000) {
+        const j = await polite('nas', 400, 'https://nas.er.usgs.gov/api/v2/occurrence/search?genus=' + genus +
+          '&species=' + species + '&status=established&limit=1000&offset=' + offset, false);
+        for (const r of j.results) all.push([r.decimalLatitude, r.decimalLongitude, r.status || '', r.year || 0, r.latLongAccuracy || '']);
+        if (j.results.length < 1000) break;
+      }
+      return all;
+    });
+    seen += rows.length;
+    for (const r of rows) {
+      /* Accurate locations only. 'Approximate' turned out to mean a point
+         standing for a whole drainage: one such, labelled Republican
+         River, put trout on the Colorado plains forty miles from the
+         spring-fed fork that actually has them. */
+      if (r[2] !== 'established' || r[4] !== 'Accurate') continue;
+      const ix = Math.floor((r[1] - LON0) / D), iy = Math.floor((r[0] - LAT0) / D);
+      if (ix < 0 || iy < 0 || ix >= NLON || iy >= NLAT) continue;
+      grid[cellIdx(ix, iy)]++; used++;
+    }
+  }
+  process.stderr.write('  NAS: ' + used + ' established trout records of ' + seen + String.fromCharCode(10));
+  return grid;
+}
+
+/* How sure it is that there are trout in a cell, 0 to 1.
+
+   SEEN HERE. A record in the cell or one beside it - a river does not
+   stop at a cell edge. An established population in the USGS database
+   or a named water counts in full. An ordinary record counts by how
+   cold the place is: where the water is cold outright one is nearly
+   enough, and where it is only marginal it takes several, because one
+   photograph of a trout from a pond east of Denver is a stocking truck
+   and not a fishery. TROUT_RECORDS is how many it takes, marginal to
+   cold, and below TROUT_RECORDS_COLD no number of them is enough:
+   several people had logged trout from a stocked lake on the Colorado
+   plains, and that is still not trout water. Water that warm needs a
+   gauge, an established population or a name to vouch for it.
+
+   SEEN ALL ROUND counts for less, and how much of the country round
+   about has to hold trout before it counts at all also depends on how
+   cold the place is. Both halves of that were needed. In cold country
+   a stream with no record is still a trout stream: the north Maine
+   woods have almost nobody logging fish in them and a brook trout in
+   every brook, and with one bar for everywhere Maine came out 46
+   percent trout water. In marginal country it is not: with the same
+   bar, southern Michigan farmland with no record anywhere near scored
+   76, and two thirds of Ohio was in range on the strength of the Mad
+   River and the Lake Erie steelhead streams. So the bar slides, from
+   TROUT_NEED[0] of the surrounding cells where the water is only just
+   cold enough to TROUT_NEED[1] where it is cold outright, and ground
+   that is in on its surroundings alone is capped at TROUT_UNSEEN.
+
+   STREAM COUNTRY. Neither is enough on its own in the West, where a
+   basin can be cold, ringed by trout mountains, and dry: the Red
+   Desert came in on its neighbours with no stream in it. Ground with
+   no trout seen on it has to look like it holds water - timber, or
+   mapped water and wetland - before its surroundings count.
+
+   COLD, TIMBERED AND SLOPING IS PRESUMED. There are places the records
+   do not reach at all. Around the Allagash one cell in a hundred has a
+   trout logged in it; in northern Wisconsin, six. Where the water is
+   cold outright, the country is stream country and the ground has some
+   fall to it, trout are presumed at TROUT_PRESUMED. The fall matters:
+   the Red Lake peatlands are as cold and as wet as the Allagash and
+   have no trout streams, and what tells them apart is a few feet of
+   relief against a hundred and thirty. Mountains count as stream
+   country on their relief alone, since above the trees - the Wind
+   Rivers, the Frank Church - there is no timber to go by. */
+const TROUT_RECORDS = [6, 0.7], TROUT_RECORDS_COLD = 0.55;
+const TROUT_NEED = [0.60, 0.12], TROUT_NEED_WIDTH = 0.20;
+const TROUT_COLD_BAND = [0.60, 1.00];
+const TROUT_UNSEEN = 0.50, TROUT_PRESUMED = 0.40, TROUT_PRESUMED_COLD = 0.95;
+const TROUT_PRESUMED_RELIEF = [10, 60];         // feet of relief inside the cell
+const TROUT_ROUND = 12;                         // cells either way: about 80 miles
+const STREAM_FOREST = [0.15, 0.40], STREAM_WET = [0.01, 0.04];   // share of the 3 by 3 round a cell
+const STREAM_RELIEF = [300, 600];                                // feet
+
+function troutEvidence(count, nas, named, cold, land, counts, reliefFt) {
+  const sure = new Float32Array(NCELL), seen = new Uint8Array(NCELL), here = new Uint8Array(NCELL);
+  for (let iy = 0; iy < NLAT; iy++) {
+    for (let ix = 0; ix < NLON; ix++) {
+      const k = cellIdx(ix, iy);
+      if (!land[k]) continue;
+      let full = named[k] ? 1 : 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const x = ix + dx, y = iy + dy;
+          if (x < 0 || y < 0 || x >= NLON || y >= NLAT) continue;
+          const j = cellIdx(x, y);
+          if (nas[j] > 0) full = 1;
+          n += count[j];
+        }
+      }
+      const c = clamp01((cold[k] - TROUT_RECORDS_COLD) / (1 - TROUT_RECORDS_COLD));
+      const takes = TROUT_RECORDS[0] + (TROUT_RECORDS[1] - TROUT_RECORDS[0]) * c;
+      sure[k] = full ? 1 : n > 0 && cold[k] > TROUT_RECORDS_COLD ? 1 - Math.exp(-n / takes) : 0;
+      here[k] = sure[k] >= 0.5 ? 1 : 0;
+    }
+  }
+
+  /* Share of land cells round about that are occupied: two running sums. */
+  const rowHit = new Float32Array(NCELL), rowLand = new Float32Array(NCELL);
+  for (let iy = 0; iy < NLAT; iy++) {
+    for (let ix = 0; ix < NLON; ix++) {
+      let h = 0, l = 0;
+      for (let dx = -TROUT_ROUND; dx <= TROUT_ROUND; dx++) {
+        const x = ix + dx;
+        if (x < 0 || x >= NLON) continue;
+        const j = cellIdx(x, iy);
+        if (!land[j]) continue;
+        l++; h += here[j];
+      }
+      rowHit[cellIdx(ix, iy)] = h; rowLand[cellIdx(ix, iy)] = l;
+    }
+  }
+
+  /* Does it look like stream country: share of timber, and of water and
+     wetland, in the nine cells round each one. */
+  const share = (classes) => {
+    const own = new Float32Array(NCELL);
+    for (const c of classes) { const arr = counts.get(c); if (arr) for (let k = 0; k < NCELL; k++) if (land[k]) own[k] += arr[k] / land[k]; }
+    const nine = new Float32Array(NCELL);
+    for (let iy = 0; iy < NLAT; iy++) for (let ix = 0; ix < NLON; ix++) {
+      let sum = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const x = ix + dx, y = iy + dy;
+        if (x < 0 || y < 0 || x >= NLON || y >= NLAT || !land[cellIdx(x, y)]) continue;
+        sum += own[cellIdx(x, y)]; n++;
+      }
+      nine[cellIdx(ix, iy)] = n ? sum / n : 0;
+    }
+    return nine;
+  };
+  const timber = share([41, 42, 43, 90]), wet = share([11, 90, 95]);
+
+  const round = new Float32Array(NCELL), unseen = new Float32Array(NCELL);
+  for (let iy = 0; iy < NLAT; iy++) {
+    for (let ix = 0; ix < NLON; ix++) {
+      const k = cellIdx(ix, iy);
+      if (!land[k]) continue;
+      let h = 0, l = 0;
+      for (let dy = -TROUT_ROUND; dy <= TROUT_ROUND; dy++) {
+        const y = iy + dy;
+        if (y < 0 || y >= NLAT) continue;
+        h += rowHit[cellIdx(ix, y)]; l += rowLand[cellIdx(ix, y)];
+      }
+      round[k] = l > 0 ? h / l : 0;
+      const c = clamp01((cold[k] - TROUT_COLD_BAND[0]) / (TROUT_COLD_BAND[1] - TROUT_COLD_BAND[0]));
+      const need = TROUT_NEED[0] + (TROUT_NEED[1] - TROUT_NEED[0]) * c;
+      const relief = isFinite(reliefFt[k]) ? reliefFt[k] : 0;
+      const country = Math.max(
+        clamp01((timber[k] - STREAM_FOREST[0]) / (STREAM_FOREST[1] - STREAM_FOREST[0])),
+        clamp01((wet[k] - STREAM_WET[0]) / (STREAM_WET[1] - STREAM_WET[0])),
+        clamp01((relief - STREAM_RELIEF[0]) / (STREAM_RELIEF[1] - STREAM_RELIEF[0])));
+      const fromRound = TROUT_UNSEEN * clamp01((round[k] - need) / TROUT_NEED_WIDTH);
+      const fall = clamp01((relief - TROUT_PRESUMED_RELIEF[0]) / (TROUT_PRESUMED_RELIEF[1] - TROUT_PRESUMED_RELIEF[0]));
+      const presumed = cold[k] >= TROUT_PRESUMED_COLD ? TROUT_PRESUMED * fall : 0;
+      unseen[k] = country * Math.max(fromRound, presumed);
+      /* Seen, for what the cell is worth, if the record says more than
+         the surroundings do. */
+      seen[k] = sure[k] >= unseen[k] && sure[k] > 0 ? 1 : 0;
+    }
+  }
+  const out = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) out[k] = seen[k] ? sure[k] : unseen[k];
+
+  /* How the numbers above were set, and how to set them again: point
+     TROUT_DEBUG at a JSON file of { "name": [lon, lat] } and each place
+     prints what the rule saw there. */
+  if (process.env.TROUT_DEBUG) {
+    const probe = JSON.parse(readFileSync(process.env.TROUT_DEBUG, 'utf8'));
+    for (const [name, p] of Object.entries(probe)) {
+      const k = cellIdx(Math.floor((p[0] - LON0) / D), Math.floor((p[1] - LAT0) / D));
+      console.log('TROUT ' + name.padEnd(30) + ' cold ' + cold[k].toFixed(2) + '  seen ' + sure[k].toFixed(2) + '  round ' + round[k].toFixed(2) +
+        '  timber ' + timber[k].toFixed(2) + '  wet ' + wet[k].toFixed(3) + '  relief ' + String(Math.round(reliefFt[k])).padStart(4) + '  evidence ' + out[k].toFixed(2) + (seen[k] ? ' (seen)' : ''));
+    }
+  }
+  return { sure: out, seen: seen };
 }
 
 /* ---------- combine ---------- */
@@ -1024,9 +1293,20 @@ async function main() {
 
   process.stderr.write('coldwater...\n');
   const cold = coldwaterGrid(ev.meanFt);
-  const tw = tailwaterGrid();
-  /* A cold release beats whatever the climate would have predicted. */
-  for (let k = 0; k < NCELL; k++) if (tw[k] > cold[k]) cold[k] = tw[k];
+  /* Measured cold water, and water known to be cold by kind, beat
+     whatever the climate would have predicted. Never the other way:
+     a warm main stem says nothing about the tributaries above it. */
+  const summer = await summerWater();
+  const measured = summerColdGrid(summer);
+  const namedTrout = namedTroutGrid();
+  let coldByGauge = 0, coldByName = 0;
+  for (let k = 0; k < NCELL; k++) {
+    if (measured[k] > cold[k]) { cold[k] = measured[k]; coldByGauge++; }
+    if (namedTrout.cold[k] > cold[k]) { cold[k] = namedTrout.cold[k]; coldByName++; }
+  }
+  process.stderr.write('  cold water raised by a gauge in ' + coldByGauge + ' cells, by a named water in ' + coldByName + String.fromCharCode(10));
+  const nasTrout = await nasEstablished();
+  let troutSure = null, troutCount = null;
 
   process.stderr.write('occurrences...\n');
   const occ = {}, effort = new Float32Array(NCELL);
@@ -1079,6 +1359,7 @@ async function main() {
        this, a species whose download hit the record cap contributes fewer
        counts than one that did not, and its share - the whole point of the
        denominator - comes out understated through no fault of the birds. */
+    if (sp === 'trout') troutCount = Float32Array.from(occ[sp]);
     let tot = 0;
     for (let k = 0; k < NCELL; k++) tot += occ[sp][k];
     if (tot > 0) for (let k = 0; k < NCELL; k++) occ[sp][k] /= tot;
@@ -1089,6 +1370,7 @@ async function main() {
      cell watched by one are judged the same way. */
   const effortS = smooth(effort, 3);
   const out = {}, presOut = {}, unrecordedOut = {};
+  troutSure = troutEvidence(troutCount, nasTrout, namedTrout.named, cold, lc.total, lc.counts, ev.reliefFt);
   const report = [];
   for (const sp of SPECIES) {
     const occS = smooth(occ[sp], 3);
@@ -1191,7 +1473,20 @@ async function main() {
 
          Trout keeps its coldwater term here because that is a
          property of the water rather than of the records. */
-      vals[k] = Math.round(clamp01(sp === 'trout' ? s * cold[k] : s) * 255);
+      if (sp === 'trout') {
+        /* Cold water, times how sure it is that trout are in it. Where
+           they have been seen, mapped water adds to it. */
+        const openArr = lc.counts.get(11);
+        const open = openArr ? openArr[k] / lc.total[k] : 0;
+        const river = s * (1 - clamp01((open - TROUT_LAKE[0]) / (TROUT_LAKE[1] - TROUT_LAKE[0])));
+        s = cold[k] * troutSure.sure[k] * (troutSure.seen[k] ? TROUT_STREAM + (1 - TROUT_STREAM) * river : 1);
+        if (!namedTrout.named[k]) {
+          let built = 0;
+          for (const c of [22, 23, 24]) { const arr = lc.counts.get(c); if (arr) built += arr[k] / lc.total[k]; }
+          s *= 1 - TROUT_CITY[2] * clamp01((built - TROUT_CITY[0]) / (TROUT_CITY[1] - TROUT_CITY[0]));
+        }
+      }
+      vals[k] = Math.round(clamp01(s) * 255);
 
       if (lean) {
         let t = 0;
@@ -1219,6 +1514,10 @@ async function main() {
         const q = Math.round(255 * clamp01(Math.pow(clamp01(share[iy * NLON + ix] / p97), 0.45)));
         const o = cy * PRES_NLON + cx;
         if (q > pv[o]) pv[o] = q;
+        /* For trout the question of range is already answered, cell by
+           cell, in troutEvidence, and is in the value. This plane only
+           has to not get in its way. */
+        if (sp === 'trout' && troutSure.sure[iy * NLON + ix] > 0) pv[o] = 255;
       }
     }
     presOut[sp] = Buffer.from(pv).toString('base64');
@@ -1285,7 +1584,8 @@ async function main() {
 
   const js = 'window.US_HABITAT=' + JSON.stringify({
     source: 'NLCD 2021 land cover (MRLC), USDA NASS Cropland Data Layer ' + CDL_YEAR + ' (rice), AWS terrarium elevation, ' +
-            'GBIF occurrence records 2015-2025 (CC0 and CC-BY only)',
+            'GBIF occurrence records 2015-2025 (CC0 and CC-BY only), USGS NWIS summer water temperature, ' +
+            'USGS Nonindigenous Aquatic Species database (established trout)',
     note: 'Land cover and elevation set habitat quality; GBIF occurrence share gates presence. ' +
           'Modelled suitability, not a census and not an abundance estimate. Occurrence records ' +
           'filtered to CC0 and CC-BY so the layer can be used commercially; CC-BY requires ' +

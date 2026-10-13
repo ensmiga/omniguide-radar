@@ -133,28 +133,10 @@
     { n: 'Katy and Eagle Lake prairie', lon: -96.3, lat: 29.6, rx: 0.8, ry: 0.5, v: 0.62, cls: 'rice' }
   ];
 
-  var TROUT_WATERS = [
-    { n: 'Bighorn River', lon: -107.95, lat: 45.32, rx: 0.30, ry: 0.42, v: 0.92, cls: 'tailwater' },
-    { n: 'Madison River', lon: -111.55, lat: 45.05, rx: 0.22, ry: 0.55, v: 0.86, cls: 'freestone' },
-    { n: 'Missouri River - Craig', lon: -111.95, lat: 47.05, rx: 0.22, ry: 0.35, v: 0.88, cls: 'tailwater' },
-    { n: 'Yellowstone River', lon: -110.4, lat: 45.4, rx: 0.8, ry: 0.4, v: 0.78, cls: 'freestone' },
-    { n: 'Green River - Flaming Gorge', lon: -109.45, lat: 40.95, rx: 0.25, ry: 0.3, v: 0.88, cls: 'tailwater' },
-    { n: 'San Juan River', lon: -107.65, lat: 36.85, rx: 0.3, ry: 0.2, v: 0.85, cls: 'tailwater' },
-    { n: 'South Platte - Deckers', lon: -105.3, lat: 39.3, rx: 0.3, ry: 0.35, v: 0.80, cls: 'tailwater' },
-    { n: 'Frying Pan and Roaring Fork', lon: -106.9, lat: 39.4, rx: 0.4, ry: 0.25, v: 0.82, cls: 'tailwater' },
-    { n: 'White River', lon: -92.3, lat: 36.3, rx: 0.5, ry: 0.3, v: 0.80, cls: 'tailwater' },
-    { n: 'Delaware River west branch', lon: -75.2, lat: 42.0, rx: 0.35, ry: 0.3, v: 0.78, cls: 'tailwater' },
-    { n: 'Henrys Fork', lon: -111.4, lat: 44.2, rx: 0.3, ry: 0.35, v: 0.84, cls: 'freestone' },
-    { n: 'Deschutes River', lon: -121.0, lat: 44.9, rx: 0.3, ry: 0.6, v: 0.80, cls: 'freestone' },
-    { n: 'Au Sable River', lon: -84.6, lat: 44.7, rx: 0.4, ry: 0.25, v: 0.72, cls: 'freestone' },
-    { n: 'Letort and Cumberland limestone', lon: -77.2, lat: 40.2, rx: 0.4, ry: 0.25, v: 0.70, cls: 'spring' },
-    { n: 'Driftless spring creeks', lon: -91.0, lat: 43.6, rx: 0.9, ry: 0.7, v: 0.74, cls: 'spring' },
-    { n: 'Gunnison and Taylor', lon: -107.0, lat: 38.6, rx: 0.4, ry: 0.35, v: 0.78, cls: 'tailwater' },
-    { n: 'Bitterroot and Blackfoot', lon: -114.0, lat: 46.6, rx: 0.5, ry: 0.6, v: 0.76, cls: 'freestone' },
-    { n: 'Snake River - South Fork', lon: -111.4, lat: 43.4, rx: 0.4, ry: 0.3, v: 0.82, cls: 'tailwater' },
-    { n: 'Upper Sacramento and McCloud', lon: -122.3, lat: 41.1, rx: 0.3, ry: 0.35, v: 0.74, cls: 'freestone' },
-    { n: 'Great Smoky headwaters', lon: -83.5, lat: 35.6, rx: 0.5, ry: 0.35, v: 0.66, cls: 'freestone' }
-  ];
+  /* Named trout waters: what the river is called and what kind of water
+     it is. Not where trout are - that is measured now. The list lives
+     in js/trout-waters.js because the raster build reads it as well. */
+  var TROUT_WATERS = global.US_TROUT_WATERS || [];
 
   /* Big game and upland range. Same approach as the waterfowl complexes:
      named country placed where the animals actually are, then shaped by
@@ -269,7 +251,12 @@
       var q = TROUT_WATERS[j];
       var v = q.v * gb((lon - q.lon) / q.rx, (lat - q.lat) / q.ry);
       trout += v * 0.9;
-      if (v > tbest) { tbest = v; if (v > 0.15) { tw = q.n; tcls = q.cls; } }
+      /* The name, and the kind of water. Claimed out to about the edge
+         of the reach as listed and no further: at 0.30 that is where a
+         typical entry stops. It was 0.15, which carried a name to 1.3
+         times its reach - tolerable with twenty waters far apart, not
+         with fifty, some of them neighbours. */
+      if (v > tbest) { tbest = v; if (v > 0.30) { tw = q.n; tcls = q.cls; } }
     }
     trout += clamp01((elev - 3500) / 4000) * 0.30 * corridor;
     trout += clamp01((45 - lat) / 10) * 0 + (detail - 0.5) * 0.10;
@@ -316,8 +303,13 @@
        points off the grid and for the case where the raster has not loaded,
        because a missing file should not read as "no animals here".
 
-       Trout is not in the raster: it is a water property, not a land-cover
-       one, and it keeps the hydrology-driven surface above. */
+       Trout comes from the raster too. It was the last thing left on a
+       hand-made surface - twenty rivers drawn as ovals - and that surface
+       found 27 of 57 well-known trout waters. The trout plane is cold
+       water, measured where a gauge measures it, times the places trout
+       are recorded; see the trout section of ingest/habitat.mjs. The
+       ovals above still say what a river is called and whether it is a
+       tailwater, and nothing else. */
     var hg = global.OG && global.OG.habgrid;
     var realSrc = {};
     if (hg && hg.ready) {
@@ -330,6 +322,7 @@
       if ((r = hg.at('turkey', lon, lat)) != null) { turkey = r; realSrc.turkey = true; }
       if ((r = hg.at('upland', lon, lat)) != null) { upland = r; realSrc.upland = true; }
       if ((r = hg.at('pronghorn', lon, lat)) != null) { pronghorn = r; realSrc.pronghorn = true; }
+      if ((r = hg.at('trout', lon, lat)) != null) { trout = r; realSrc.trout = true; }
     }
 
     var out = {

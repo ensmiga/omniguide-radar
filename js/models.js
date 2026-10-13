@@ -587,7 +587,9 @@
       migratory: false, habKey: 'trout',
       pressureSens: 0.11,
       distWeight: 0.30,
-      habFloor: 0.02, rangeFloor: 0.02,
+      /* Higher than the others: a trout value this low is one record in
+         water too warm to hold the fish through a summer. */
+      habFloor: 0.06, rangeFloor: 0.02,
       weights: { hab: 0.34, move: 0.40, mig: 0, wx: 0.26 },
       blurb: 'Fly fishing model. Water temperature, flow stability and hatch timing.',
       movement: function (wx, hab) {
@@ -641,7 +643,7 @@
     'pronghorn':    [9.5, 76.6],
     'turkey':       [19.8, 77.6],
     'upland':       [10.5, 82.7],
-    'trout':        [8.8, 77.2]
+    'trout':        [14.6, 81.1]
   };
   var CAL_LO = 8, CAL_HI = 94;   // the scores those two anchors map to
 

@@ -417,7 +417,9 @@
       { n: 'NOAA NCEI', u: 'https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals',
         d: '1991-2020 daily climate normals, 494 stations. Everything beyond the forecast window.', l: 'Public domain' },
       { n: 'USGS NWIS', u: 'https://waterservices.usgs.gov/',
-        d: 'About 9,500 stream gauges: discharge, water temperature, tailwater identification.', l: 'Public domain' },
+        d: 'About 9,500 stream gauges: discharge and water temperature now, and at the 2,000 or so with a ' +
+           'record, the mean water temperature for July and August - which is what says where water stays ' +
+           'cold enough for trout.', l: 'Public domain' },
       { n: 'NOAA NOHRSC SNODAS, distributed by NSIDC', u: 'https://nsidc.org/data/g02158',
         d: 'Daily modelled snow depth.', l: 'Public domain' }
     ] },
@@ -451,6 +453,10 @@
            'Ranch in Missouri and Tomblin WMA in West Virginia, and the three prairie moose units of ' +
            'north-west North Dakota.',
         l: 'Public domain' },
+      { n: 'USGS Nonindigenous Aquatic Species database', u: 'https://nas.er.usgs.gov/',
+        d: 'Self-sustaining populations of brown, rainbow, brook and cutthroat trout outside their native ' +
+           'range, from agency surveys. One of the things that says where trout are. Stocking records, ' +
+           'which are most of that database, are not used.', l: 'Public domain' },
       { n: 'GBIF', u: 'https://www.gbif.org/', gbif: true,
         d: 'Occurrence records 2015-2025 for 30 taxa, counted in full through the GBIF maps and statistics ' +
            'services - about 20.6 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +

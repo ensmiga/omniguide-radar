@@ -138,7 +138,7 @@
     'Delaware River west branch': [
       { f: 'Pheasant tail', s: '#16-20', m: ALL, w: 'Fished fine, these fish are educated.' },
       { f: 'BWO nymph', s: '#18-20', m: [4, 5, 9, 10], w: 'Through both olive seasons.' },
-      { f: 'Sulphur nymph', s: '#16', m: [5, 6], w: 'Ahead of the evening emergence.' },
+      { f: 'Sulphur nymph', s: '#16', m: [5, 6, 7], w: 'Ahead of the evening emergence. The cold release stretches them into July.' },
       { f: 'Caddis pupa', s: '#16', m: WARM, w: 'Swung at dusk.' }
     ],
     'Letort and Cumberland limestone': [
@@ -146,6 +146,80 @@
       { f: 'Scud', s: '#14-16', m: ALL, w: 'In the weed beds.' },
       { f: 'Sulphur nymph', s: '#16-18', m: [5, 6], w: 'Through the sulphur weeks.' },
       { f: 'Pheasant tail', s: '#18-20', m: ALL, w: 'Small and unweighted on these spooky fish.' }
+    ],
+    'South Holston and Watauga': [
+      { f: 'Sulphur nymph', s: '#16-18', m: [5, 6, 7, 8, 9], w: 'The hatch this river is known for, and the cold release runs it for months.' },
+      { f: 'Zebra midge', s: '#18-22', m: ALL, w: 'Black or olive. The year-round answer between hatches.' },
+      { f: 'BWO nymph', s: '#18-20', m: [10, 11, 12, 1, 2, 3, 4], w: 'Through the cold half of the year.' },
+      { f: 'Pheasant tail', s: '#16-18', m: ALL, w: 'Small and dark, on fine tippet.' }
+    ],
+    'Lees Ferry': [
+      { f: 'Zebra midge', s: '#16-20', m: ALL, w: 'The staple. Most of what these fish eat is a midge.' },
+      { f: 'Scud', s: '#12-16', m: ALL, w: 'Ginger or olive, in the weed beds.' },
+      { f: 'San Juan worm', s: '#12-14', m: ALL, w: 'When the flow changes.' },
+      { f: 'Egg pattern', s: '#14-16', m: [11, 12, 1, 2, 3], w: 'Through the winter spawn.' }
+    ],
+    'North Platte - Grey Reef': [
+      { f: 'Scud', s: '#14-16', m: ALL, w: 'Tan or orange. The resident food below the dam.' },
+      { f: 'Rock worm', s: '#12-14', m: ALL, w: 'Red. The local take on a worm, and a Grey Reef standard.' },
+      { f: 'Leech', s: '#8-10', m: ALL, w: 'Dead-drifted under an indicator rather than stripped.' },
+      { f: 'Egg pattern', s: '#14-16', m: [3, 4, 5], w: 'Through the spring rainbow spawn.' }
+    ],
+    'Provo River': [
+      { f: 'Sow bug', s: '#16-18', m: ALL, w: 'Grey. The fly this river runs on.' },
+      { f: 'Zebra midge', s: '#18-22', m: ALL, w: 'Especially through the winter.' },
+      { f: 'BWO nymph', s: '#18-20', m: [3, 4, 5, 9, 10], w: 'Through both olive seasons.' },
+      { f: 'Caddis pupa', s: '#16-18', m: WARM, w: 'Green, in the evening.' }
+    ],
+    'Arkansas River': [
+      { f: 'Caddis pupa', s: '#14-16', m: [4, 5, 6], w: 'The spring caddis hatch moves upriver day by day.' },
+      { f: 'Golden stone nymph', s: '#8-12', m: ALL, w: 'In the pocket water, all year.' },
+      { f: 'BWO nymph', s: '#18-20', m: [3, 4, 5, 9, 10], w: 'Through both olive seasons.' },
+      { f: 'Pheasant tail', s: '#16-18', m: ALL, w: 'The default dropper.' }
+    ],
+    'Lake Taneycomo': [
+      { f: 'Scud', s: '#14-18', m: ALL, w: 'Grey or tan. The main food below the dam.' },
+      { f: 'Zebra midge', s: '#16-18', m: ALL, w: 'Under an indicator when the water is off.' },
+      { f: 'San Juan worm', s: '#12-14', m: ALL, w: 'When they are running water.' },
+      { f: 'Egg pattern', s: '#14', m: [10, 11, 12, 1], w: 'Through the brown trout run.' }
+    ],
+    'Yakima River': [
+      { f: "Pat's rubber legs", s: '#6-10', m: ALL, w: 'The anchor fly here, as on most western freestones.' },
+      { f: 'Skwala nymph', s: '#10-12', m: [2, 3, 4], w: 'Ahead of the late-winter stonefly, tight to the bank.' },
+      { f: 'Caddis pupa', s: '#14-16', m: WARM, w: 'Through the summer evenings.' },
+      { f: 'October caddis pupa', s: '#8-10', m: [9, 10], w: 'Swung through the tailouts in autumn.' }
+    ],
+    'Big Hole and Beaverhead': [
+      { f: "Pat's rubber legs", s: '#6-10', m: ALL, w: 'The anchor on the Big Hole.' },
+      { f: 'Salmonfly nymph', s: '#4-8', m: [5, 6], w: 'Before and through the Big Hole hatch, tight to the bank.' },
+      { f: 'Caddis pupa', s: '#14-16', m: WARM, w: 'Swung in the evening.' },
+      { f: 'Zebra midge', s: '#18-20', m: COLD, w: 'On the Beaverhead, which is a tailwater and fishes like one.' },
+      { f: 'Pheasant tail', s: '#16-18', m: ALL, w: 'The default dropper.' }
+    ],
+    'Lower Sacramento River': [
+      { f: 'Caddis pupa', s: '#14-16', m: ALL, w: 'Olive or tan. This is a caddis river first.' },
+      { f: 'Egg pattern', s: '#12-14', m: [10, 11, 12, 1], w: 'Behind the spawning salmon.' },
+      { f: 'PMD nymph', s: '#16', m: [3, 4, 5, 6], w: 'Through the spring mayflies.' },
+      { f: 'Pheasant tail', s: '#16-18', m: ALL, w: 'The searching nymph.' }
+    ],
+    'Penns Creek and Spring Creek': [
+      { f: 'Cress bug or scud', s: '#14-18', m: ALL, w: 'Limestone water grows them all year.' },
+      { f: 'Caddis larva', s: '#14-16', m: [4, 5], w: 'Green, ahead of the spring caddis.' },
+      { f: 'Sulphur nymph', s: '#16', m: [5, 6], w: 'Ahead of the evening emergence.' },
+      { f: 'Green drake nymph', s: '#10', m: [5, 6], w: 'On Penns, for the week or two it matters.' },
+      { f: 'Pheasant tail', s: '#16-18', m: ALL, w: 'The searching nymph.' }
+    ],
+    'Beaverkill and Willowemoc': [
+      { f: 'Hendrickson nymph', s: '#12-14', m: [4, 5], w: 'Through the riffles before the afternoon hatch.' },
+      { f: 'Caddis pupa', s: '#14-16', m: WARM, w: 'Swung at dusk.' },
+      { f: 'Stonefly nymph', s: '#8-12', m: ALL, w: 'In the pocket water.' },
+      { f: 'Pheasant tail', s: '#14-18', m: ALL, w: 'The searching nymph.' }
+    ],
+    'Silver Creek': [
+      { f: 'Pheasant tail', s: '#18-20', m: ALL, w: 'Small and slim. Everything here is small and slim.' },
+      { f: 'PMD nymph', s: '#16-18', m: [6, 7], w: 'Ahead of the morning emergence.' },
+      { f: 'Callibaetis nymph', s: '#16', m: [7, 8, 9], w: 'In the slow water and the pond.' },
+      { f: 'Damsel nymph', s: '#12', m: [6, 7], w: 'Crawled slowly toward the bank.' }
     ],
     'Great Smoky headwaters': [
       { f: 'Pheasant tail', s: '#14-18', m: ALL, w: 'The default in pocket water.' },

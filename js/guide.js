@@ -556,7 +556,26 @@
      for most of the day and most of the year that is where the fish are
      feeding. `peak` is the time of day the emergence concentrates, which
      drives the activity window. */
-  function hatchForecast(wx, doy) {
+  /* WHICH BUGS LIVE WHERE.
+
+     There was one chart for the whole country, and it was a Rocky
+     Mountain tailwater's: midges, olives, caddis, pale morning duns,
+     tricos, hoppers. So the Beaverkill in the first week of May was told
+     to expect pale morning duns, which do not live east of the plains,
+     and nothing was ever told to expect a Hendrickson, a sulphur, a
+     salmonfly or a Hex - four of the hatches people plan a year around.
+
+     The split is the hundredth-and-fourth meridian, the east face of the
+     Rockies. West of it: pale morning duns, salmonflies and golden stones
+     on freestone rivers (a tailwater's steady cold flow does not grow
+     them, and a spring creek has no cobble for them), western green
+     drakes, and October caddis from western Montana to the coast.
+     East of it: Hendricksons, sulphurs, the eastern green drake, and the
+     Hex in the silt-bottomed rivers of the upper Great Lakes. Midges,
+     olives, caddis, tricos and terrestrials are everywhere.
+
+     Water temperature still comes first and the calendar second. */
+  function hatchForecast(wx, doy, cls) {
     function win(d, a, b) {
       var mid = (a + b) / 2, half = (b - a) / 2 + 12;
       var dd = d - mid;
@@ -565,6 +584,10 @@
       return clamp01(1 - Math.abs(dd) / half);
     }
     var wt = wx.waterTemp, cloud = wx.cloud, flow = wx.flowIdx;
+    var lon = wx.lon, lat = wx.lat;
+    var west = lon == null || lon < -104;
+    var freestone = cls !== 'tailwater' && cls !== 'spring';
+    var hexWater = !west && lon > -93.5 && lon < -82 && lat > 42.5 && lat < 47.5;
 
     var list = [
       { n: 'Midge', v: pref(wt, 40, 10) * (0.55 + 0.35 * cloud) * (0.5 + 0.5 * win(doy, 330, 440)),
@@ -580,10 +603,6 @@
         peak: 19, sub: 'Pupae rise fast, so fish move to intercept them. A caddis pupa on a tight ' +
           'line swing accounts for more fish than the evening dry does.',
         rig: ['#16 caddis pupa', '#14 hares ear'], dry: '#16 elk hair caddis' },
-      { n: 'Pale morning dun', v: pref(wt, 56, 5) * win(doy, 155, 220),
-        peak: 11, sub: 'Emergers stuck in the film are the easy meal. Cripples outfish duns ' +
-          'through the middle of the hatch.',
-        rig: ['#16 PMD nymph', '#18 flashback'], dry: '#16 PMD cripple' },
       { n: 'Trico', v: pref(wt, 60, 6) * win(doy, 205, 262),
         peak: 9, sub: 'Nothing subsurface worth fishing during the spinner fall. Before it, ' +
           'a small pheasant tail in the riffle.',
@@ -592,17 +611,72 @@
           (0.55 + 0.45 * clamp01(ramp(wx.windSpd, 6, 18))),
         peak: 14, sub: 'Nothing hatching. A beadhead dropper 18 inches under the hopper covers ' +
           'the fish that will not come up.',
-        rig: ['#10 foam hopper', '#16 beadhead dropper'], dry: '#10 foam hopper' },
-      { isHatch: false, n: 'Baetis nymph drift', v: clamp01(ramp(flow, 0.55, 0.9)) * 0.75 * clamp01(ramp(wt, 38, 50)),
-        peak: 12, sub: 'Rising or off-colour water knocks nymphs loose. This is a bottom-bouncing ' +
-          'day, not a dry fly day, and the fish will be on the inside edges out of the push.',
-        rig: ['#16 beadhead pheasant tail', '#14 rubber legs'], dry: null },
-      { isHatch: false, n: 'Streamer window', v: clamp01(0.3 * clamp01(ramp(flow, 0.5, 0.85)) +
-          0.3 * clamp01(cloud) + 0.2 * clamp01(ramp(52 - wt, 0, 12)) + 0.3 * win(doy, 270, 330)),
-        peak: 10, sub: 'Not a hatch. Big fish hunting rather than feeding, which is why low light ' +
-          'and pushy water matter more than insects.',
-        rig: ['Sculpin pattern on a sink tip', 'Smaller trailing streamer'], dry: null }
+        rig: ['#10 foam hopper', '#16 beadhead dropper'], dry: '#10 foam hopper' }
     ];
+
+    if (west) {
+      list.push({ n: 'Pale morning dun', v: pref(wt, 56, 5) * win(doy, 155, 220),
+        peak: 11, sub: 'Emergers stuck in the film are the easy meal. Cripples outfish duns ' +
+          'through the middle of the hatch.',
+        rig: ['#16 PMD nymph', '#18 flashback'], dry: '#16 PMD cripple' });
+      /* Marked down below a dam. The Bighorn, the Missouri, the Green and
+         the San Juan have none to speak of; the Frying Pan is the exception
+         and is undersold by this. */
+      list.push({ n: 'Green drake', v: pref(wt, 56, 5) * win(doy, 172, 208) * (0.55 + 0.45 * cloud) *
+          (cls === 'tailwater' ? 0.4 : 1),
+        peak: 12.5, sub: 'The nymphs are big, poor swimmers and slow to get off the water. Fish that ' +
+          'ignore everything else will move for one.',
+        rig: ['#10 green drake nymph', '#12 soft hackle'], dry: '#10 green drake' });
+      if (freestone) {
+        list.push({ n: 'Salmonfly and golden stone', v: pref(wt, 54, 5) * win(doy, 145, 195),
+          peak: 15, sub: 'The nymphs crawl to the bank to hatch and the fish follow them in. A big ' +
+            'dark stonefly nymph tight to the bank works for a week before anything is in the air.',
+          rig: ['#6 salmonfly nymph or black rubber legs', '#10 golden stone nymph'],
+          dry: '#6 salmonfly dry, tight to the willows' });
+      }
+      /* West of the Continental Divide, more or less. East of it - the
+         Madison, the Yellowstone, the Missouri - autumn is olives and
+         streamers, and the big orange caddis is a curiosity. */
+      if (lon == null || lon < -113) {
+        list.push({ n: 'October caddis', v: pref(wt, 52, 7) * win(doy, 258, 300),
+          peak: 17, sub: 'The pupae crawl and swim for the bank through the afternoon. A big orange ' +
+            'pupa swung through the tailouts takes more fish than the adult does.',
+          rig: ['#8 October caddis pupa', '#14 soft hackle'], dry: '#8 orange stimulator' });
+      }
+    } else {
+      list.push({ n: 'Hendrickson', v: pref(wt, 53, 5) * win(doy, 105, 140) * (0.75 + 0.25 * cloud),
+        peak: 14.5, sub: 'The nymphs get active in the riffles an hour or two before the duns show. ' +
+          'A dark nymph fished through that water beats waiting for the hatch.',
+        rig: ['#14 Hendrickson nymph', '#14 dark soft hackle'], dry: '#14 Hendrickson or red quill' });
+      /* Mid-May to early July on a freestone. Below a dam the water never
+         warms out of their range and they keep coming: the South Holston
+         has sulphurs in September. */
+      list.push({ n: 'Sulphur', v: pref(wt, 60, 6) * win(doy, 130, cls === 'tailwater' ? 245 : 190),
+        peak: 19.5, sub: 'Emergers hang in the film through the last hour of light. A soft hackle ' +
+          'swung just under the surface takes fish that refuse the dun.',
+        rig: ['#16 sulphur nymph', '#16 soft hackle emerger'], dry: '#16 sulphur dun, then a spinner at dark' });
+      list.push({ n: 'Green drake', v: pref(wt, 60, 5) * win(doy, 142, 162),
+        peak: 20, sub: 'The nymphs are big, poor swimmers and slow to get off the water. Fish that ' +
+          'ignore everything else will move for one, and the spinner fall at dusk is the main event.',
+        rig: ['#10 green drake nymph', '#12 soft hackle'], dry: '#10 green drake, then a coffin fly spinner' });
+      if (hexWater) {
+        list.push({ n: 'Hex', v: pref(wt, 65, 5) * win(doy, 166, 196),
+          peak: 22, sub: 'The nymphs leave their burrows in the silt at dusk. Before dark a big wiggle ' +
+            'nymph along the mud flats is the play; after dark the fish are on the duns and spinners.',
+          rig: ['#6 Hex wiggle nymph', '#8 soft hackle'], dry: '#6 Hex dun or spinner, after dark' });
+      }
+    }
+
+    list.push({ isHatch: false, n: 'Baetis nymph drift', v: clamp01(ramp(flow, 0.55, 0.9)) * 0.75 * clamp01(ramp(wt, 38, 50)),
+      peak: 12, sub: 'Rising or off-colour water knocks nymphs loose. This is a bottom-bouncing ' +
+        'day, not a dry fly day, and the fish will be on the inside edges out of the push.',
+      rig: ['#16 beadhead pheasant tail', '#14 rubber legs'], dry: null });
+    list.push({ isHatch: false, n: 'Streamer window', v: clamp01(0.3 * clamp01(ramp(flow, 0.5, 0.85)) +
+        0.3 * clamp01(cloud) + 0.2 * clamp01(ramp(52 - wt, 0, 12)) + 0.3 * win(doy, 270, 330)),
+      peak: 10, sub: 'Not a hatch. Big fish hunting rather than feeding, which is why low light ' +
+        'and pushy water matter more than insects.',
+      rig: ['Sculpin pattern on a sink tip', 'Smaller trailing streamer'], dry: null });
+
     list.forEach(function (h) { h.v = clamp01(h.v); });
     list.sort(function (a, b) { return b.v - a.v; });
     return list;
@@ -610,7 +684,7 @@
 
   function troutPlan(sc, legal, win, doy) {
     var wx = sc.wx;
-    var hatches = hatchForecast(wx, doy);
+    var hatches = hatchForecast(wx, doy, sc.hab.waterCls);
     var top = hatches[0];
     var surface = Math.round(100 * clamp01(top.v * (0.5 + 0.5 * wx.cloud) * pref(wx.waterTemp, 55, 10) * 1.3));
     var streamer = Math.round(100 * clamp01(

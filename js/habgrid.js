@@ -103,8 +103,12 @@
     moose:     [0.45, 0.70],   // sagebrush is not willow; at 0.18 this had moose over 83% of Wyoming
     whitetail: [0.30, 0.50],   // Coues deer country must not open the Sonoran floor
     muledeer:  [0.05, 0.25],
-    pronghorn: [0.15, 0.35],   // at 0.05 this covered 96% of Arizona
-    trout:     [0.35, 0.60]
+    pronghorn: [0.15, 0.35]    // at 0.05 this covered 96% of Arizona
+    /* No entry for trout. Whether a cell holds trout is worked out in the
+       raster build, where the cold-water and stream-country evidence is to
+       hand, and is already in the value - see troutEvidence in
+       ingest/habitat.mjs. A second, cruder rule here would only reopen
+       what that one closed. */
   };
   var REGION_R = 5, REGION_ANY = 5;      // cells either way; stored value that counts as a record
   var regionPlanes = {};

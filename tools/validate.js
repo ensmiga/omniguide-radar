@@ -366,57 +366,74 @@
       ]
     },
     trout: {
-      /* Lengthened when every species was put through the test elk failed,
-         and this is the one that fails it worst: about half of these
-         waters come up blank, the Yakima, the Truckee, the South Holston
-         and most of the East among them. It is not a range problem and a
-         range map will not fix it. Trout habitat here is read from the
-         rivers large enough to be on a continental map, and a trout
-         stream is mostly not that. It needs a real stream network. Left
-         failing on purpose, so the number is there to be moved. */
+      /* The list that showed trout to be the worst of the lot: the app
+         found 27 of the first 57 waters on it, because trout habitat was
+         twenty rivers drawn by hand. It is measured now - cold water at
+         the gauges, trout records, established populations - and this
+         list has grown to match, with the places that tested each rule:
+         the north Maine woods and the Bob Marshall, where nobody logs
+         fish; southern tailwaters no climate would predict; and for the
+         negatives the farm country, bogs, dry basins and cities that an
+         earlier pass at the rule let in. */
       yes: [
-        ['Madison MT', -111.60, 45.30], ['Au Sable MI', -84.71, 44.66],
-        ['Penns Creek PA', -77.32, 40.88], ['Battenkill VT', -73.10, 43.08],
-        ['White R AR', -92.56, 36.37], ['Frying Pan CO', -106.82, 39.36],
-        ['Davidson NC', -82.78, 35.28], ['Salmon R NY', -76.13, 43.52],
-        ['Driftless WI', -90.80, 43.55], ['Driftless WI', -90.90, 43.60],
-        ['Au Sable MI', -84.50, 44.70], ['Pere Marquette MI', -86.00, 43.90],
-        ['Brule WI', -91.60, 46.60], ['North Shore MN', -91.20, 47.50],
-        ['White River AR', -92.50, 36.40], ['Norfork AR', -92.24, 36.25],
-        ['Taneycomo MO', -93.20, 36.65], ['Current River MO', -91.50, 37.40],
-        ['South Holston TN', -82.10, 36.50], ['Smokies TN', -83.50, 35.60],
-        ['Davidson NC', -82.70, 35.30], ['Chattahoochee GA', -84.10, 34.10],
-        ['Cumberland KY', -85.10, 36.87], ['Shenandoah VA', -78.40, 38.50],
-        ['Elk River WV', -80.30, 38.50], ['Savage MD', -79.10, 39.50],
-        ['Gunpowder MD', -76.70, 39.60], ['Letort PA', -77.20, 40.20],
-        ['Penns Creek PA', -77.40, 40.85], ['Spring Creek PA', -77.80, 40.85],
-        ['Erie tributaries PA', -80.20, 42.00], ['Beaverkill NY', -74.90, 41.95],
-        ['West Branch Delaware NY', -75.30, 42.00], ['Ausable NY', -73.80, 44.40],
-        ['Salmon River NY', -76.00, 43.50], ['Battenkill VT', -73.20, 43.10],
-        ['White Mountains NH', -71.40, 44.20], ['Rangeley ME', -70.70, 45.00],
-        ['Guadalupe TX', -98.20, 29.87], ['Lower Mountain Fork OK', -94.70, 34.10],
-        ['San Juan NM', -107.70, 36.80], ['Lees Ferry AZ', -111.60, 36.87],
-        ['Green River UT', -109.40, 40.90], ['Provo UT', -111.55, 40.40],
-        ['Madison MT', -111.60, 45.00], ['Bighorn MT', -107.90, 45.30],
-        ['Missouri at Craig MT', -112.00, 47.10], ['Henrys Fork ID', -111.30, 44.30],
-        ['Silver Creek ID', -114.10, 43.30], ['Deschutes OR', -121.20, 44.80],
-        ['Yakima WA', -120.50, 46.90], ['McCloud CA', -122.10, 41.10],
-        ['Truckee CA', -120.20, 39.40], ['Owens CA', -118.50, 37.50],
+        ['Driftless WI', -90.90, 43.60], ['Au Sable MI', -84.50, 44.70],
+        ['Pere Marquette MI', -86.00, 43.90], ['Brule WI', -91.60, 46.60],
+        ['North Shore MN', -91.20, 47.50], ['White River AR', -92.50, 36.40],
+        ['Norfork AR', -92.24, 36.25], ['Taneycomo MO', -93.20, 36.65],
+        ['Current River MO', -91.50, 37.40], ['South Holston TN', -82.10, 36.50],
+        ['Smokies TN', -83.50, 35.60], ['Davidson NC', -82.70, 35.30],
+        ['Chattahoochee GA', -84.10, 34.10], ['Cumberland KY', -85.10, 36.87],
+        ['Shenandoah VA', -78.40, 38.50], ['Elk River WV', -80.30, 38.50],
+        ['Savage MD', -79.10, 39.50], ['Gunpowder MD', -76.70, 39.60],
+        ['Letort PA', -77.20, 40.20], ['Penns Creek PA', -77.40, 40.85],
+        ['Spring Creek PA', -77.80, 40.85], ['Erie tributaries PA', -80.20, 42.00],
+        ['Beaverkill NY', -74.90, 41.95], ['West Branch Delaware NY', -75.30, 42.00],
+        ['Ausable NY', -73.80, 44.40], ['Salmon River NY', -76.00, 43.50],
+        ['Battenkill VT', -73.20, 43.10], ['White Mountains NH', -71.40, 44.20],
+        ['Rangeley ME', -70.70, 45.00], ['Guadalupe TX', -98.20, 29.87],
+        ['Lower Mountain Fork OK', -94.70, 34.10], ['San Juan NM', -107.70, 36.80],
+        ['Lees Ferry AZ', -111.60, 36.87], ['Green River UT', -109.40, 40.90],
+        ['Provo UT', -111.55, 40.40], ['Madison MT', -111.60, 45.00],
+        ['Bighorn MT', -107.90, 45.30], ['Missouri at Craig MT', -112.00, 47.10],
+        ['Henrys Fork ID', -111.30, 44.30], ['Silver Creek ID', -114.10, 43.30],
+        ['Deschutes OR', -121.20, 44.80], ['Yakima WA', -120.50, 46.90],
+        ['McCloud CA', -122.10, 41.10], ['Truckee CA', -120.20, 39.40],
+        ['Owens CA', -118.50, 37.50], ['Fryingpan CO', -106.80, 39.36],
         ['South Platte Deckers CO', -105.20, 39.25], ['North Platte WY', -106.70, 42.20],
-        ['Spearfish SD', -103.85, 44.40]
+        ['Spearfish SD', -103.85, 44.40], ['ME Allagash', -69.20, 46.60],
+        ['ME Baxter', -68.90, 46.00], ['NH north', -71.30, 44.90],
+        ['NY Adirondacks', -74.40, 44.10], ['MI Upper Peninsula', -87.50, 46.50],
+        ['MN Arrowhead', -91.00, 47.80], ['WI north', -89.60, 45.90],
+        ['MT Bob Marshall', -113.20, 47.60], ['ID Frank Church', -114.80, 45.00],
+        ['WY Wind Rivers', -109.60, 43.00], ['WA N Cascades', -121.00, 48.60],
+        ['UT Uintas', -110.40, 40.75], ['CO Weminuche', -107.40, 37.60],
+        ['NM Pecos', -105.60, 35.90], ['CA Sierra', -119.30, 37.80],
+        ['PA north central', -77.80, 41.50], ['WV highlands', -79.80, 38.60],
+        ['NC Blue Ridge', -81.90, 36.00], ['Lower Sacramento CA', -122.35, 40.50],
+        ['Caney Fork TN', -85.88, 36.15], ['Bennett Spring MO', -92.86, 37.72],
+        ['Owyhee OR', -117.20, 43.70], ['Smith River VA', -79.97, 36.75],
+        ['Farmington CT', -72.95, 41.90], ['Arkansas River CO', -106.00, 38.55],
+        ['Big Hole MT', -112.90, 45.70]
       ],
       no: [
-        ['Phoenix AZ', -112.07, 33.45], ['Houston TX', -95.37, 29.76],
-        ['Kansas prairie', -98.50, 38.50], ['S Florida', -80.90, 25.90],
         ['Florida', -81.50, 28.50], ['S Louisiana', -91.00, 29.80],
-        ['Dallas', -96.80, 32.80], ['S Georgia', -83.30, 31.20],
-        ['S Alabama', -87.50, 31.20], ['Mississippi delta', -90.80, 33.40],
+        ['Houston', -95.37, 29.76], ['Dallas', -96.80, 32.80],
+        ['S Georgia', -83.30, 31.20], ['S Alabama', -87.50, 31.20],
+        ['Mississippi delta', -90.80, 33.40], ['Phoenix', -112.07, 33.45],
         ['Yuma', -114.60, 32.70], ['Mojave', -116.00, 35.00], ['W Kansas', -100.50, 38.50],
         ['W Oklahoma', -99.50, 35.50], ['S Texas', -98.50, 27.50],
         ['Iowa farmland', -93.60, 42.00], ['Illinois', -89.00, 40.00],
-        ['W Ohio', -84.00, 40.30], ['Red River valley ND', -97.00, 47.50],
+        ['W Ohio', -84.40, 40.60], ['Red River valley ND', -97.00, 47.50],
         ['E South Dakota', -98.00, 44.40], ['E Nebraska', -96.80, 41.00],
-        ['CA Central Valley floor', -120.50, 36.80], ['E Kansas', -95.50, 38.50]
+        ['CA Central Valley floor', -120.50, 36.80], ['E Kansas', -95.50, 38.50],
+        ['ND prairie', -100.50, 47.50], ['E Montana plains', -105.50, 47.50],
+        ['S Michigan', -84.50, 42.50], ['NJ pine barrens', -74.60, 39.80],
+        ['Indiana', -86.20, 40.30], ['S Wisconsin', -88.80, 42.90],
+        ['Nevada basin', -117.50, 40.20], ['Delmarva', -75.60, 38.60],
+        ['S Minnesota farmland', -94.50, 44.30], ['Nebraska Sandhills', -100.50, 42.00],
+        ['E Colorado plains', -102.60, 39.30], ['WY Red Desert', -108.50, 41.80],
+        ['UT West Desert', -113.50, 40.70], ['Chicago', -87.65, 41.85],
+        ['Kansas City', -94.60, 39.10], ['Atlanta south', -84.40, 33.50]
       ]
     }
   };
