@@ -298,42 +298,95 @@
       ]
     },
     turkey: {
-      /* Lengthened when every species was put through the test elk failed.
-         The record gate got 41 of 41 and 9 of 12; turkey stay on records. */
+      /* Rewritten, because the list it replaces was too easy. That one
+         had 46 places and 15, the 15 nearly all desert, and the record
+         gate passed 46 and 13 of it while showing turkeys across 96
+         percent of Idaho and 93 of Montana. The absences that matter
+         are the ones beside real turkey country - the high country
+         above it and the farmed or sage valley floor below - and they
+         are in here now: against these, records alone found every
+         place turkeys are and 16 of the first 33 places they are not.
+         Turkey range is the USGS map with strong records beside it;
+         see ingest/usgs-range.mjs.
+
+         One point was moved. South-west Idaho was a spot on the open
+         grass hills north of Emmett, where the birds are in the river
+         bottom and not on the hill; it is now the timbered foothills at
+         Council. */
       yes: [
-        ['Missouri', -92.50, 38.50], ['Pennsylvania', -77.80, 40.90],
-        ['Alabama', -86.80, 32.60], ['Texas Hill Country', -99.10, 30.30],
-        ['Black Hills SD', -103.70, 43.90], ['New York', -75.50, 42.60],
-        ['SD Black Hills', -103.70, 44.00], ['WY Northeast', -104.50, 44.50],
-        ['MT Southeast', -105.50, 45.60], ['CO Southwest', -107.90, 37.30],
-        ['NM Lincoln NF', -105.60, 33.00], ['NM Gila', -108.30, 33.30],
-        ['AZ Mogollon Rim', -111.00, 34.40], ['AZ Kaibab', -112.20, 36.60],
-        ['ID Clearwater', -116.30, 46.20], ['WA Northeast', -117.80, 48.30],
-        ['WA Klickitat', -121.20, 45.80], ['OR Southwest', -123.30, 43.00],
-        ['CA Sierra foothills', -120.80, 38.50], ['CA Coast Range', -122.80, 38.80],
-        ['NE Niobrara', -100.00, 42.80], ['Kansas', -98.00, 38.50],
-        ['OK west', -99.50, 35.50], ['TX Hill Country', -99.20, 30.30],
-        ['TX South', -98.30, 28.30], ['TX Rolling Plains', -100.20, 33.50],
-        ['FL Osceola', -81.20, 27.60], ['Georgia', -83.50, 32.50],
-        ['Alabama', -87.30, 32.40], ['Mississippi', -90.00, 32.80],
-        ['MO Ozarks', -91.50, 37.30], ['Iowa', -93.00, 41.00],
-        ['WI Southwest', -90.60, 43.20], ['MI Northern Lower', -84.50, 44.80],
-        ['Pennsylvania', -77.80, 41.20], ['Vermont', -72.80, 43.80],
-        ['Maine south', -70.30, 44.20], ['SE Ohio', -81.80, 39.60],
-        ['Kentucky', -84.50, 37.80], ['Tennessee', -86.50, 35.80],
-        ['Virginia', -78.50, 37.50], ['Arkansas', -92.50, 34.80],
-        ['Louisiana', -92.20, 31.50], ['MN Southeast', -92.00, 44.00],
-        ['ND Missouri River', -100.80, 46.80], ['UT South', -112.50, 37.60]
+        ['MO Ozarks', -91.50, 37.30], ['N Missouri', -93.00, 40.20],
+        ['Missouri River hills MO', -92.50, 38.50], ['AL Black Belt', -87.30, 32.40],
+        ['E Alabama', -86.80, 32.60], ['Georgia Piedmont', -83.50, 32.50],
+        ['Red Hills GA', -84.10, 30.72], ['N Florida', -84.50, 30.40],
+        ['FL Osceola (Kissimmee prairie)', -81.20, 27.60], ['Big Cypress FL', -81.20, 26.10],
+        ['SC Lowcountry', -80.60, 33.00], ['NC Piedmont', -79.50, 35.80],
+        ['Virginia Piedmont', -78.50, 37.50], ['WV', -80.50, 38.80],
+        ['W Maryland', -79.00, 39.60], ['PA ridge and valley', -77.80, 40.90],
+        ['PA north central', -77.80, 41.20], ['NW New Jersey', -74.80, 41.00],
+        ['Catskills NY', -75.50, 42.60], ['W Massachusetts', -72.90, 42.40],
+        ['Connecticut', -72.50, 41.60], ['Vermont', -72.80, 43.80],
+        ['S New Hampshire', -71.60, 43.20], ['S Maine', -70.30, 44.20],
+        ['SE Ohio', -81.80, 39.60], ['Kentucky Bluegrass', -84.50, 37.80],
+        ['W Kentucky', -88.00, 37.00], ['Middle Tennessee', -86.50, 35.80],
+        ['S Indiana', -86.40, 38.70], ['W Illinois (Pike Co)', -90.90, 39.60],
+        ['S Michigan', -84.80, 42.60], ['N Lower Michigan', -84.50, 44.80],
+        ['WI Driftless', -90.60, 43.20], ['SE Minnesota', -92.00, 44.00],
+        ['S Iowa', -93.00, 41.00], ['SE Nebraska bluffs', -95.90, 40.60],
+        ['Mississippi', -90.00, 32.80], ['Arkansas', -92.50, 34.80],
+        ['N Louisiana', -92.20, 31.50], ['E Texas Pineywoods', -94.60, 31.30],
+        ['TX Hill Country', -99.20, 30.30], ['TX South brush', -98.30, 28.30],
+        ['TX Rolling Plains', -100.20, 33.50], ['W Oklahoma', -99.50, 35.50],
+        ['C Kansas', -98.00, 38.50], ['NE Niobrara', -100.00, 42.80],
+        ['NE Pine Ridge', -103.20, 42.70], ['ND Missouri River', -100.80, 46.80],
+        ['SD Black Hills', -103.70, 44.00], ['NE Wyoming', -104.50, 44.50],
+        ['SE Montana', -105.50, 45.60], ['Flathead MT', -114.20, 48.10],
+        ['CO Southwest', -107.90, 37.30], ['Spanish Peaks CO', -104.90, 37.40],
+        ['Uncompahgre CO', -108.50, 38.50], ['NM Lincoln NF', -105.60, 33.00],
+        ['NM Gila', -108.30, 33.30], ['AZ Mogollon Rim', -111.00, 34.40],
+        ['AZ Kaibab', -112.20, 36.60], ['AZ Huachucas (Gould\'s)', -110.30, 31.45],
+        ['ID Clearwater', -116.30, 46.20], ['NE Washington', -117.80, 48.30],
+        ['WA Klickitat', -121.20, 45.80], ['NE Oregon Blues', -118.00, 45.50],
+        ['SW Oregon', -123.30, 43.00], ['CA Sierra foothills', -120.80, 38.50],
+        ['CA Coast Range', -122.80, 38.80], ['WA Blue Mts', -117.80, 46.20],
+        ['N Idaho Panhandle', -116.60, 47.90], ['Willamette foothills OR', -123.00, 44.30],
+        ['CA North Coast', -123.30, 39.30], ['CA Central Coast', -120.70, 35.60],
+        ['CA San Diego backcountry', -116.70, 33.10], ['N Utah (Cache)', -111.70, 41.60],
+        ['MT Bitterroot', -114.10, 46.40], ['MT Musselshell', -108.50, 46.40],
+        ['WY Laramie Peak', -105.40, 42.30], ['CO Front Range foothills', -105.20, 39.50],
+        ['NM Sangre de Cristo', -105.50, 36.30], ['TX Canadian River breaks', -100.40, 35.90],
+        ['OK Cross Timbers', -97.60, 34.60], ['KS Flint Hills', -96.60, 38.40],
+        ['NE Republican River', -100.20, 40.20], ['SD Missouri breaks', -99.30, 43.20],
+        ['ND Little Missouri badlands', -103.40, 47.00], ['C Minnesota', -94.30, 45.60],
+        ['N central Wisconsin', -89.70, 45.20], ['UP Menominee MI', -87.60, 45.40],
+        ['N New York (St Lawrence)', -75.20, 44.50], ['C Maine', -69.50, 44.80],
+        ['Delmarva', -75.60, 38.60], ['E NC coastal plain', -77.30, 35.30],
+        ['S Georgia', -83.40, 31.40], ['FL Panhandle', -85.80, 30.60],
+        ['S Alabama', -86.90, 31.30], ['LA Florida parishes', -90.60, 30.80],
+        ['OK Ouachitas', -94.90, 34.60], ['TX Edwards Plateau west', -100.60, 30.60],
+        ['TX Coastal Bend', -97.60, 28.40], ['SW Idaho (Council)', -116.50, 44.80],
+        ['S Utah (Paunsaugunt)', -112.50, 37.60]
       ],
       no: [
-        ['Mojave CA', -116.20, 34.80], ['Nevada interior', -116.50, 39.50],
-        ['Sonoran AZ', -113.40, 33.00], ['NV central', -116.50, 39.00],
-        ['UT West Desert', -113.50, 40.50], ['Mojave', -116.00, 35.00],
-        ['Yuma', -114.60, 32.70], ['WY Red Desert', -108.80, 41.80],
-        ['CO Sawatch alpine', -106.40, 39.10], ['OR Alvord', -118.50, 42.50],
-        ['Death Valley', -116.90, 36.40], ['Everglades', -80.80, 25.60],
+        ['Mojave CA', -116.20, 34.80], ['Death Valley', -116.90, 36.40],
         ['Las Vegas', -115.15, 36.17], ['Los Angeles', -118.25, 34.05],
-        ['Bonneville flats', -113.80, 40.75]
+        ['Imperial Valley CA', -115.50, 33.00], ['San Joaquin floor CA', -120.00, 36.50],
+        ['Sierra crest CA', -118.60, 37.00], ['Sonoran AZ', -113.40, 33.00],
+        ['Yuma', -114.60, 32.70], ['Painted Desert AZ', -110.50, 35.50],
+        ['Nevada interior', -116.50, 39.50], ['NV central', -116.50, 39.00],
+        ['UT West Desert', -113.50, 40.50], ['Bonneville flats', -113.80, 40.75],
+        ['WY Red Desert', -108.80, 41.80], ['Wind Rivers alpine WY', -109.60, 43.10],
+        ['Yellowstone plateau', -110.50, 44.60], ['CO Sawatch alpine', -106.40, 39.10],
+        ['Glacier high country MT', -113.80, 48.70], ['Sawtooth crest ID', -114.90, 44.00],
+        ['Snake River Plain ID', -114.40, 43.00], ['Columbia Basin WA', -119.30, 46.98],
+        ['North Cascades WA', -121.00, 48.60], ['Olympic interior WA', -123.70, 47.80],
+        ['OR Alvord', -118.50, 42.50], ['Big Bend TX', -103.30, 29.30],
+        ['Chihuahuan desert NM', -107.50, 32.30], ['White Sands NM', -106.30, 32.80],
+        ['TX Llano Estacado', -102.30, 33.90], ['Louisiana coastal marsh', -91.00, 29.40],
+        ['Mississippi River Delta LA', -89.40, 29.20], ['Everglades', -80.80, 25.60],
+        ['Boundary Waters MN', -91.40, 47.95], ['High Uintas UT', -110.40, 40.75],
+        ['San Juan alpine CO', -107.60, 37.80], ['Beartooth plateau MT', -109.60, 45.00],
+        ['Mt Rainier WA', -121.75, 46.85], ['Black Rock Desert NV', -119.00, 40.90],
+        ['Organ Pipe AZ', -112.80, 32.00], ['El Paso desert TX', -106.00, 31.80]
       ]
     },
     upland: {

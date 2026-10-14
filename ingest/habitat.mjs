@@ -69,7 +69,8 @@ const SUIT = {
   whitetail: { 41: 1.00, 43: 0.95, 90: 0.90, 82: 0.76, 81: 0.70, 42: 0.60, 52: 0.48, 21: 0.34, 95: 0.45 },
   moose:     { 90: 1.00, 95: 0.86, 42: 0.80, 43: 0.75, 41: 0.60, 52: 0.52, 11: 0.40, 71: 0.20 },
   pronghorn: { 71: 1.00, 52: 0.86, 81: 0.50, 82: 0.36, 31: 0.30, 21: 0.10 },
-  turkey:    { 41: 1.00, 43: 0.95, 42: 0.70, 81: 0.62, 82: 0.56, 52: 0.42, 90: 0.55, 21: 0.30 },
+  /* Not used as a table - see turkeySuit - but a species needs a row to exist. */
+  turkey:    { 41: 1.00, 43: 0.90, 42: 0.75, 90: 0.60 },
   upland:    { 82: 0.88, 71: 0.90, 81: 0.80, 52: 0.70, 41: 0.30, 90: 0.30, 21: 0.15 },
   waterfowl: { 95: 1.00, 90: 0.86, 11: 0.80, 82: 0.70, 81: 0.45, 71: 0.30, 12: 0.05 },
   /* Not used as a table - see gooseSuit - but a species needs a row to exist. */
@@ -92,7 +93,7 @@ const SUIT = {
    False positives are held off by the occurrence gate rather than by
    keeping the suitability artificially low - the Utah west desert has
    woody cover too, and no whitetail recorded in it. */
-const SATURATE = { whitetail: 7, turkey: 5, waterfowl: 4, trout: 30 };
+const SATURATE = { whitetail: 7, waterfowl: 4, trout: 30 };
 
 /* MAPPED BUT NOT RECORDED.
 
@@ -143,7 +144,7 @@ const ELEV = {
   whitetail: [-400, -300, 7500, 10000],
   moose:     [0, 400, 11000, 12500],
   pronghorn: [800, 3000, 10000, 11500],
-  turkey:    [-400, -300, 9500, 11000],
+  turkey:    [-400, -300, 9300, 10300],
   upland:    [-400, -300, 10500, 12000],
   waterfowl: [-400, -300, 9500, 11800],
   goose:     [-400, -300, 9300, 10300],
@@ -1453,6 +1454,92 @@ const BIRDS = {
   'spruce-grouse':   ['Canachites canadensis']
 };
 
+/* ---------- turkey ----------
+
+   A turkey sleeps in a tree. The table had no way to say so: it added
+   up cover of every kind and then flattened the sum, so that a cell of
+   nothing but sagebrush came to 0.88 and a cell of nothing but cotton
+   to 0.94. Big Bend read 0.87, the San Joaquin valley floor 0.93, the
+   Snake River Plain 0.68 - and the Ozarks, 0.99, were not much better
+   than any of them.
+
+   Two things are counted instead. Timber is somewhere to roost and
+   something to eat in the fall, and without any there are no turkeys
+   whatever else is there. It does not take much: a creek bottom of
+   cottonwoods through pasture holds Rio Grande birds, so the roost
+   term is most of the way to full by a tenth of the cell.
+
+   Then the mix. Turkeys use the woods and the openings beside them -
+   fields, pasture, meadow, burn - and ground with both is worth more
+   than unbroken timber, which keeps TURKEY_WOODS_ONLY of the value.
+
+   BRUSH. The live oak and juniper of the Texas Hill Country, where
+   there are more Rio Grande turkeys than anywhere, is mapped as brush:
+   at the test point there the land cover has no timber at all and brush
+   over the whole cell, exactly what it has at Organ Pipe in the Sonoran
+   desert. Land cover cannot tell those apart, so there are two
+   surfaces. One counts timber only, and is what ground is worth where
+   the only evidence of turkeys is that someone recorded one. The other
+   lets brush stand in for a little timber, and is used only where the
+   USGS range map has the bird - see RANGE_WITH_RECORDS in
+   js/habgrid.js.
+
+   Even there it has to be earned. The USGS map takes in whole
+   watersheds, some of them desert, and with brush counted outright
+   Big Bend came back at 0.31 and a quarter of Nevada was turkey range.
+   So brush counts in proportion to how well the bird is recorded on
+   it: the Texas brush country reads 0.43 to 1.00 on that measure, Big
+   Bend 0.10, the Utah and Nevada desert 0.06 and under. */
+const TURKEY_TIMBER = { 41: 1.00, 43: 0.90, 42: 0.75, 90: 0.60 };
+const TURKEY_OPEN = { 81: 1.00, 82: 0.90, 71: 0.80, 52: 0.50, 21: 0.30 };
+const TURKEY_ROOST = 0.03;          // timber share at which the roost term reaches 63%
+const TURKEY_WOODS_ONLY = 0.55;
+const TURKEY_BOTH = 0.15;           // share of each at which the mix counts in full
+const TURKEY_BRUSH = 0.10;          // what a cell of nothing but brush is worth as timber, on mapped range
+const TURKEY_BRUSH_SEEN = [0.15, 0.40];   // presence at which brush starts to count, and counts in full
+
+function turkeySuit(lc, presence) {
+  const part = (table, k) => {
+    let v = 0;
+    for (const c of Object.keys(table)) { const a = lc.counts.get(+c); if (a) v += table[c] * a[k] / lc.total[k]; }
+    return v;
+  };
+  const frac = (cls, k) => { const a = lc.counts.get(cls); return a ? a[k] / lc.total[k] : 0; };
+  const timber = new Float32Array(NCELL), open = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    timber[k] = part(TURKEY_TIMBER, k); open[k] = part(TURKEY_OPEN, k);
+  }
+  /* A roost is used from a mile or two off, and the tally is 25 points
+     a cell: the timber counted is the cell's or its neighbours'. */
+  const nearTimber = smooth(timber, 1);
+  const recorded = new Float32Array(NCELL), mapped = new Float32Array(NCELL);
+  const value = (wood, k) => {
+    const roost = 1 - Math.exp(-wood / TURKEY_ROOST);
+    const mix = clamp01(Math.min(wood, open[k]) / TURKEY_BOTH);
+    return roost * (TURKEY_WOODS_ONLY + (1 - TURKEY_WOODS_ONLY) * mix) * (1 - frac(23, k) - frac(24, k));
+  };
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    const wood = Math.max(timber[k], nearTimber[k]);
+    recorded[k] = value(wood, k);
+    const seen = clamp01((presence[k] - TURKEY_BRUSH_SEEN[0]) / (TURKEY_BRUSH_SEEN[1] - TURKEY_BRUSH_SEEN[0]));
+    mapped[k] = value(wood + TURKEY_BRUSH * seen * frac(52, k), k);
+  }
+  /* For checking the rule against places whose answer is known: point
+     TURKEY_DEBUG at a JSON file of { "name": [lon, lat] }. */
+  if (process.env.TURKEY_DEBUG) {
+    const probe = JSON.parse(readFileSync(process.env.TURKEY_DEBUG, 'utf8'));
+    for (const [name, p] of Object.entries(probe)) {
+      const k = cellIdx(Math.floor((p[0] - LON0) / D), Math.floor((p[1] - LAT0) / D));
+      console.log('TURKEY ' + name.padEnd(34) + ' timber ' + timber[k].toFixed(3) + '  round ' + nearTimber[k].toFixed(3) +
+        '  open ' + open[k].toFixed(2) + '  brush ' + frac(52, k).toFixed(2) + '  recorded ' + recorded[k].toFixed(2) +
+        '  mapped ' + mapped[k].toFixed(2));
+    }
+  }
+  return { recorded: recorded, mapped: mapped };
+}
+
 /* ---------- geese ----------
 
    Geese were scored on the duck surface, which is water and marsh with
@@ -1712,8 +1799,11 @@ async function main() {
     const suitPairs = Object.keys(suit).map((c) => [+c, suit[c]]);
     const vals = new Uint8Array(NCELL);
     const skip = UNRECORDED_SKIP[sp] || null;
-    const lean = skip ? new Uint8Array(NCELL) : null;
-    const ducks = sp === 'waterfowl' ? waterfowlSuit(lc, rice) : sp === 'goose' ? gooseSuit(lc, rice) : null;
+    const lean = skip || sp === 'turkey' ? new Uint8Array(NCELL) : null;
+    const gobblers = sp === 'turkey'
+      ? turkeySuit(lc, Float32Array.from(share, (v) => clamp01(Math.pow(clamp01(v / p97), 0.45)))) : null;
+    const ducks = sp === 'waterfowl' ? waterfowlSuit(lc, rice) : sp === 'goose' ? gooseSuit(lc, rice)
+      : gobblers ? gobblers.recorded : null;
     const birds = sp === 'upland' && uplandTaxa
       ? (uplandBest = uplandSuit(lc, ev.reliefFt, uplandTaxa, normalsGrid(ev.meanFt, 0, 3))).val : null;
     for (let k = 0; k < NCELL; k++) {
@@ -1815,7 +1905,9 @@ async function main() {
       }
       vals[k] = Math.round(clamp01(s) * 255);
 
-      if (lean) {
+      if (lean && gobblers) {
+        lean[k] = Math.round(clamp01(gobblers.mapped[k] * elevFactor(ev.meanFt[k], band)) * 255);
+      } else if (lean) {
         let t = 0;
         for (let q = 0; q < suitPairs.length; q++) {
           if (skip.indexOf(suitPairs[q][0]) >= 0) continue;

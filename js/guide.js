@@ -552,20 +552,49 @@
 
   function turkeyPlan(sc, legal, win, doy) {
     var wx = sc.wx;
-    var spring = doy > 60 && doy < 175;
+    var spring = doy > 55 && doy < 175;
     var rec = [];
     rec.push(spring
       ? 'Get within a couple of hundred yards of the roost in the dark, set up against a tree wider than your ' +
         'shoulders, and let him gobble on the limb before you say anything.'
       : 'Find the flock and the feed they are using, then either ambush the travel route or scatter the flock ' +
         'and call them back together.');
-    rec.push(wx.windSpd > 14
-      ? 'Wind at ' + Math.round(wx.windSpd) + ' mph will cut both gobbling and your ability to hear it. ' +
-        'Hunt leeward hollows and field edges where sound carries, and call louder than feels right.'
-      : 'Wind is light at ' + Math.round(wx.windSpd) + ' mph, so birds should gobble well and carry a long way. ' +
-        'Move and listen rather than committing to one spot too early.');
-    if (wx.precip > 0.3) rec.push('Rain suppresses gobbling and pushes birds into open fields where they can see. ' +
-      'Glass field edges rather than trying to call in timber.');
+    /* Where in the spring this is, for this latitude and height - the
+       same date the score uses. Early and late are different hunts. */
+    if (spring && models.gobblePeak) {
+      var off = doy - models.gobblePeak(sc.lat, sc.hab && sc.hab.elev);
+      if (off < -12) rec.push('Early for this latitude. Gobblers are still with hens once they fly down, so the ' +
+        'roost gobble can be the whole show. Be patient, call softly, and be where the hens want to go.');
+      else if (off > 12) rec.push('Late for this latitude. Most hens are on nests by now, and a gobbler that has ' +
+        'been silent all morning will come looking between mid-morning and noon, often without a sound.');
+      else rec.push('This is about the peak of gobbling for this latitude.');
+    }
+    rec.push(spring
+      ? 'Spring seasons are for bearded birds only nearly everywhere, and several states stop at midday. ' +
+        'Check the dates, the zone and the hours with the state agency before you hunt.'
+      : 'Not every state has a fall turkey season, and where there is one the units, the permits and the rules ' +
+        'on sex and method differ from spring. Check with the state agency before you hunt.');
+    /* Everything from here down said the spring thing whatever the
+       month: in October it had birds gobbling well in light wind and
+       recommended tree yelps at fly-down. A fall flock is found by
+       eye and by ear, not called off the limb. */
+    if (spring) {
+      rec.push(wx.windSpd > 14
+        ? 'Wind at ' + Math.round(wx.windSpd) + ' mph will cut both gobbling and your ability to hear it. ' +
+          'Hunt leeward hollows and field edges where sound carries, and call louder than feels right.'
+        : 'Wind is light at ' + Math.round(wx.windSpd) + ' mph, so birds should gobble well and carry a long way. ' +
+          'Move and listen rather than committing to one spot too early.');
+    } else {
+      rec.push(wx.windSpd > 14
+        ? 'Wind at ' + Math.round(wx.windSpd) + ' mph makes a flock hard to hear and hard to call. Glass fields and ' +
+          'open timber from cover, and hunt the sheltered side of ridges where birds will be feeding.'
+        : 'Wind is light at ' + Math.round(wx.windSpd) + ' mph, so a flock scratching, yelping or flying up to roost ' +
+          'can be heard a long way off. Listen at first and last light to find where they sleep.');
+    }
+    if (wx.precip > 0.3) rec.push(spring
+      ? 'Rain suppresses gobbling and pushes birds into open fields where they can see. ' +
+        'Glass field edges rather than trying to call in timber.'
+      : 'Rain pushes birds out into open fields where they can see. Glass field edges and pastures.');
     if (wx.cloud < 0.3 && spring) rec.push('Clear sky at fly-down is the best gobbling condition there is. ' +
       'Be in position early - the roost gobble may be the only one you get.');
 
@@ -577,11 +606,16 @@
                           'Face the likely approach with shooting lanes cleared to 40 yards'] },
         { k: 'Distance', v: spring ? '100-200 yards from the roost, never directly under it'
                                    : 'On the feed or the travel route between roost and feed' },
-        { k: 'Calling', v: wx.windSpd > 14
-            ? 'Box call for volume into the wind, then cut to a mouth call once he commits.'
-            : 'Soft tree yelps at fly-down, then go quiet. Let him look for her.' },
-        { k: 'Decoys', v: sc.movement > 70 ? 'A jake and a hen will pull a dominant bird in hard'
-                                           : 'A single hen, or none at all on pressured birds' },
+        { k: 'Calling', v: !spring
+            ? 'After a scatter, sit at the break and wait a quarter of an hour. Kee-kees and lost yelps for young ' +
+              'birds; slow, coarse yelps and clucks for a flock of gobblers.'
+            : wx.windSpd > 14
+              ? 'Box call for volume into the wind, then cut to a mouth call once he commits.'
+              : 'Soft tree yelps at fly-down, then go quiet. Let him look for her.' },
+        { k: 'Decoys', v: (!spring ? 'Not needed in fall; a hen on a field edge can help'
+                           : sc.movement > 70 ? 'A jake and a hen will pull a dominant bird in hard'
+                                              : 'A single hen, or none at all on pressured birds') +
+                          '. Some states and public areas restrict decoys.' },
         { k: 'Wind', v: env.dirName(wx.windFrom) + ' ' + Math.round(wx.windSpd) + ' mph' }
       ]
     };

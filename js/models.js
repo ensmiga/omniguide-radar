@@ -299,6 +299,27 @@
     };
   }
 
+  /* ---------- When turkeys gobble ----------
+
+     The spring peak was the 25th of April everywhere. Turkeys in south
+     Florida are gobbling and being hunted in March, and in Maine and
+     the Black Hills not until May, so the one date scored the Osceola
+     season as early and half over and the northern one as past its
+     best on opening day.
+
+     The peak now moves with latitude, and a little with height, since
+     Merriam's birds in the mountains run later than the plains below
+     them. This is a rule of thumb and not a measurement: the slope is
+     a judgement, set so the date falls where spring seasons are
+     generally held - late March in peninsular Florida, the first half
+     of April across the Deep South, late April through the middle of
+     the country, early May in the north. Day of year. */
+  function gobblePeak(lat, elevFt) {
+    if (lat == null) return 115;
+    var high = clamp(((elevFt || 0) - 1500) / 400, 0, 15);
+    return clamp(80 + 2.6 * (lat - 27) + high, 78, 128);
+  }
+
   /* ---------- Upland birds ----------
 
      One movement model for all of them - it is about the dog's nose more
@@ -581,28 +602,42 @@
       migratory: false, habKey: 'turkey',
       pressureSens: 0.11,
       distWeight: 0.30,
-      habFloor: 0.02, rangeFloor: 0.025,
+      /* Set between the thinnest real turkey ground on the test list
+         (the Republican River in Nebraska, 0.33, and central Kansas,
+         0.34 - river-bottom timber in farmland) and the strongest place
+         there are none (Big Bend, 0.25). */
+      habFloor: 0.28, rangeFloor: 0.025,
       weights: { hab: 0.36, move: 0.40, mig: 0, wx: 0.24 },
-      blurb: 'Gobbling activity. Calm clear mornings in spring, flocked up and feed-driven in fall.',
+      blurb: 'Gobbling activity. Calm clear mornings in spring, flocked up and feed-driven in fall. ' +
+             'Spring comes earlier in the south and later with latitude and height.',
       movement: function (wx, hab, doy) {
-        var spring = Math.exp(-Math.pow((doy - 115) / 28, 2));      // April and early May
+        var spring = Math.exp(-Math.pow((doy - gobblePeak(hab.lat, hab.elev)) / 28, 2));
         var fall = Math.exp(-Math.pow((doy - 295) / 26, 2));
         var season = Math.max(spring, fall * 0.72);
         return blend([
           { w: 1.8, v: 0.15 + 0.85 * season,
             hi: spring > fall ? 'Peak spring gobbling period' : 'Fall flocks are predictable on feed',
             lo: 'Well outside the active turkey window' },
+          /* The same terms either season - a calm, dry, clear day is when
+             turkeys are out and can be heard - but worded for the season.
+             In October these all spoke of gobbling. */
           { w: 1.6, v: 1 - clamp01(ramp(wx.windSpd, 7, 20)),
-            hi: 'Calm enough to hear a gobble at distance and to be heard',
-            lo: 'Wind is killing both gobbling and your ability to hear it' },
+            hi: spring > fall ? 'Calm enough to hear a gobble at distance and to be heard'
+                              : 'Calm enough to hear a flock at distance and to be heard',
+            lo: spring > fall ? 'Wind is killing both gobbling and your ability to hear it'
+                              : 'Wind makes a flock hard to hear and hard to call' },
           { w: 1.4, v: 1 - clamp01(wx.precip * 1.8),
-            hi: 'Dry morning - birds gobble and stay on the ground',
-            lo: 'Rain shuts down gobbling and pushes birds to open fields' },
+            hi: spring > fall ? 'Dry morning - birds gobble and stay on the ground' : 'Dry - birds out feeding',
+            lo: spring > fall ? 'Rain shuts down gobbling and pushes birds to open fields'
+                              : 'Rain pushes birds out to open fields' },
           { w: 1.2, v: 0.35 + 0.65 * clamp01(1 - wx.cloud * 0.8),
-            hi: 'Clear sky at fly-down, which is when they are loudest', lo: 'Heavy overcast muting the roost gobble' },
-          { w: 1.1, v: clamp01(hab.turkey * 1.3), hi: 'Timber and field edge they roost and strut in', lo: 'Thin turkey country' },
+            hi: spring > fall ? 'Clear sky at fly-down, which is when they are loudest'
+                              : 'Clear morning - birds down early and on feed',
+            lo: spring > fall ? 'Heavy overcast muting the roost gobble' : 'Heavy overcast - birds late off the roost' },
+          { w: 1.1, v: clamp01(hab.turkey * 1.3), hi: 'Timber to roost in with open ground beside it', lo: 'Thin turkey country' },
           { w: 1.0, v: 0.4 + 0.6 * clamp01(0.5 + wx.pressTrend * 0.5),
-            hi: 'Stable or rising pressure, which gobbling tracks closely', lo: 'Falling pressure ahead of weather' },
+            hi: spring > fall ? 'Stable or rising pressure, which gobbling tracks closely' : 'Stable or rising pressure',
+            lo: 'Falling pressure ahead of weather' },
           { w: 0.9, v: pref(wx.tempF, 58, 18), hi: 'Comfortable temperature for all-morning activity', lo: null }
         ]);
       }
@@ -711,7 +746,7 @@
     'muledeer':        [16.5, 76.9],
     'moose':           [8.1, 71.9],
     'pronghorn':       [9.5, 76.6],
-    'turkey':          [19.8, 77.6],
+    'turkey':          [39.0, 89.4],
     'upland':          [23.0, 80.4],
     'pheasant':        [24.7, 85.1],
     'bobwhite':        [26.0, 81.8],
@@ -738,6 +773,20 @@
     if (sp.pursuit === 'fish') {
       return 100 * clamp01(0.3 + 0.4 * pref(wx.waterTemp, 55, 10) + 0.2 * clamp01(wx.cloud) +
         0.2 * (1 - clamp01(ramp(wx.windSpd, 14, 32))));
+    }
+    /* The score below is duck weather: wind, a falling thermometer, a
+       front, cloud. Turkey were being given it too, a quarter of their
+       total, while their movement model marked the same day down for
+       the same wind and the same cloud. For a turkey the good day is
+       the calm, dry, clear one. */
+    if (sp.group === 'turkey') {
+      return 100 * clamp01(
+        0.32 * (1 - clamp01(ramp(wx.windSpd, 6, 20))) +
+        0.26 * (1 - clamp01(wx.precip * 1.8)) +
+        0.18 * clamp01(1 - wx.cloud * 0.8) +
+        0.14 * clamp01(0.5 + wx.pressTrend * 0.4) +
+        0.10 * pref(wx.tempF, 58, 20)
+      );
     }
     return 100 * clamp01(
       0.26 * clamp01(ramp(wx.windSpd, 3, 16)) +
@@ -1438,6 +1487,7 @@
     hourlyActivity: hourlyActivity,
     huntingPressure: huntingPressure, migration: migration, rutStage: rutStage,
     freezeLock: freezeLock, presenceFactor: presenceFactor, PRESENT_FLOOR: PRESENT_FLOOR,
+    gobblePeak: gobblePeak,
     HAB_ENOUGH: HAB_ENOUGH, HAB_THIN: HAB_THIN,
     toScore: toScore, weatherScore: weatherScore
   };

@@ -447,8 +447,8 @@
     { group: 'Species range and records', items: [
       { n: 'USGS Gap Analysis Project', u: 'https://doi.org/10.5066/F7Q81B3R',
         d: 'Species Range Maps CONUS_2001 (2018): every sub-watershed in the country marked by state range ' +
-           'data and expert review, 2008 to 2014. It is the range for elk and moose, and for whitetail it is ' +
-           'used alongside the records. Wandering animals and historical range are left out. Added from the ' +
+           'data and expert review, 2008 to 2014. It is the range for elk and moose, and for whitetail and ' +
+           'turkey it is used alongside the records. Wandering animals and historical range are left out. Added from the ' +
            'state agencies concerned: elk released since at Black River State Forest in Wisconsin, Peck ' +
            'Ranch in Missouri and Tomblin WMA in West Virginia, and the three prairie moose units of ' +
            'north-west North Dakota.',
@@ -460,8 +460,8 @@
       { n: 'GBIF', u: 'https://www.gbif.org/', gbif: true,
         d: 'Occurrence records 2015-2025 for 44 taxa, counted in full through the GBIF maps and statistics ' +
            'services - about 25.9 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +
-           'decide whether a species is in range - except elk and moose, which use the USGS map, and whitetail, ' +
-           'which use both - and when waterfowl normally arrive, how many are normally ' +
+           'decide whether a species is in range - except elk and moose, which use the USGS map, and whitetail ' +
+           'and turkey, which use both - and when waterfowl normally arrive, how many are normally ' +
            'present by date, and which birds the decoy, goose and upland advice names. Each upland bird\'s ' +
            'own map is drawn from its own records. They do not decide how good a place is, except that for ' +
            'all upland birds together they say which bird\'s cover to judge it by.',

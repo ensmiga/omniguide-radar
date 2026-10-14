@@ -175,16 +175,47 @@ const SPECIES = {
 
      One shape, known native range.
 
-     NOT HERE, ON PURPOSE. Mule deer, pronghorn and turkey were put
-     through the same test and their record gates need no help: 35 of
-     35 and 22 of 22, 28 of 28 and 22 of 23, 41 of 41 and 9 of 12. The
-     USGS maps scored 35 and 21, 27 and 23, 40 and 9 - no better, and
-     each missing somewhere real (Parker Mountain for pronghorn, the
-     Clearwater for turkey). */
+     NOT HERE, ON PURPOSE. Mule deer and pronghorn were put through
+     the same test and their record gates need no help: 35 of 35 and
+     22 of 22, 28 of 28 and 22 of 23. The USGS maps scored 35 and 21,
+     27 and 23 - no better, and missing somewhere real (Parker
+     Mountain for pronghorn). Turkey passed that test as well, 41 of
+     41 and 9 of 12, and were left on records; it was the test that
+     was wrong. See below. */
   whitetail: {
     item: '59f5e284e4b063d5d307df0f',
     name: 'White-tailed Deer (Odocoileus virginianus) mWTDEx_CONUS_2001v1 Range Map',
     shapes: [199008],
+    keep: [1],
+    added: []
+  },
+
+  /* TURKEY.
+
+     Left on records alone the first time round, on a test of 41
+     places and 12 - see the note above. That test was too easy. The
+     absences in it were deserts, and what the record gate gets wrong
+     is the ground beside real turkey country: a quarter-degree cell
+     lit by the birds in the valley below. Asked about 101 places
+     turkeys are and 40 they are not, with the high country and the
+     farmed valley floors among the 40, the records had all 101 and
+     16 of the first 33 absences tried; this map alone has 93 and 36.
+     Glacier's high country, the North Cascades, the Beartooth
+     plateau, the San Joaquin valley floor and Big Bend all read as
+     turkey range on records and do not here.
+
+     What it lacks is the birds put out in the North-west since it
+     was drawn - the Clearwater and the Payette in Idaho, Klickitat
+     County in Washington - and those are well recorded. So the two
+     are used together, as for whitetail: in range where this map
+     says so, or where the records are strong. See RANGE_WITH_RECORDS
+     in js/habgrid.js.
+
+     One shape, known native range. */
+  turkey: {
+    item: '59f5e269e4b063d5d307de81',
+    name: 'Wild Turkey (Meleagris gallopavo) bWITUx_CONUS_2001v1 Range Map',
+    shapes: [1353601],
     keep: [1],
     added: []
   }

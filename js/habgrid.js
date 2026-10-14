@@ -70,10 +70,13 @@
      place is; the records only say whether the species is in range,
      and there are two ways to be in range:
 
-     RECORDED HERE. Presence over a low knee counts in full. For the
-     birds this is the whole test - there are millions of records, and
-     turkey reads exactly zero at every desert point checked and above
-     zero at every real one.
+     RECORDED HERE. Presence over a low knee counts in full. For most
+     of the birds this is the whole test - there are millions of
+     records. It was the whole test for turkey too, on the strength of
+     reading zero at every desert point checked; asked about the high
+     country and the valley floors beside real turkey ground, it
+     failed, and turkey now lean on the published map - see
+     RANGE_WITH_RECORDS below.
 
      ESTABLISHED ALL ROUND. For the mammals and for trout the records
      are too thin for that, so ground with none of its own still counts
@@ -112,10 +115,18 @@
      Dakota. The places each is known for start at 0.29 and 0.44. */
   var RANGE_KNEE = {
     elk: 0.50, moose: 0.50, whitetail: 0.25, muledeer: 0.25, pronghorn: 0.25,
-    turkey: 0.10, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25,
+    turkey: 0.55, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25,
     pheasant: 0.30, bobwhite: 0.30, 'mearns-quail': 0.45
   };
-  var RANGE_TOE = { pheasant: 0.20, bobwhite: 0.20 };
+  /* Turkey records are a second opinion beside the USGS map, and are
+     believed only where they are strong. The places the map lacks and
+     turkeys certainly are read 0.52 to 0.76 (the Idaho panhandle, the
+     Payette, Klickitat County, the Clearwater); the places they are
+     not read 0.35 and under (the Everglades 0.35, Glacier's high
+     country 0.30, the San Joaquin valley floor 0.26). One does not fit:
+     White Sands reads 0.58, lit from the mountains east of it, and is
+     kept out by having no timber. */
+  var RANGE_TOE = { pheasant: 0.20, bobwhite: 0.20, turkey: 0.35 };
   var RANGE_REGION = {
     elk:       [0.30, 0.50],   // high, to keep the eastern herds as islands
     moose:     [0.45, 0.70],   // sagebrush is not willow; at 0.18 this had moose over 83% of Wyoming
@@ -235,8 +246,20 @@
      ground is worth depends on which. With records, the land cover
      is taken as it stands. On the map alone, the shrub class is left
      out: there the deer are in the hay and the cottonwoods, not the
-     sage. That second surface is the "unrecorded" plane. */
-  var RANGE_WITH_RECORDS = { whitetail: 1 };
+     sage. That second surface is the "unrecorded" plane.
+
+     Turkey are done the same way for the opposite reason. Their
+     records are too generous - a cell is lit by the birds in the
+     valley below, and Glacier's high country, the North Cascades and
+     Big Bend all came up as turkey range - and the map has the range
+     right but not the birds put out in the North-west since it was
+     drawn. So the map decides, and records add to it only where they
+     are strong: see the toe and knee below. The second surface runs
+     the other way too. On mapped range, brush counts as a little
+     timber, because that is what Texas turkey country is mapped as;
+     on records alone it does not. See turkeySuit in
+     ingest/habitat.mjs. */
+  var RANGE_WITH_RECORDS = { whitetail: 1, turkey: 1 };
 
   /* 0 out of range, 1 in it. */
   function rangeAt(sp, lon, lat) {

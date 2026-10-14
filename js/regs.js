@@ -94,6 +94,13 @@
 
   var DUCKS = ['ducks'];
 
+  /* Turkey: the states that open in March, and the states with a fall
+     season - see the rules below for what these are and are not. */
+  var TURKEY_EARLY = ['FL', 'AL', 'MS', 'GA', 'LA', 'SC', 'TX'];
+  var TURKEY_FALL = ['ND', 'SD', 'MN', 'MT', 'WI', 'MI', 'IA', 'NE', 'WY', 'ID', 'ME', 'VT', 'NH', 'NY',
+                     'MO', 'IL', 'IN', 'OH', 'CO', 'UT', 'OR', 'WA', 'PA', 'WV', 'KY', 'MA', 'CT', 'CA',
+                     'MD', 'NJ', 'TX', 'OK', 'NM', 'AZ', 'FL', 'VA', 'TN'];
+
   function rule(o) {
     o.verification = 'unverified-sample';
     o.effective = null;
@@ -195,14 +202,43 @@
       bag: 'One pronghorn, unit-specific tag, usually by draw',
       hours: 'daylight', source: 'State wildlife agency' }),
 
-    rule({ states: NORTH.concat(MID, SOUTH), species: ['turkey'], type: 'Spring turkey season',
-      start: '04-01', end: '05-20', status: 'LIMITED',
+    /* Spring was one window for the whole country, the first of April
+       to the 20th of May. That had Florida closed through March, which
+       is most of its season, and open into late May, which is not; and
+       it closed the north ten days early. Three envelopes instead - the
+       earliest opening and latest closing in each part of the country,
+       as for ducks above.
+
+       Fall was every state. A good many have no fall season at all, so
+       it is now only the states listed, and elsewhere an autumn date
+       reads closed. Both the dates and the list are from general
+       knowledge and have not been checked against any agency; the list
+       is drawn short on purpose, because showing a closed season as
+       closed is the safe way to be wrong. */
+    rule({ states: TURKEY_EARLY, species: ['turkey'], type: 'Spring turkey season',
+      start: '03-01', end: '05-15', status: 'LIMITED',
       bag: 'Bearded birds only in spring. Bag varies by state.',
-      note: 'Spring seasons are usually bearded-bird-only and often zoned with staggered opening dates.',
+      note: 'Envelope, not an actual season: the earliest opening and latest closing in this part of the ' +
+            'country. Most states open later or close sooner, and many are zoned.',
       hours: 'turkey', source: 'State wildlife agency' }),
-    rule({ states: NORTH.concat(MID, SOUTH), species: ['turkey'], type: 'Fall turkey season',
+    rule({ states: MID.concat(SOUTH).filter(function (s) { return TURKEY_EARLY.indexOf(s) < 0; }),
+      species: ['turkey'], type: 'Spring turkey season',
+      start: '04-01', end: '05-31', status: 'LIMITED',
+      bag: 'Bearded birds only in spring. Bag varies by state.',
+      note: 'Envelope, not an actual season: the earliest opening and latest closing in this part of the ' +
+            'country. Most states open later or close sooner, and many are zoned or by permit period.',
+      hours: 'turkey', source: 'State wildlife agency' }),
+    rule({ states: NORTH, species: ['turkey'], type: 'Spring turkey season',
+      start: '04-10', end: '05-31', status: 'LIMITED',
+      bag: 'Bearded birds only in spring. Bag varies by state.',
+      note: 'Envelope, not an actual season: the earliest opening and latest closing in this part of the ' +
+            'country. Most states open later or close sooner, and many are zoned or by permit period.',
+      hours: 'turkey', source: 'State wildlife agency' }),
+    rule({ states: TURKEY_FALL, species: ['turkey'], type: 'Fall turkey season',
       start: '10-01', end: '11-30', status: 'LIMITED',
-      bag: 'Either sex in most fall seasons, where a fall season exists at all',
+      bag: 'Either sex in most fall seasons. Often by permit, and only in some units.',
+      note: 'Placeholder window, not an actual season. Fall seasons are shorter than this in most states, ' +
+            'limited to some units, and often by permit.',
       hours: 'daylight', source: 'State wildlife agency' }),
 
     rule({ states: NORTH.concat(MID, SOUTH), species: ['upland'], type: 'Upland game bird season',
