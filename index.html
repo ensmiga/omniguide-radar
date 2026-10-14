@@ -203,6 +203,21 @@
     color: var(--muted);
   }
   .tool:hover { color: var(--text); border-color: var(--line); }
+  .tool-primary {
+    background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+    font-weight: 700; letter-spacing: 0.1em;
+  }
+  .tool-primary:hover { color: var(--accent-ink); border-color: var(--accent); filter: brightness(1.08); }
+  .tool-sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; align-self: center; }
+  .tool-icon { font-size: 15px; line-height: 1; padding: 5px 9px; letter-spacing: 0; }
+  .tool[hidden] { display: none; }
+  #toast {
+    position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+    max-width: min(420px, calc(100% - 24px));
+    padding: 8px 13px; border-radius: 9px; z-index: 30;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
+    font-size: 12.5px; line-height: 1.4; color: var(--text);
+  }
   .badge {
     position: absolute;
     top: -2px; right: -2px;
@@ -288,6 +303,66 @@
     min-height: 0;
   }
   #layerdock:not(.open) #layers { display: none; }
+
+  /* League tables: the layer dock's mirror on the right. Stops short of
+     the zoom buttons and the legend below it. */
+  #leaguedock {
+    position: absolute; top: 12px; right: 0;
+    display: flex; flex-direction: row-reverse; align-items: flex-start;
+    z-index: 6; height: calc(100% - 232px); min-height: 120px; pointer-events: none;
+  }
+  #leaguedock > * { pointer-events: auto; }
+  #leaguetab {
+    flex: none; width: 30px; padding: 14px 0;
+    background: var(--surface); border: 1px solid var(--line); border-right: 0;
+    border-radius: 10px 0 0 10px; cursor: pointer; box-shadow: var(--shadow);
+  }
+  #leaguetab span {
+    display: block; writing-mode: vertical-rl;
+    font-family: var(--disp); font-size: 11.5px; font-weight: 600;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+  }
+  #leaguetab:hover span { color: var(--accent); }
+  #leaguedock.open #leaguetab { border-radius: 0; border-left: 0; }
+  #leaguedock.open #leaguetab span { color: var(--text); }
+  #league {
+    width: min(280px, calc(100vw - 80px)); max-height: 100%; overflow-y: auto; overscroll-behavior: contain;
+    padding: 11px 12px 12px; display: flex; flex-direction: column; gap: 6px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    border: 1px solid var(--line); border-right: 0; border-radius: 10px 0 0 10px;
+    backdrop-filter: blur(10px); box-shadow: var(--shadow);
+  }
+  #leaguedock:not(.open) #league { display: none; }
+  .lg-head { display: grid; gap: 1px; }
+  .lg-h { font-family: var(--disp); font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .lg-s { font-size: 11.5px; color: var(--muted); }
+  .lg-sum { margin: 2px 0 2px; font-size: 12.5px; line-height: 1.45; }
+  .lg-note { margin: 2px 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
+  .lg-tabs { display: flex; gap: 4px; }
+  .lg-tab {
+    flex: 1; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 0; cursor: pointer;
+    font-family: var(--disp); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .lg-tab.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .lg-sec {
+    margin-top: 6px; padding-bottom: 3px; border-bottom: 1px solid var(--line);
+    font-family: var(--disp); font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .lg-row {
+    display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 6px;
+    background: none; border: 0; border-radius: 6px; padding: 4px 4px; cursor: pointer; text-align: left;
+    color: var(--text);
+  }
+  .lg-row:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .lg-rank { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .lg-name { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+  .lg-place { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lg-where { font-family: var(--mono); font-size: 10px; color: var(--muted); flex: none; }
+  .lg-score { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .lg-locked .lg-place, .lg-locked .lg-score { filter: blur(4px); user-select: none; }
+  #stage #notice { right: 44px; }
+  #stage.league-open #notice { right: 324px; }
 
   /* Zoom buttons, because a trackpad is not the only input. */
   #zoomctl {
@@ -1009,6 +1084,30 @@
     text-transform: uppercase; color: var(--muted);
   }
   .wkstat { width: 6px; height: 6px; border-radius: 999px; background: var(--unknown); }
+  .wk-locked .wkval, .wk-locked .wkbar { filter: blur(2.5px); opacity: 0.55; }
+
+  /* Pro preview */
+  .pro-blur { position: relative; min-height: 46px; }
+  .pro-blur-in {
+    filter: blur(5px); opacity: 0.8; user-select: none; pointer-events: none;
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .pro-badge {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 999px;
+    padding: 6px 14px; cursor: pointer; box-shadow: var(--shadow);
+    font-family: var(--disp); font-size: 11.5px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+  }
+  .pro-badge:hover { filter: brightness(1.08); }
+  .pro-blur-line { filter: blur(4.5px); opacity: 0.8; user-select: none; }
+  .pro-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 10px 12px; border: 1px solid var(--accent); border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--raised));
+  }
+  .pro-banner-t { font-size: 13px; font-weight: 600; }
+  .sec > .btn.small { align-self: flex-start; }
   .wkstat.s-open { background: var(--good); }
   .wkstat.s-limited { background: var(--warn); }
   .wkstat.s-permit { background: var(--permit); }
@@ -1180,6 +1279,7 @@
     .layer-grp { padding: 0 4px 0 0; }
     #legend { width: calc(100% - 16px); left: 8px; right: auto; bottom: 8px; border-right: 1px solid var(--line); border-radius: 10px; }
     #hint { display: none; }
+    #leaguedock { height: calc(100% - 140px); }
     #panel { width: 100%; top: auto; height: 88%; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; }
     .metrics { grid-template-columns: repeat(2, 1fr); }
     .kv { grid-template-columns: 1fr; gap: 2px 0; }
@@ -1220,17 +1320,19 @@
 
     <div class="grow"></div>
 
+    <!-- What you do here first, then where you are, then you. The base
+         map choice lives in the layer dock and Sources under the legend
+         and in Account; neither needed a button up here. -->
     <nav class="tools">
-      <button class="tool" id="btn-plan">Plan a hunt</button>
+      <button class="tool tool-primary" id="btn-plan">Plan a hunt</button>
       <button class="tool" id="btn-spots">Spots</button>
       <button class="tool" id="btn-alerts">Alerts<span class="badge" id="alertdot" hidden></span></button>
       <button class="tool" id="btn-log">Log</button>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <button class="tool" id="btn-gps" title="Show my location on the map">Locate</button>
+      <button class="tool" id="btn-markhere" title="Save a spot where you are standing" hidden>Mark here</button>
       <button class="tool" id="btn-account">Account</button>
-      <button class="tool" id="btn-sources">Sources</button>
-      <button class="tool" id="btn-gps" title="Show my location">Locate</button>
-      <button class="tool" id="btn-markhere" title="Save a spot at my location">Mark here</button>
-      <button class="tool" id="btn-basemap" title="Switch the base map">Relief</button>
-      <button class="tool" id="themebtn" title="Switch light and dark">Theme</button>
+      <button class="tool tool-icon" id="themebtn" title="Switch light and dark" aria-label="Switch light and dark">&#9680;</button>
     </nav>
   </header>
 
@@ -1241,6 +1343,12 @@
         <span>Layers</span>
       </button>
       <div id="layers"></div>
+    </div>
+    <div id="leaguedock">
+      <button id="leaguetab" aria-expanded="false" aria-controls="league" title="Show or hide the league tables">
+        <span>League tables</span>
+      </button>
+      <div id="league"></div>
     </div>
     <div id="zoomctl">
       <button id="zoom-in" title="Zoom in">+</button>
@@ -1266,6 +1374,7 @@
       <div class="hv-pair" hidden></div>
     </div>
     <div id="hint">Tap anywhere for the OmniGuide Plan &middot; scroll to zoom</div>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
   </main>
 
   <footer id="timeline">
@@ -1280,10 +1389,6 @@
       <span><i class="k-night"></i>Night</span>
       <span><i class="k-legal"></i>Legal light</span>
     </div>
-    <label class="toggle" for="legaltoggle">
-      <input type="checkbox" id="legaltoggle" checked>
-      Legal overlay
-    </label>
   </footer>
 </div>
 
@@ -1296,41 +1401,41 @@
   <div id="panel-body"></div>
 </aside>
 
-<script src="js/us-topo.js?v=tmvn8u"></script>
-<script src="js/us-cities.js?v=tmvn8u"></script>
-<script src="js/gbif-credits.js?v=tmvn8u"></script>
-<script src="js/hydro.js?v=tmvn8u"></script>
-<script src="js/wx-grid.js?v=tmvn8u"></script>
-<script src="js/geo.js?v=tmvn8u"></script>
-<script src="js/wx.js?v=tmvn8u"></script>
+<script src="js/us-topo.js?v=tmx7wr"></script>
+<script src="js/us-cities.js?v=tmx7wr"></script>
+<script src="js/gbif-credits.js?v=tmx7wr"></script>
+<script src="js/hydro.js?v=tmx7wr"></script>
+<script src="js/wx-grid.js?v=tmx7wr"></script>
+<script src="js/geo.js?v=tmx7wr"></script>
+<script src="js/wx.js?v=tmx7wr"></script>
 <!-- The baked habitat raster and its reader load before env.js, which
      consults them inside habitat() and falls back to its own synthetic
      surface if either is missing. -->
-<script src="js/normals.js?v=tmvn8u"></script>
-<script src="js/climo.js?v=tmvn8u"></script>
-<script src="js/habitat-grid.js?v=tmvn8u"></script>
-<script src="js/range-grid.js?v=tmvn8u"></script>
-<script src="js/elev-grid.js?v=tmvn8u"></script>
-<script src="js/water-grid.js?v=tmvn8u"></script>
-<script src="js/habgrid.js?v=tmvn8u"></script>
-<script src="js/trout-waters.js?v=tmvn8u"></script>
-<script src="js/env.js?v=tmvn8u"></script>
-<script src="js/models.js?v=tmvn8u"></script>
-<script src="js/regs.js?v=tmvn8u"></script>
-<script src="js/snow.js?v=tmvn8u"></script>
-<script src="js/snowfield.js?v=tmvn8u"></script>
-<script src="js/gauges.js?v=tmvn8u"></script>
-<script src="js/gaugefield.js?v=tmvn8u"></script>
-<script src="js/openwater.js?v=tmvn8u"></script>
-<script src="js/duckwater.js?v=tmvn8u"></script>
-<script src="js/flyshops.js?v=tmvn8u"></script>
-<script src="js/patterns.js?v=tmvn8u"></script>
-<script src="js/terrain.js?v=tmvn8u"></script>
-<script src="js/landcover.js?v=tmvn8u"></script>
-<script src="js/guide.js?v=tmvn8u"></script>
-<script src="js/planner.js?v=tmvn8u"></script>
-<script src="js/radar.js?v=tmvn8u"></script>
-<script src="js/app.js?v=tmvn8u"></script>
+<script src="js/normals.js?v=tmx7wr"></script>
+<script src="js/climo.js?v=tmx7wr"></script>
+<script src="js/habitat-grid.js?v=tmx7wr"></script>
+<script src="js/range-grid.js?v=tmx7wr"></script>
+<script src="js/elev-grid.js?v=tmx7wr"></script>
+<script src="js/water-grid.js?v=tmx7wr"></script>
+<script src="js/habgrid.js?v=tmx7wr"></script>
+<script src="js/trout-waters.js?v=tmx7wr"></script>
+<script src="js/env.js?v=tmx7wr"></script>
+<script src="js/models.js?v=tmx7wr"></script>
+<script src="js/regs.js?v=tmx7wr"></script>
+<script src="js/snow.js?v=tmx7wr"></script>
+<script src="js/snowfield.js?v=tmx7wr"></script>
+<script src="js/gauges.js?v=tmx7wr"></script>
+<script src="js/gaugefield.js?v=tmx7wr"></script>
+<script src="js/openwater.js?v=tmx7wr"></script>
+<script src="js/duckwater.js?v=tmx7wr"></script>
+<script src="js/flyshops.js?v=tmx7wr"></script>
+<script src="js/patterns.js?v=tmx7wr"></script>
+<script src="js/terrain.js?v=tmx7wr"></script>
+<script src="js/landcover.js?v=tmx7wr"></script>
+<script src="js/guide.js?v=tmx7wr"></script>
+<script src="js/planner.js?v=tmx7wr"></script>
+<script src="js/radar.js?v=tmx7wr"></script>
+<script src="js/app.js?v=tmx7wr"></script>
 <script>
   (function () {
     var x = document.getElementById('notice-x');

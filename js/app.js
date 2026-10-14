@@ -42,7 +42,6 @@
       basemap: load('og.basemap', 'relief'),
       t: 1,
       playing: false,
-      legalOverlay: true,
       selection: null,
       spots: load('og.spots', DEFAULT_SPOTS),
       logs: load('og.logs', []),
@@ -328,18 +327,22 @@
     return svg;
   }
 
-  function weekChart(series, container) {
+  /* open: how many days from the first are shown; the rest are drawn
+     locked, with no number and no height, so nothing about them leaks. */
+  function weekChart(series, container, open) {
+    if (open == null) open = series.length;
     var best = 0;
     series.forEach(function (s) { if (s.opp > series[best].opp) best = s.day; });
     var wrap = el('div', 'week');
-    series.forEach(function (s) {
-      var c = el('div', 'wk' + (s.day === best ? ' wk-best' : ''));
+    series.forEach(function (s, i) {
+      var locked = i >= open;
+      var c = el('div', 'wk' + (locked ? ' wk-locked' : s.day === best && open >= series.length ? ' wk-best' : ''));
       var bar = el('div', 'wkbar');
       var fill = el('div', 'wkfill');
-      fill.style.height = Math.max(4, s.opp) + '%';
-      fill.style.background = radarNS.rampCSS(s.opp / 100, 0.92);
+      fill.style.height = locked ? '45%' : Math.max(4, s.opp) + '%';
+      fill.style.background = locked ? 'var(--line)' : radarNS.rampCSS(s.opp / 100, 0.92);
       bar.appendChild(fill);
-      c.appendChild(el('div', 'wkval', String(s.opp)));
+      c.appendChild(el('div', 'wkval', locked ? '--' : String(s.opp)));
       c.appendChild(bar);
       c.appendChild(el('div', 'wkday', shortDay(s.day, s.date).slice(0, 3)));
       var dot = el('div', 'wkstat s-' + s.status.toLowerCase());
@@ -364,6 +367,17 @@
     panelBody.scrollTop = 0;
   }
   function closePanel() { panel.hidden = true; scrim.hidden = true; }
+
+  /* A line that says something once and goes. */
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('#toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 5000);
+  }
 
   function section(title) {
     var s = el('section', 'sec');
@@ -545,10 +559,114 @@
 
   /* ---------- The Plan ---------- */
 
+  /* ---------- Pro preview ----------
+
+     A free plan shows what the Pro plan would say without saying it: the
+     section headings, the first lines of the recommendation, two days of
+     the week, and all of how the number was made and the conditions under
+     it. The rest is blurred. Under the blur is the same shape of text with
+     its letters scrambled, so the blur is honest about how much is there
+     and turning it off gives nothing away. The season reference is never
+     blurred - what is legal is not a paid feature. */
+  function scrambleText(s) {
+    var out = '', seed = s.length * 7 + 3;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      if (c >= 97 && c <= 122) out += String.fromCharCode(97 + seed % 26);
+      else if (c >= 65 && c <= 90) out += String.fromCharCode(65 + seed % 26);
+      else if (c >= 48 && c <= 57) out += String.fromCharCode(48 + seed % 10);
+      else out += s[i];
+    }
+    return out;
+  }
+  function scrambleTree(node) {
+    if (node.nodeType === 3) { node.nodeValue = scrambleText(node.nodeValue); return; }
+    if (node.removeAttribute) { node.removeAttribute('title'); node.removeAttribute('href'); node.removeAttribute('id'); }
+    for (var i = 0; i < node.childNodes.length; i++) scrambleTree(node.childNodes[i]);
+  }
+  /* Swap the given nodes for one blurred, scrambled copy of them, with the
+     way to Pro on top. */
+  function blurNodes(nodes, label) {
+    nodes = nodes.filter(function (n) { return n && n.parentNode; });
+    if (!nodes.length) return null;
+    var parent = nodes[0].parentNode;
+    var wrap = el('div', 'pro-blur');
+    var inner = el('div', 'pro-blur-in');
+    inner.setAttribute('aria-hidden', 'true');
+    parent.insertBefore(wrap, nodes[0]);
+    nodes.forEach(function (n) {
+      var c = n.cloneNode(true);
+      scrambleTree(c);
+      inner.appendChild(c);
+      parent.removeChild(n);
+    });
+    wrap.appendChild(inner);
+    var b = el('button', 'pro-badge', label || 'Unlock with Pro');
+    b.addEventListener('click', proUpsell);
+    wrap.appendChild(b);
+    return wrap;
+  }
+  /* Everything in a section after its heading and the first keep items. */
+  function blurSection(sec, keep) {
+    var kids = Array.prototype.slice.call(sec.childNodes);
+    var start = kids.length && kids[0].classList && kids[0].classList.contains('sech') ? 1 : 0;
+    return blurNodes(kids.slice(start + (keep || 0)));
+  }
+  /* A list of headings and values: the headings stay, the values go. */
+  function blurValues(dl) {
+    Array.prototype.forEach.call(dl.querySelectorAll('dd'), function (dd) {
+      var c = dd.cloneNode(true);
+      scrambleTree(c);
+      dd.innerHTML = '';
+      var s = el('div', 'pro-blur-line');
+      s.setAttribute('aria-hidden', 'true');
+      while (c.firstChild) s.appendChild(c.firstChild);
+      dd.appendChild(s);
+    });
+  }
+  function proButton(label) {
+    var b = el('button', 'btn primary small', label || 'See what Pro adds');
+    b.addEventListener('click', proUpsell);
+    return b;
+  }
+
+  var lastPlanArgs = null;
+  function proUpsell() {
+    openPanel('OmniGuide Pro', function () {
+      var root = frag();
+      root.appendChild(el('div', 'lede', 'The full OmniGuide Plan is part of Pro.'));
+      var ul = el('ul', 'drivers pos');
+      ['The whole recommendation for the spot, the day and the hour, with the ground read at the pin',
+       'Setup: where to sit, spread, calling, concealment or rig',
+       'Why the number is what it is, and what could make the plan fail',
+       'The best window of the day and all seven days of the outlook',
+       'Satellite imagery and the Duck water map',
+       'Every state and every species']
+        .forEach(function (x) { ul.appendChild(el('li', null, x)); });
+      root.appendChild(ul);
+      var b = el('button', 'btn primary', 'Simulate Pro in this demo');
+      b.addEventListener('click', function () {
+        App.state.ent.pro = true;
+        save('og.ent', App.state.ent);
+        radarNS.clearScores();
+        App.dirty = true;
+        var a = lastPlanArgs;
+        if (a) openPanel('OmniGuide Plan', function () { return buildPlan(a.lon, a.lat, a.name); });
+        else closePanel();
+      });
+      root.appendChild(b);
+      root.appendChild(el('p', 'note', 'No payment flow is wired up in this build.'));
+      return root;
+    });
+  }
+
   function buildPlan(lon, lat, spotName) {
     var st = App.state;
 
     if (!App.unlockedAt(lon, lat, st.species)) return buildLocked(lon, lat);
+    lastPlanArgs = { lon: lon, lat: lat, name: spotName };
+    var preview = !App.entitlement().pro;
 
     /* Scored at the exact time on the slider, not at midnight of the day, so
        this number matches the hexagon the user tapped. */
@@ -673,6 +791,13 @@
     });
     root.appendChild(mr);
 
+    if (preview) {
+      var pb = el('div', 'pro-banner');
+      pb.appendChild(el('div', 'pro-banner-t', 'Free preview. The full plan is part of Pro.'));
+      pb.appendChild(proButton());
+      root.appendChild(pb);
+    }
+
     /* Window */
     var winSec = section('Best window');
     if (plan.legalWindow) {
@@ -711,6 +836,11 @@
     winSec.appendChild(hourlyChart(plan));
     winSec.appendChild(el('div', 'chartkey',
       'Shaded band = legal hours. Brighter band = predicted peak activity inside them.'));
+    if (preview) {
+      blurNodes(Array.prototype.filter.call(winSec.childNodes, function (n) {
+        return !(n.classList && (n.classList.contains('sech') || n.classList.contains('sunline')));
+      }));
+    }
     root.appendChild(winSec);
 
     /* Recommendation */
@@ -722,6 +852,15 @@
     var tSlot = el('div', 'terrain-slot');
     tSlot.appendChild(el('p', 'note', 'Reading the ground at these coordinates…'));
     recSec.appendChild(tSlot);
+    if (preview) {
+      /* Paragraphs until two sentences have been shown. */
+      var shown = 0, sentences = 0, paras = plan.body.recommendation;
+      while (shown < paras.length && sentences < 2) {
+        sentences += (paras[shown].match(/[.!?](\s|$)/g) || [1]).length;
+        shown++;
+      }
+      blurSection(recSec, shown);
+    }
     root.appendChild(recSec);
 
     if (global.OG.terrain) {
@@ -778,6 +917,7 @@
           fr.appendChild(c);
         });
       hsec.appendChild(fr);
+      if (preview) blurSection(hsec);
       root.appendChild(hsec);
 
       /* Subsurface patterns for this water. Established flies, seasonally
@@ -801,6 +941,7 @@
             'These are what reliably works here, not a report of what came off yesterday.'
           : 'No water-specific list for this reach, so these are the defaults for a ' +
             (sc.hab.waterCls || 'freestone') + '. Check with a local shop.'));
+        if (preview) blurSection(subSec);
         root.appendChild(subSec);
       }
 
@@ -829,7 +970,9 @@
 
     /* Setup */
     var setSec = section(plan.species.pursuit === 'fish' ? 'Rig and approach' : 'Setup recommendation');
-    setSec.appendChild(kvList(plan.body.setup));
+    var setList = kvList(plan.body.setup);
+    setSec.appendChild(setList);
+    if (preview) { blurValues(setList); setSec.appendChild(proButton('Unlock the setup with Pro')); }
     root.appendChild(setSec);
 
     /* Why */
@@ -844,16 +987,23 @@
       plan.negatives.forEach(function (p) { ul2.appendChild(el('li', null, p.t)); });
       whySec.appendChild(ul2);
     }
+    if (preview) blurSection(whySec);
     root.appendChild(whySec);
 
     /* Seven day */
     var wkSec = section('Next seven days here');
     var series = guide.outlook(lon, lat, st.species);
-    var best = weekChart(series, wkSec);
-    wkSec.appendChild(el('p', 'note',
-      shortDay(best, series[best].date) + ' currently provides the strongest ' +
-      plan.species.name.toLowerCase() + ' opportunity over the next seven days at this location (' +
-      series[best].opp + '/100). Each bar is that day at its best between dawn and dusk.'));
+    var best = weekChart(series, wkSec, preview ? 2 : 7);
+    if (preview) {
+      wkSec.appendChild(el('p', 'note', 'The next two days are free. The rest of the week, and which day is ' +
+        'the best of it, are part of Pro.'));
+      wkSec.appendChild(proButton('See the whole week with Pro'));
+    } else {
+      wkSec.appendChild(el('p', 'note',
+        shortDay(best, series[best].date) + ' currently provides the strongest ' +
+        plan.species.name.toLowerCase() + ' opportunity over the next seven days at this location (' +
+        series[best].opp + '/100). Each bar is that day at its best between dawn and dusk.'));
+    }
     root.appendChild(wkSec);
 
     /* Legal gate detail */
@@ -880,6 +1030,7 @@
     var fl = el('ul', 'drivers warn');
     plan.failures.forEach(function (f) { fl.appendChild(el('li', null, f)); });
     fSec.appendChild(fl);
+    if (preview) blurSection(fSec);
     root.appendChild(fSec);
 
     /* How the number was made */
@@ -1146,6 +1297,242 @@
     wrap.appendChild(el('p', 'note', 'Waypoints exported from onX, Garmin, Google Earth or HuntStand ' +
       'import directly. Nothing leaves your browser.'));
     return wrap;
+  }
+
+  /* ---------- League tables ----------
+
+     How the country is shaping up for the species on the map: a line on
+     today against tomorrow, the best places, your own spots in order,
+     where it gets better overnight, and the best states. Read at the hour
+     on the timeline, today and tomorrow, from a half-degree lattice over
+     the lower 48 - the same scoring as the map and the plan, so the three
+     cannot disagree. Worked out in slices so the map keeps moving while it
+     runs, and only while the dock is open. */
+  var LG_STEP = 0.5, LG_SLICE = 250;
+  var lg = { key: null, rows: null, job: null, day: 1 };
+
+  function leagueKey() {
+    var st = App.state;
+    return st.species + ':' + (st.t - Math.floor(st.t)).toFixed(3) + ':' + (App.entitlement().pro ? 1 : 0) +
+      ':' + st.spots.length;
+  }
+
+  function computeLeague(done) {
+    var st = App.state, sp = st.species, frac = st.t - Math.floor(st.t);
+    var t0 = frac, t1 = 1 + frac, d0 = env.doyFor(t0), d1 = env.doyFor(t1);
+    var pts = [];
+    for (var lat = 25.25; lat < 49.5; lat += LG_STEP) {
+      for (var lon = -124.75; lon < -66.9; lon += LG_STEP) {
+        var si = geo.stateIndexAt(lon, lat);
+        if (si >= 0) pts.push([lon, lat, si]);
+      }
+    }
+    var rows = [], i = 0, key = leagueKey();
+    if (lg.job) clearTimeout(lg.job);
+    (function slice() {
+      var end = Math.min(pts.length, i + LG_SLICE);
+      for (; i < end; i++) {
+        var p = pts[i];
+        var a = models.scoreAt(p[0], p[1], t0, d0, sp);
+        if (!a.inRange) continue;
+        var b = models.scoreAt(p[0], p[1], t1, d1, sp);
+        rows.push({ lon: p[0], lat: p[1], si: p[2], s: [a.opportunity, b.inRange ? b.opportunity : null] });
+      }
+      if (i < pts.length) { lg.job = setTimeout(slice, 0); return; }
+      lg.job = null;
+      if (key !== leagueKey()) return;      // something changed while it ran
+      lg.rows = rows;
+      lg.key = key;
+      done();
+    })();
+  }
+
+  /* Best first, at least a degree and a half apart, so the top of the
+     table is several places and not one place eight times. */
+  function spread(rows, day, n, score) {
+    var sorted = rows.filter(function (r) { return score(r) != null; })
+      .sort(function (a, b) { return score(b) - score(a); });
+    var out = [];
+    for (var i = 0; i < sorted.length && out.length < n; i++) {
+      var r = sorted[i], near = false;
+      for (var j = 0; j < out.length; j++) {
+        var dx = (r.lon - out[j].lon) * Math.cos(r.lat * Math.PI / 180), dy = r.lat - out[j].lat;
+        if (dx * dx + dy * dy < 2.25) { near = true; break; }
+      }
+      if (!near) out.push(r);
+    }
+    return out;
+  }
+
+  /* The lon/lat box round a state, worked out once from its outline. */
+  function stateBox(s) {
+    if (s._box) return s._box;
+    var b = [180, 90, -180, -90];
+    (s.rings || []).forEach(function (r) {
+      r.forEach(function (p) {
+        if (p[0] < b[0]) b[0] = p[0]; if (p[1] < b[1]) b[1] = p[1];
+        if (p[0] > b[2]) b[2] = p[0]; if (p[1] > b[3]) b[3] = p[1];
+      });
+    });
+    return (s._box = b[0] < b[2] ? b : null);
+  }
+
+  /* By county where there is one. The plan's title is often a region -
+     the Prairie Pothole Region - which put the same name on several rows. */
+  function placeName(lon, lat) {
+    var p = guide.placeLabel(lon, lat), si = geo.stateIndexAt(lon, lat);
+    return { name: p.county ? p.county.name + ' County' : p.title, where: si >= 0 ? geo.states[si].abbr : '' };
+  }
+
+  function lgRow(rank, name, where, v, onClick, locked) {
+    var r = el('button', 'lg-row' + (locked ? ' lg-locked' : ''));
+    r.appendChild(el('span', 'lg-rank', rank));
+    var nm = el('span', 'lg-name');
+    nm.appendChild(el('span', 'lg-place', locked ? scrambleText(name) : name));
+    if (where) nm.appendChild(el('span', 'lg-where', where));
+    r.appendChild(nm);
+    var sv = el('span', 'lg-score', v == null ? '--' : locked ? '00' : String(v));
+    if (v != null && !locked) sv.style.color = radarNS.rampCSS(v / 100, 1);
+    r.appendChild(sv);
+    r.addEventListener('click', locked ? proUpsell : onClick);
+    return r;
+  }
+
+  function renderLeague() {
+    var box = $('#league');
+    if (!box) return;
+    var st = App.state, spName = App.speciesName(st.species), pro = App.entitlement().pro;
+    var hour = env.hhmm(Math.round((st.t - Math.floor(st.t)) * 1440));
+    box.innerHTML = '';
+    var head = el('div', 'lg-head');
+    head.appendChild(el('div', 'lg-h', 'League tables'));
+    head.appendChild(el('div', 'lg-s', spName + ' · ' + hour + ' local'));
+    box.appendChild(head);
+
+    if (!lg.rows || lg.key !== leagueKey()) {
+      box.appendChild(el('p', 'lg-note', 'Ranking the country…'));
+      computeLeague(renderLeague);
+      return;
+    }
+    var rows = lg.rows, day = lg.day;
+    if (!rows.length) {
+      box.appendChild(el('p', 'lg-note', 'No ' + spName.toLowerCase() + ' range on the map.'));
+      return;
+    }
+
+    /* Today against tomorrow, in a sentence. */
+    var good = [0, 0], sum = [0, 0], n = [0, 0];
+    rows.forEach(function (r) {
+      for (var d = 0; d < 2; d++) {
+        if (r.s[d] == null) continue;
+        n[d]++; sum[d] += r.s[d];
+        if (r.s[d] >= 70) good[d]++;
+      }
+    });
+    var pct = [n[0] ? Math.round(100 * good[0] / n[0]) : 0, n[1] ? Math.round(100 * good[1] / n[1]) : 0];
+    var mean = [n[0] ? sum[0] / n[0] : 0, n[1] ? sum[1] / n[1] : 0];
+    var diff = mean[1] - mean[0];
+    var sumTxt = (Math.abs(diff) < 2 ? 'Tomorrow looks much like today' :
+      diff > 0 ? 'Tomorrow looks better than today' : 'Tomorrow looks worse than today') +
+      ' for ' + spName.toLowerCase() + ' at ' + hour + ': ' + pct[1] + '% of their range rates Good or better ' +
+      'tomorrow, against ' + pct[0] + '% today.';
+    box.appendChild(el('p', 'lg-sum', sumTxt));
+
+    /* Today / tomorrow */
+    var tabs = el('div', 'lg-tabs');
+    ['Today', 'Tomorrow'].forEach(function (lab, d) {
+      var b = el('button', 'lg-tab' + (d === day ? ' on' : ''), lab);
+      b.addEventListener('click', function () { lg.day = d; renderLeague(); });
+      tabs.appendChild(b);
+    });
+    box.appendChild(tabs);
+    var at = function (r) { return r.s[day]; };
+
+    /* Best places. Two free; the rest of the table is Pro. */
+    box.appendChild(el('div', 'lg-sec', 'Best in the country'));
+    spread(rows, day, 8, at).forEach(function (r, i) {
+      var p = placeName(r.lon, r.lat);
+      box.appendChild(lgRow(String(i + 1), p.name, p.where, r.s[day],
+        function () { goTo(r.lon, r.lat, 0.6, true); }, !pro && i >= 2));
+    });
+
+    /* Your spots, best first. */
+    box.appendChild(el('div', 'lg-sec', 'Your spots'));
+    if (!st.spots.length) {
+      box.appendChild(el('p', 'lg-note', 'No saved spots yet. Tap the map and save one from the plan.'));
+    } else {
+      var t = day + (st.t - Math.floor(st.t));
+      st.spots.map(function (s) {
+        var open = App.unlockedAt(s.lon, s.lat, st.species);
+        var v = open ? App.spotScore(s, t).opp : null;
+        return { s: s, v: v, open: open };
+      }).sort(function (a, b) { return (b.v == null ? -1 : b.v) - (a.v == null ? -1 : a.v); })
+        .forEach(function (x, i) {
+          var r = lgRow(String(i + 1), x.s.name, x.open ? '' : 'Pro', x.v,
+            function () { goTo(x.s.lon, x.s.lat, 0.5, true); }, false);
+          box.appendChild(r);
+        });
+    }
+
+    /* Where it gets better overnight. */
+    box.appendChild(el('div', 'lg-sec', 'Moving up tomorrow'));
+    var gain = function (r) { return r.s[1] != null && r.s[1] >= 50 ? r.s[1] - r.s[0] : null; };
+    var up = spread(rows, 1, 3, gain).filter(function (r) { return gain(r) > 0; });
+    if (!up.length) box.appendChild(el('p', 'lg-note', 'Nowhere gets much better overnight.'));
+    up.forEach(function (r, i) {
+      var p = placeName(r.lon, r.lat);
+      var row = lgRow('+' + gain(r), p.name, p.where, r.s[1],
+        function () { goTo(r.lon, r.lat, 0.6, true); }, !pro);
+      box.appendChild(row);
+    });
+
+    /* Best states, by the average of their range. */
+    box.appendChild(el('div', 'lg-sec', 'Best states'));
+    var byState = {};
+    rows.forEach(function (r) {
+      if (r.s[day] == null) return;
+      var b = byState[r.si] || (byState[r.si] = { n: 0, sum: 0 });
+      b.n++; b.sum += r.s[day];
+    });
+    Object.keys(byState).filter(function (k) { return byState[k].n >= 4; })
+      .map(function (k) { return { si: +k, v: Math.round(byState[k].sum / byState[k].n) }; })
+      .sort(function (a, b) { return b.v - a.v; }).slice(0, 5)
+      .forEach(function (x, i) {
+        var s = geo.states[x.si];
+        box.appendChild(lgRow(String(i + 1), s.name, 'average', x.v, function () {
+          var b = stateBox(s);
+          if (b) { App.radar.zoomToBounds(b[0], b[1], b[2], b[3], 0.06); App.dirty = true; scheduleBands(); }
+        }, false));
+      });
+
+    box.appendChild(el('p', 'lg-note', 'Scored at ' + hour + ' local, the hour on the timeline. Change the hour ' +
+      'there and the tables follow.' + (pro ? '' : ' Two places are free; the full tables are part of Pro.')));
+  }
+
+  function initLeague() {
+    var dock = $('#leaguedock'), tab = $('#leaguetab');
+    if (!dock || !tab) return;
+    var stage = $('#stage');
+    var want = load('og.league', null);
+    /* Open on a wide screen, closed on a phone whatever was chosen on a
+       desktop - there it covers most of the map. */
+    var open = window.innerWidth < 760 ? false : want == null ? window.innerWidth >= 1200 : !!want;
+    function set(o) {
+      dock.classList.toggle('open', o);
+      stage.classList.toggle('league-open', o);
+      tab.setAttribute('aria-expanded', o ? 'true' : 'false');
+      if (o) renderLeague();
+    }
+    tab.addEventListener('click', function () {
+      var o = !dock.classList.contains('open');
+      save('og.league', o);
+      set(o);
+    });
+    set(open);
+    /* Follow the species, the hour and the spots while it is open. */
+    setInterval(function () {
+      if (dock.classList.contains('open') && lg.key !== leagueKey() && !lg.job) renderLeague();
+    }, 700);
   }
 
   function renderSpotsPanel() {
@@ -1966,6 +2353,10 @@
       p.appendChild(reset);
       root.appendChild(p);
 
+      var srcs = el('button', 'btn', 'Data sources and credits');
+      srcs.addEventListener('click', renderSourcesPanel);
+      root.appendChild(srcs);
+
       var about = section('What is real in this build');
 
       about.appendChild(el('p', null, 'Measured, from live sources: the forecast, water, snow, terrain and ' +
@@ -2679,14 +3070,6 @@
     });
     timeLabel = $('#timelabel');
 
-    /* Legal overlay toggle */
-    var lo = $('#legaltoggle');
-    lo.addEventListener('change', function () {
-      App.state.legalOverlay = lo.checked;
-      App.dirty = true;
-      buildLegend();
-    });
-
     /* Panels */
     $("#btn-plan").addEventListener("click", renderPlannerPanel);
     $('#btn-spots').addEventListener('click', renderSpotsPanel);
@@ -2698,16 +3081,17 @@
 
     /* GPS. Needs a secure origin, which GitHub Pages provides and the
        artifact sandbox does not. */
-    var gpsBtn = $('#btn-gps');
+    var gpsBtn = $('#btn-gps'), markBtn = $('#btn-markhere');
     var watchId = null;
     gpsBtn.addEventListener('click', function () {
-      if (!navigator.geolocation) { gpsBtn.textContent = 'No GPS'; return; }
+      if (!navigator.geolocation) { toast('This browser cannot share your location.'); return; }
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
         App.state.gps = null;
         gpsBtn.classList.remove('on');
         gpsBtn.textContent = 'Locate';
+        markBtn.hidden = true;
         App.dirty = true;
         return;
       }
@@ -2719,6 +3103,7 @@
         };
         gpsBtn.classList.add('on');
         gpsBtn.textContent = 'You';
+        markBtn.hidden = false;
         if (!App._gpsCentred) {
           App._gpsCentred = true;
           radar.zoomToBounds(App.state.gps.lon - 0.22, App.state.gps.lat - 0.16,
@@ -2727,14 +3112,19 @@
         }
         App.dirty = true;
       }, function (err) {
-        gpsBtn.textContent = err.code === 1 ? 'Denied' : 'No fix';
+        /* The button used to keep saying "Denied" or "No fix" for good. */
+        gpsBtn.textContent = 'Locate';
         gpsBtn.classList.remove('on');
+        markBtn.hidden = true;
         watchId = null;
+        toast(err.code === 1 ? 'Location is blocked for this site. Allow it in your browser settings to use Locate.'
+                             : 'Could not get a location fix. Try again in the open.');
       }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
     });
 
-    /* Mark the current GPS fix as a saved spot - the point of having GPS. */
-    $('#btn-markhere').addEventListener('click', function () {
+    /* Mark the current GPS fix as a saved spot - the point of having GPS.
+       Shown only once there is a fix to mark. */
+    markBtn.addEventListener('click', function () {
       var g = App.state.gps;
       if (!g) { gpsBtn.click(); return; }
       addSpotAt(g.lon, g.lat);
@@ -2838,18 +3228,16 @@
     });
     canvas.addEventListener('pointerleave', function () { hov.hidden = true; hoverPt = null; });
 
-    /* Basemap. Satellite is a Pro layer: imagery is what lets someone pick a
-       slough or a field edge out by eye, so it is worth paying for. */
-    var bmBtn = $('#btn-basemap');
+    /* Basemap. Satellite and Duck water are Pro: imagery is what lets
+       someone pick a slough or a field edge out by eye, and Duck water is
+       the whole country's ponds, marshes and rivers drawn for finding
+       somewhere to hunt. The choice lives in the layer dock; the button
+       that cycled through them in the top bar is gone. */
     var BM_CYCLE = ['relief', 'topo', 'satellite', 'waterways', 'none'];
-    function bmLabel() {
-      var k = App.state.basemap;
-      return k === 'relief' ? 'Relief' : k === 'satellite' ? 'Satellite' : 'No base';
-    }
+    var BM_PRO = { satellite: 1, waterways: 1 };
+    if (BM_PRO[App.state.basemap] && !App.entitlement().pro) App.state.basemap = 'relief';
     var syncBasemap = function () {
       if (App.autoOpacity) App.autoOpacity();
-      bmBtn.textContent = bmLabel();
-      bmBtn.classList.toggle('pro-locked', App.state.basemap === 'satellite' && !App.entitlement().pro);
     };
     /* Overlay strength. The right blend depends on what is underneath, so it
        is a control rather than a constant. */
@@ -2860,7 +3248,7 @@
     opIn.type = 'range';
     opIn.id = 'fieldop';
     opIn.min = '10'; opIn.max = '100'; opIn.step = '5';
-    opIn.value = String(Math.round((load('og.fieldop', 0) || 0) * 100) || 62);
+    opIn.value = String(Math.round((load('og.fieldop', 0) || 0) * 100) || 50);
     App.state.fieldOpacity = parseInt(opIn.value, 10) / 100;
     var opVal = el('span', 'op-val', opIn.value + '%');
     opIn.addEventListener('input', function () {
@@ -2875,8 +3263,9 @@
        imagery needs to show through far more than a relief shade does. */
     App.autoOpacity = function () {
       if (App._opTouched) return;
-      var d = App.state.basemap === 'satellite' ? 38 : App.state.basemap === 'none' ? 85
-        : App.state.basemap === 'waterways' ? 58 : 62;
+      /* Half by default; imagery wants more of itself to show through,
+         and with no base map at all the colour is the only thing there. */
+      var d = App.state.basemap === 'satellite' ? 40 : App.state.basemap === 'none' ? 75 : 50;
       opIn.value = String(d);
       var snapped = parseInt(opIn.value, 10);   // the step may round it
       opVal.textContent = snapped + "%";
@@ -2894,7 +3283,7 @@
     BM_CYCLE.forEach(function (k) {
       var b = el('button', 'layerbtn', k === 'relief' ? 'Relief' : k === 'topo' ? 'Topo'
         : k === 'satellite' ? 'Satellite' : k === 'waterways' ? 'Duck water' : 'None');
-      if (k === 'satellite') b.appendChild(el('span', 'pro-tag', 'Pro'));
+      if (BM_PRO[k]) b.appendChild(el('span', 'pro-tag', 'Pro'));
       b.dataset.basemap = k;
       b.addEventListener('click', function () { setBasemap(k); });
       bmBtns[k] = b;
@@ -2902,19 +3291,24 @@
     });
 
     function setBasemap(next) {
-      if (next === 'satellite' && !App.entitlement().pro) {
-        openPanel('Satellite imagery', function () {
+      if (BM_PRO[next] && !App.entitlement().pro) {
+        var sat = next === 'satellite';
+        openPanel(sat ? 'Satellite imagery' : 'Duck water', function () {
           var root = frag();
-          root.appendChild(el('div', 'lede', 'Satellite imagery is part of OmniGuide Pro.'));
-          root.appendChild(el('p', null, 'Aerial imagery is how you pick out the slough, the treeline and ' +
-            'the field edge you are actually going to hunt, rather than guessing from a relief map. ' +
-            'It is the difference between marking a spot and marking the right spot.'));
+          root.appendChild(el('div', 'lede', (sat ? 'Satellite imagery' : 'The Duck water map') + ' is part of OmniGuide Pro.'));
+          root.appendChild(el('p', null, sat
+            ? 'Aerial imagery is how you pick out the slough, the treeline and ' +
+              'the field edge you are actually going to hunt, rather than guessing from a relief map. ' +
+              'It is the difference between marking a spot and marking the right spot.'
+            : 'Every pond, marsh, slough and river in the country drawn on a clean ground, so the water ' +
+              'you could hunt stands out from the land around it.'));
           var b = el('button', 'btn primary', 'Simulate Pro in this demo');
           b.addEventListener('click', function () {
             App.state.ent.pro = true;
             save('og.ent', App.state.ent);
-            App.state.basemap = 'satellite';
-            save('og.basemap', 'satellite');
+            App.state.basemap = next;
+            save('og.basemap', next);
+            App._theme = null;
             radarNS.clearScores();
             App.dirty = true;
             syncBasemap();
@@ -2934,11 +3328,6 @@
       syncBasemap();
     }
 
-    bmBtn.addEventListener('click', function () {
-      var i = BM_CYCLE.indexOf(App.state.basemap);
-      setBasemap(BM_CYCLE[(i + 1) % BM_CYCLE.length]);
-    });
-
     var baseSync = syncBasemap;
     syncBasemap = function () {
       baseSync();
@@ -2956,6 +3345,8 @@
       App._theme = null;
       App.dirty = true;
     });
+
+    initLeague();
 
     /* Search */
     var search = $('#search');

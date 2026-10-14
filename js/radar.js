@@ -88,7 +88,12 @@
     snowpack: {
       name: 'Snow depth', unit: 'in', min: 0, max: 24, digits: 1,
       get: function (w) { return (w.snowDepthFt || 0) * 12; },
-      ramp: makeRamp([[0, '#1B3A4B'], [0.2, '#3E7FA8'], [0.5, '#8FC0D8'], [0.78, '#CFE4EE'], [1, '#FFFFFF']])
+      /* It ran to white, so the deepest snow vanished into a light base
+         map - and the base map is light most of the time. Now blue for a
+         dusting through violet to magenta for deep snow, which stands
+         out on light and dark ground alike. */
+      ramp: makeRamp([[0, '#4E9BD4'], [0.15, '#3F86C8'], [0.35, '#2A5FB0'], [0.55, '#4B3AA6'],
+                      [0.78, '#8B2FA8'], [1, '#C42A7E']])
     }
   };
 
@@ -592,8 +597,11 @@
           col = wxl.ramp((v - lo) / span);
           /* Precipitation and snow read better fading in from nothing than
              as a wall of colour over dry ground. */
+          /* Snow comes in faster than rain: a couple of inches on the ground
+             is worth seeing, and at the rain rate it was a faint tint. Full
+             strength from four inches. */
           a = softAlpha
-            ? Math.round(alpha * Math.min(1, Math.max(0, (v - lo) / span) * 2.4))
+            ? Math.round(alpha * Math.min(1, Math.max(0, (v - lo) / span) * (layer === 'snowpack' ? 6 : 2.4)))
             : alpha;
         } else {
           col = rampRGB(v / 100);

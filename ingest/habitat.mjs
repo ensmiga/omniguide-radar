@@ -93,6 +93,19 @@ const SUIT = {
    False positives are held off by the occurrence gate rather than by
    keeping the suitability artificially low - the Utah west desert has
    woody cover too, and no whitetail recorded in it. */
+/* How far a record reaches, in cells either way, before it is counted
+   against the effort round it. Three for everything else. Turkey records
+   at three lit the hills for thirty kilometres round each valley flock:
+   against the Nevada wildlife agency's own turkey map, which puts them in
+   fourteen valleys and 2.5 percent of the state, the map had 14 percent
+   of Nevada as turkey range and only 11 percent of that inside the
+   valleys, and missed 37 percent of the valleys. At one: 10 percent of
+   the state, 19 percent of it inside the valleys, 23 percent of the
+   valleys missed. What is left over is mostly the USGS map's own reach
+   (the Spring Mountains, which have no turkeys) and valley flocks that
+   roost in ditch-bank cottonwoods too thin for the land cover to see. */
+const RECORD_REACH = { turkey: 1 };
+
 const SATURATE = { whitetail: 7, waterfowl: 4, trout: 30 };
 
 /* MAPPED BUT NOT RECORDED.
@@ -1496,7 +1509,7 @@ const TURKEY_ROOST = 0.03;          // timber share at which the roost term reac
 const TURKEY_WOODS_ONLY = 0.55;
 const TURKEY_BOTH = 0.15;           // share of each at which the mix counts in full
 const TURKEY_BRUSH = 0.10;          // what a cell of nothing but brush is worth as timber, on mapped range
-const TURKEY_BRUSH_SEEN = [0.15, 0.40];   // presence at which brush starts to count, and counts in full
+const TURKEY_BRUSH_SEEN = [0.10, 0.30];   // presence at which brush starts to count, and counts in full
 
 function turkeySuit(lc, presence) {
   const part = (table, k) => {
@@ -1784,7 +1797,7 @@ async function main() {
   troutSure = troutEvidence(troutCount, nasTrout, namedTrout.named, cold, lc.total, lc.counts, ev.reliefFt);
   const report = [];
   for (const sp of SPECIES) {
-    const occS = smooth(occ[sp], 3);
+    const occS = smooth(occ[sp], RECORD_REACH[sp] || 3);
     const share = new Float32Array(NCELL);
     for (let k = 0; k < NCELL; k++) {
       share[k] = effortS[k] > 1e-9 ? occS[k] / effortS[k] : 0;

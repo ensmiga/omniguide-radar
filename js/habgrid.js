@@ -115,18 +115,18 @@
      Dakota. The places each is known for start at 0.29 and 0.44. */
   var RANGE_KNEE = {
     elk: 0.50, moose: 0.50, whitetail: 0.25, muledeer: 0.25, pronghorn: 0.25,
-    turkey: 0.55, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25,
+    turkey: 0.40, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25,
     pheasant: 0.30, bobwhite: 0.30, 'mearns-quail': 0.45
   };
   /* Turkey records are a second opinion beside the USGS map, and are
-     believed only where they are strong. The places the map lacks and
-     turkeys certainly are read 0.52 to 0.76 (the Idaho panhandle, the
-     Payette, Klickitat County, the Clearwater); the places they are
-     not read 0.35 and under (the Everglades 0.35, Glacier's high
-     country 0.30, the San Joaquin valley floor 0.26). One does not fit:
-     White Sands reads 0.58, lit from the mountains east of it, and is
-     kept out by having no timber. */
-  var RANGE_TOE = { pheasant: 0.20, bobwhite: 0.20, turkey: 0.35 };
+     believed only where they are strong. Measured with turkey records
+     reaching one cell rather than three (see RECORD_REACH in
+     ingest/habitat.mjs): the places the map lacks and turkeys certainly
+     are read 0.40 to 0.73 (the Clearwater, Lovelock, Council, Klickitat
+     County); the places they are not, 0.30 and under (the Everglades
+     0.30, White Sands 0.22, the San Joaquin valley floor 0.09, Glacier's
+     high country 0.05). */
+  var RANGE_TOE = { pheasant: 0.20, bobwhite: 0.20, turkey: 0.25 };
   var RANGE_REGION = {
     elk:       [0.30, 0.50],   // high, to keep the eastern herds as islands
     moose:     [0.45, 0.70],   // sagebrush is not willow; at 0.18 this had moose over 83% of Wyoming
