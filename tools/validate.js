@@ -584,6 +584,286 @@
     }
   };
 
+  /* The upland birds one at a time.
+
+     Each bird against the places it is known for, and against places
+     that have other upland birds and not this one - which is the test
+     the all-birds list above cannot make. Places are shared between the
+     lists, so they are named once.
+
+     Two points were wrong and were changed, not tuned round. The
+     foothills north-east of Phoenix were down as having no Mearns
+     quail, and the bird is recorded there, in the oak country below the
+     Mogollon Rim. And the Sierra foothill point for valley quail was the
+     one picked for mountain quail, up in the pines; valley quail now
+     have their own, lower down in the oaks. */
+  var PLACES = {
+    'Mitchell SD': [-98.00, 43.70], 'Winner SD': [-99.85, 43.38], 'Aberdeen SD': [-98.50, 45.50],
+    'Mott ND': [-102.30, 46.37], 'Colby KS': [-101.05, 39.40], 'Holyoke CO': [-102.30, 40.50],
+    'McCook NE': [-100.60, 40.20], 'Spencer IA': [-95.15, 43.15], 'Marshall MN': [-95.80, 44.45],
+    'Plentywood MT': [-104.55, 48.78], 'Palouse WA': [-118.00, 46.90],
+    'Sacramento Valley CA': [-121.90, 39.30], 'TX Panhandle': [-102.00, 34.80],
+    'Michigan Thumb': [-83.20, 43.60], 'Tulelake CA': [-121.50, 41.90],
+    'E central Illinois': [-88.20, 40.40], 'Golden Triangle MT': [-111.00, 48.00],
+    'Malta MT': [-107.87, 48.36], 'SE Nebraska': [-96.50, 40.30], 'Yuma Co CO': [-102.40, 40.00],
+    'N Maine': [-69.30, 46.30], 'Adirondacks NY': [-74.30, 44.10], 'S Georgia': [-83.40, 31.40],
+    'Babcock FL': [-81.70, 26.85], 'SW Louisiana': [-92.70, 30.00], 'Mississippi': [-90.40, 31.50],
+    'AL Black Belt': [-87.50, 32.30], 'Ozarks AR': [-93.00, 35.80], 'Great Smokies': [-83.50, 35.60],
+    'WV highlands': [-79.80, 38.60], 'Oracle AZ': [-110.80, 32.60],
+    'Phoenix foothills AZ': [-111.50, 33.80], 'Mojave Preserve CA': [-115.60, 35.20],
+    'Brooks Co TX': [-98.20, 27.00], 'Park Falls WI': [-90.45, 45.93],
+    'Lake County MN': [-91.40, 47.80], 'Sawatch alpine CO': [-106.35, 38.80],
+    'Olympic Peninsula': [-123.50, 47.50], 'Death Valley floor': [-116.83, 36.25],
+    'Red Hills GA': [-84.10, 30.72], 'Albany GA': [-84.35, 31.40], 'Albany TX': [-99.30, 32.70],
+    'W Oklahoma': [-99.40, 35.60], 'SE Kansas': [-95.30, 37.50], 'N Missouri': [-93.00, 40.20],
+    'Ames TN': [-89.20, 35.10], 'SC coastal plain': [-79.50, 34.20], 'S Iowa': [-93.50, 40.80],
+    'W Kentucky': [-88.00, 37.00], 'Rolling Plains TX': [-100.20, 34.50],
+    'Southside VA': [-78.00, 36.90], 'S Illinois': [-88.90, 38.00], 'Osage Co OK': [-96.40, 36.80],
+    'Flint Hills KS': [-96.60, 38.40], 'Grand Rapids MN': [-93.53, 47.24],
+    'Rawlins WY': [-107.20, 41.80], 'Elko NV': [-115.80, 41.50], 'Hart Mtn OR': [-119.60, 42.50],
+    'Coast Range CA': [-121.00, 36.20], 'Colorado high country': [-106.50, 39.50],
+    'Wyoming Range': [-110.60, 42.60], 'Cascades WA': [-121.50, 47.30], 'N Idaho': [-116.50, 48.50],
+    'UP Michigan': [-87.50, 46.40], 'Gaylord MI': [-84.67, 45.03], 'N NH': [-71.30, 44.90],
+    'PA north central': [-77.80, 41.50], 'Vermont NEK': [-72.00, 44.70],
+    'Idaho panhandle': [-116.30, 47.50], 'Seeley MT': [-113.50, 47.20],
+    'NE Washington': [-117.80, 48.60], 'SE New Mexico': [-104.00, 32.50],
+    'Lewistown MT': [-109.40, 47.06], 'Williston ND': [-103.60, 48.15],
+    'Fort Pierre grassland SD': [-100.40, 44.20], 'Valentine NE': [-100.55, 42.87],
+    'Roseau MN': [-95.80, 48.70], 'Thedford Sandhills NE': [-100.60, 41.98],
+    'Jordan MT': [-106.90, 47.30], 'Craig CO': [-107.55, 40.50], 'Burwell NE': [-99.10, 41.80],
+    'Glacial Ridge MN': [-96.30, 47.70], 'Permian W Texas': [-102.80, 31.00],
+    'UT West Desert ranges': [-112.90, 40.30], 'Camas Prairie ID': [-116.30, 46.10],
+    'Baker Co OR': [-117.80, 44.80], 'Hells Canyon ID': [-116.80, 45.30],
+    'Santa Rosa NV': [-117.60, 41.50], 'John Day OR': [-119.60, 44.80],
+    'Snake breaks WA': [-117.20, 46.50], 'NV chukar hills': [-117.20, 40.60],
+    'Owyhee canyon OR': [-117.25, 43.60], 'Steens OR': [-118.60, 42.60],
+    'Salmon River ID': [-116.30, 45.75], 'Yakima canyon WA': [-120.45, 46.85],
+    'Red Mountain CA': [-117.60, 35.35], 'Book Cliffs': [-109.20, 39.40],
+    'Cody WY': [-109.20, 44.40], 'Willamette Valley OR': [-123.10, 44.60],
+    'Farson WY': [-109.40, 42.10], 'Pinedale WY': [-109.90, 42.70],
+    'S Phillips Co MT': [-108.00, 47.90], 'Owyhee ID': [-116.30, 42.50],
+    'North Park CO': [-106.30, 40.70], 'Rich Co UT': [-111.20, 41.60],
+    'Yakima valley WA': [-120.70, 46.50], 'Sierra foothills CA': [-120.30, 38.30], 'Sierra low foothills CA': [-120.70, 38.10],
+    'Boise foothills ID': [-116.10, 43.70], 'Okanogan WA': [-119.60, 48.40],
+    'Rogue Valley OR': [-122.90, 42.40], 'Carson Valley NV': [-119.80, 39.00],
+    'Mormon Mesa NV': [-114.40, 36.60], 'St George UT': [-113.60, 37.10],
+    'Avra Valley AZ': [-111.30, 32.30], 'Safford AZ': [-109.80, 32.90],
+    'Lordsburg NM': [-108.70, 32.30], 'Socorro NM': [-106.90, 34.00], 'Kingman AZ': [-114.00, 35.20],
+    'Comanche grassland CO': [-103.00, 37.30], 'Marfa TX': [-104.00, 30.30],
+    'Sulphur Springs AZ': [-109.80, 31.90], 'Clayton NM': [-103.30, 36.40],
+    'Oklahoma Panhandle': [-102.00, 36.80], 'Laredo brush TX': [-99.60, 28.00],
+    'Sonoita AZ': [-110.60, 31.60], 'Huachucas AZ': [-110.30, 31.45],
+    'Santa Ritas AZ': [-110.85, 31.75], 'Chiricahuas AZ': [-109.30, 31.90],
+    'Peloncillos NM': [-108.90, 31.60], 'Davis Mts TX': [-104.00, 30.65],
+    'Gila NM': [-108.30, 33.20], 'Mendocino NF CA': [-122.90, 39.50],
+    'Klamath Mts CA': [-123.30, 41.50], 'SW Oregon': [-123.40, 42.60],
+    'Oregon Coast Range': [-123.60, 44.30], 'San Bernardino Mts CA': [-117.00, 34.20],
+    'S Sierra CA': [-118.70, 36.00], 'San Joaquin floor CA': [-120.00, 36.50],
+    'Columbia Basin WA': [-119.30, 46.98], 'Bitterroot MT': [-114.30, 46.30],
+    'Central Idaho': [-115.00, 44.50], 'Uintas UT': [-111.00, 40.70],
+    'N New Mexico mts': [-105.50, 36.30], 'Oregon Cascades': [-122.00, 44.00],
+    'Sierra Nevada CA': [-120.00, 38.60], 'Blue Mts OR': [-118.20, 45.30],
+    'White Mts AZ': [-109.50, 33.90], 'Bighorns WY': [-107.30, 44.50],
+    'Snake River Plain ID': [-114.40, 43.00], 'E UP Michigan': [-86.00, 46.50],
+    'NW Montana': [-114.50, 48.50], 'N Cascades WA': [-120.50, 48.60],
+    'S Wisconsin': [-89.50, 43.20]
+  };
+  var BIRDS = {
+    'pheasant': {
+      yes: [
+        'Mitchell SD', 'Winner SD', 'Aberdeen SD', 'Mott ND', 'Colby KS', 'Holyoke CO', 'McCook NE',
+        'Spencer IA', 'Marshall MN', 'Plentywood MT', 'Palouse WA', 'Sacramento Valley CA',
+        'TX Panhandle', 'Michigan Thumb', 'Tulelake CA', 'E central Illinois', 'Golden Triangle MT',
+        'Malta MT', 'SE Nebraska', 'Yuma Co CO'
+      ],
+      no: [
+        'N Maine', 'Adirondacks NY', 'S Georgia', 'Babcock FL', 'SW Louisiana', 'Mississippi',
+        'AL Black Belt', 'Ozarks AR', 'Great Smokies', 'WV highlands', 'Oracle AZ',
+        'Phoenix foothills AZ', 'Mojave Preserve CA', 'Brooks Co TX', 'Park Falls WI',
+        'Lake County MN', 'Sawatch alpine CO', 'Olympic Peninsula', 'Death Valley floor',
+        'Red Hills GA'
+      ]
+    },
+    'bobwhite': {
+      yes: [
+        'Red Hills GA', 'Albany GA', 'Brooks Co TX', 'Albany TX', 'W Oklahoma', 'SE Kansas',
+        'N Missouri', 'Ames TN', 'AL Black Belt', 'SC coastal plain', 'Babcock FL', 'SE Nebraska',
+        'S Iowa', 'W Kentucky', 'Rolling Plains TX', 'Southside VA', 'S Illinois', 'Osage Co OK',
+        'Flint Hills KS', 'S Georgia'
+      ],
+      no: [
+        'N Maine', 'Adirondacks NY', 'Grand Rapids MN', 'Park Falls WI', 'Malta MT', 'Rawlins WY',
+        'Elko NV', 'Hart Mtn OR', 'Coast Range CA', 'Phoenix foothills AZ', 'Mott ND',
+        'Colorado high country', 'Wyoming Range', 'Death Valley floor', 'Cascades WA', 'N Idaho',
+        'Sacramento Valley CA', 'UP Michigan'
+      ]
+    },
+    'ruffed-grouse': {
+      yes: [
+        'Park Falls WI', 'Grand Rapids MN', 'Gaylord MI', 'N Maine', 'N NH', 'Adirondacks NY',
+        'PA north central', 'WV highlands', 'UP Michigan', 'Vermont NEK', 'Idaho panhandle',
+        'Seeley MT', 'NE Washington', 'Lake County MN'
+      ],
+      no: [
+        'Colby KS', 'McCook NE', 'Brooks Co TX', 'W Oklahoma', 'Babcock FL', 'S Georgia',
+        'SW Louisiana', 'Mississippi', 'Oracle AZ', 'Coast Range CA', 'Death Valley floor',
+        'Mitchell SD', 'E central Illinois', 'TX Panhandle', 'Holyoke CO', 'Sacramento Valley CA',
+        'Mojave Preserve CA', 'SE New Mexico', 'Red Hills GA', 'Albany TX'
+      ]
+    },
+    'sharptail': {
+      yes: [
+        'Malta MT', 'Lewistown MT', 'Williston ND', 'Fort Pierre grassland SD', 'Valentine NE',
+        'Plentywood MT', 'Roseau MN', 'Mott ND', 'Thedford Sandhills NE', 'Jordan MT', 'Craig CO'
+      ],
+      no: [
+        'Flint Hills KS', 'W Oklahoma', 'Brooks Co TX', 'Red Hills GA', 'Oracle AZ',
+        'Coast Range CA', 'N Maine', 'PA north central', 'WV highlands', 'N Missouri', 'Spencer IA',
+        'E central Illinois', 'Sacramento Valley CA', 'Babcock FL', 'SE New Mexico',
+        'Mojave Preserve CA', 'Albany TX', 'SW Louisiana', 'Cascades WA', 'SE Kansas'
+      ]
+    },
+    'prairie-chicken': {
+      yes: [
+        'Flint Hills KS', 'Valentine NE', 'Fort Pierre grassland SD', 'Yuma Co CO', 'Burwell NE',
+        'Osage Co OK', 'Glacial Ridge MN', 'Thedford Sandhills NE'
+      ],
+      no: [
+        'Malta MT', 'Rawlins WY', 'Red Hills GA', 'N Maine', 'Oracle AZ', 'Elko NV',
+        'Coast Range CA', 'Brooks Co TX', 'Permian W Texas', 'Babcock FL', 'PA north central',
+        'WV highlands', 'Gaylord MI', 'Palouse WA', 'Hart Mtn OR', 'UT West Desert ranges',
+        'SW Louisiana', 'Mississippi', 'Lewistown MT', 'Park Falls WI'
+      ]
+    },
+    'hun': {
+      yes: [
+        'Malta MT', 'Lewistown MT', 'Williston ND', 'Plentywood MT', 'Mott ND', 'Palouse WA',
+        'Camas Prairie ID', 'Spencer IA', 'Baker Co OR', 'Golden Triangle MT'
+      ],
+      no: [
+        'W Oklahoma', 'Brooks Co TX', 'Red Hills GA', 'Oracle AZ', 'SE New Mexico', 'Coast Range CA',
+        'N Maine', 'PA north central', 'WV highlands', 'Babcock FL', 'SW Louisiana', 'N Missouri',
+        'Holyoke CO', 'Mojave Preserve CA', 'Sacramento Valley CA', 'Flint Hills KS', 'Albany TX',
+        'Mississippi', 'Great Smokies'
+      ]
+    },
+    'chukar': {
+      yes: [
+        'Hells Canyon ID', 'Santa Rosa NV', 'John Day OR', 'Snake breaks WA',
+        'UT West Desert ranges', 'NV chukar hills', 'Owyhee canyon OR', 'Steens OR',
+        'Salmon River ID', 'Yakima canyon WA', 'Red Mountain CA', 'Book Cliffs', 'Cody WY'
+      ],
+      no: [
+        'Colby KS', 'Mitchell SD', 'McCook NE', 'Marshall MN', 'Red Hills GA', 'N Maine',
+        'PA north central', 'Brooks Co TX', 'W Oklahoma', 'Babcock FL', 'SW Louisiana',
+        'Park Falls WI', 'Cascades WA', 'Olympic Peninsula', 'Sacramento Valley CA',
+        'Willamette Valley OR', 'Phoenix foothills AZ', 'SE New Mexico', 'Adirondacks NY',
+        'E central Illinois'
+      ]
+    },
+    'sage-grouse': {
+      yes: [
+        'Farson WY', 'Rawlins WY', 'Craig CO', 'Elko NV', 'Hart Mtn OR', 'Pinedale WY',
+        'S Phillips Co MT', 'Owyhee ID', 'North Park CO', 'Jordan MT', 'Rich Co UT'
+      ],
+      no: [
+        'Colby KS', 'McCook NE', 'Brooks Co TX', 'W Oklahoma', 'Oracle AZ', 'Phoenix foothills AZ',
+        'SE New Mexico', 'Red Hills GA', 'N Maine', 'PA north central', 'Park Falls WI',
+        'Marshall MN', 'Spencer IA', 'Coast Range CA', 'Cascades WA', 'Mojave Preserve CA',
+        'Sacramento Valley CA', 'Mitchell SD', 'Olympic Peninsula', 'Babcock FL'
+      ]
+    },
+    'valley-quail': {
+      yes: [
+        'Coast Range CA', 'Yakima valley WA', 'Sierra low foothills CA', 'Boise foothills ID',
+        'Okanogan WA', 'Rogue Valley OR', 'John Day OR', 'Santa Rosa NV', 'Carson Valley NV',
+        'Snake breaks WA', 'Sacramento Valley CA'
+      ],
+      no: [
+        'Colby KS', 'Mitchell SD', 'McCook NE', 'Brooks Co TX', 'W Oklahoma', 'Red Hills GA',
+        'N Maine', 'PA north central', 'Marshall MN', 'Park Falls WI', 'Babcock FL', 'SE New Mexico',
+        'Malta MT', 'Rawlins WY', 'Holyoke CO', 'Oracle AZ', 'Albany TX', 'Adirondacks NY'
+      ]
+    },
+    'gambels-quail': {
+      yes: [
+        'Oracle AZ', 'Phoenix foothills AZ', 'Mojave Preserve CA', 'Mormon Mesa NV', 'St George UT',
+        'Avra Valley AZ', 'Safford AZ', 'Lordsburg NM', 'Socorro NM', 'Kingman AZ'
+      ],
+      no: [
+        'Colby KS', 'Mitchell SD', 'Brooks Co TX', 'W Oklahoma', 'Red Hills GA', 'N Maine',
+        'PA north central', 'Marshall MN', 'Babcock FL', 'Coast Range CA', 'Sacramento Valley CA',
+        'Sierra foothills CA', 'John Day OR', 'Yakima valley WA', 'Malta MT', 'Rawlins WY',
+        'Elko NV', 'Hart Mtn OR', 'Albany TX', 'Cascades WA'
+      ]
+    },
+    'scaled-quail': {
+      yes: [
+        'SE New Mexico', 'Permian W Texas', 'Comanche grassland CO', 'Marfa TX',
+        'Sulphur Springs AZ', 'Clayton NM', 'Oklahoma Panhandle', 'Laredo brush TX', 'Lordsburg NM'
+      ],
+      no: [
+        'Flint Hills KS', 'Mitchell SD', 'Valentine NE', 'Red Hills GA', 'N Maine',
+        'PA north central', 'Marshall MN', 'Babcock FL', 'SW Louisiana', 'Coast Range CA',
+        'Sacramento Valley CA', 'John Day OR', 'Yakima valley WA', 'Malta MT', 'Rawlins WY',
+        'St George UT', 'Cascades WA', 'Hart Mtn OR', 'N Missouri', 'Mojave Preserve CA'
+      ]
+    },
+    'mearns-quail': {
+      yes: [
+        'Sonoita AZ', 'Huachucas AZ', 'Santa Ritas AZ', 'Chiricahuas AZ', 'Peloncillos NM',
+        'Davis Mts TX', 'Gila NM'
+      ],
+      no: [
+        'Mojave Preserve CA', 'Colby KS', 'Colorado high country', 'Red Hills GA', 'N Maine',
+        'Coast Range CA', 'Elko NV', 'St George UT', 'Malta MT', 'Mitchell SD', 'Clayton NM',
+        'Brooks Co TX', 'W Oklahoma', 'Permian W Texas', 'Kingman AZ', 'Sacramento Valley CA',
+        'Babcock FL', 'PA north central'
+      ]
+    },
+    'mountain-quail': {
+      yes: [
+        'Sierra foothills CA', 'Mendocino NF CA', 'Klamath Mts CA', 'SW Oregon',
+        'Oregon Coast Range', 'San Bernardino Mts CA', 'S Sierra CA'
+      ],
+      no: [
+        'Colby KS', 'Mitchell SD', 'Red Hills GA', 'N Maine', 'PA north central', 'Oracle AZ',
+        'SE New Mexico', 'Colorado high country', 'Rawlins WY', 'Malta MT', 'UT West Desert ranges',
+        'Sacramento Valley CA', 'San Joaquin floor CA', 'Columbia Basin WA', 'Brooks Co TX',
+        'Babcock FL', 'Marshall MN', 'Phoenix foothills AZ', 'Death Valley floor'
+      ]
+    },
+    'blue-grouse': {
+      yes: [
+        'Colorado high country', 'Wyoming Range', 'Cascades WA', 'Bitterroot MT', 'Central Idaho',
+        'Uintas UT', 'N New Mexico mts', 'Oregon Cascades', 'Olympic Peninsula', 'Sierra Nevada CA',
+        'Blue Mts OR', 'White Mts AZ', 'Bighorns WY'
+      ],
+      no: [
+        'Colby KS', 'Mitchell SD', 'Red Hills GA', 'N Maine', 'PA north central', 'Oracle AZ',
+        'Mojave Preserve CA', 'Sacramento Valley CA', 'Columbia Basin WA', 'Snake River Plain ID',
+        'Malta MT', 'Mott ND', 'Brooks Co TX', 'W Oklahoma', 'Babcock FL', 'Park Falls WI',
+        'Marshall MN', 'Death Valley floor', 'SE New Mexico', 'Willamette Valley OR'
+      ]
+    },
+    'spruce-grouse': {
+      yes: [
+        'N Maine', 'Lake County MN', 'E UP Michigan', 'NW Montana', 'N Idaho', 'NE Washington',
+        'N Cascades WA', 'N NH'
+      ],
+      no: [
+        'PA north central', 'WV highlands', 'Colby KS', 'Mitchell SD', 'Colorado high country',
+        'Uintas UT', 'Elko NV', 'Coast Range CA', 'Sierra Nevada CA', 'Oracle AZ', 'Brooks Co TX',
+        'Red Hills GA', 'S Wisconsin', 'Spencer IA', 'SW Oregon', 'N New Mexico mts', 'Babcock FL',
+        'Michigan Thumb', 'Great Smokies', 'Marshall MN'
+      ]
+    }
+  };
+  Object.keys(BIRDS).forEach(function (b) {
+    var at = function (n) { return [n, PLACES[n][0], PLACES[n][1]]; };
+    T[b] = { yes: BIRDS[b].yes.map(at), no: BIRDS[b].no.map(at) };
+  });
+
   var OG = window.OG;
   var t = 1.3, doy = OG.env.doyFor(t);
   var rows = [], totYes = 0, hitYes = 0, totNo = 0, hitNo = 0;
@@ -595,7 +875,7 @@
       var sc = OG.models.scoreAt(p[1], p[2], t, doy, sp);
       if (sc.inRange) y++;
       else misses.push('MISSING ' + p[0] + ' (hab ' +
-        Math.round(OG.env.habitat(p[1], p[2])[OG.models.byId(sp).habKey] * 100) + ')');
+        Math.round(OG.env.habOf(OG.env.habitat(p[1], p[2]), OG.models.byId(sp).habKey) * 100) + ')');
     });
     set.no.forEach(function (p) {
       var sc = OG.models.scoreAt(p[1], p[2], t, doy, sp);
@@ -614,7 +894,7 @@
 
   var out = ['RANGE VALIDATION', ''];
   rows.forEach(function (r) {
-    out.push(r.species.padEnd(11) + ' present ' + r.present.padEnd(7) + ' absent ' + r.absent);
+    out.push(r.species.padEnd(16) + ' present ' + r.present.padEnd(7) + ' absent ' + r.absent);
     r.misses.forEach(function (m) { out.push('              ' + m); });
   });
   out.push('');

@@ -94,10 +94,28 @@
      For elk both failures were on the map at once, so elk no longer
      come through here at all - see PUBLISHED RANGE below. The numbers
      for elk are kept only as the fallback if that plane fails to load. */
+  /* The upland birds one at a time take the default, a quarter, except
+     three. On their test list - 172 places a bird is known for and 292
+     where it is not - that and one habitat floor put every point on the
+     right side; see tools/validate.js.
+
+     Mearns quail is higher because the list can tell thin range from
+     the middle of it: the seven places the bird is known for read 0.56
+     to 0.98, and the oak country below the Mogollon Rim, where it is
+     scarce, 0.21. At a quarter that came out nearly as good as Sonoita.
+
+     Pheasant and bobwhite have a toe as well: presence below it counts
+     as none. They are the two birds turned out for shooting, and a
+     released bird leaves records where no wild one lives - pheasants
+     read 0.06 to 0.22 at points in Florida, Georgia, Tennessee and
+     North Carolina, bobwhite 0.05 to 0.15 in Idaho, Montana and North
+     Dakota. The places each is known for start at 0.29 and 0.44. */
   var RANGE_KNEE = {
     elk: 0.50, moose: 0.50, whitetail: 0.25, muledeer: 0.25, pronghorn: 0.25,
-    turkey: 0.10, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25
+    turkey: 0.10, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25,
+    pheasant: 0.30, bobwhite: 0.30, 'mearns-quail': 0.45
   };
+  var RANGE_TOE = { pheasant: 0.20, bobwhite: 0.20 };
   var RANGE_REGION = {
     elk:       [0.30, 0.50],   // high, to keep the eastern herds as islands
     moose:     [0.45, 0.70],   // sagebrush is not willow; at 0.18 this had moose over 83% of Wyoming
@@ -234,7 +252,8 @@
     var pres = presenceAt(sp, lon, lat);
     if (pres == null) return null;
     var knee = RANGE_KNEE[sp] == null ? 0.25 : RANGE_KNEE[sp];
-    var here = pres >= knee ? 1 : pres / knee;
+    var toe = RANGE_TOE[sp] || 0;
+    var here = pres >= knee ? 1 : pres <= toe ? 0 : (pres - toe) / (knee - toe);
     var band = RANGE_REGION[sp];
     if (!band || here >= 1) return here;
     var share = regionalAt(sp, lon, lat);

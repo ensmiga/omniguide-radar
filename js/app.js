@@ -242,7 +242,7 @@
        Benezette talked about pulling birds off the clock. */
     var sp = plan.species || {};
     var who = sp.pursuit === 'fish' ? 'fish'
-      : (sp.group === 'waterfowl' || sp.id === 'turkey' || sp.id === 'upland') ? 'birds' : 'animals';
+      : (sp.group === 'waterfowl' || sp.id === 'turkey' || sp.group === 'upland') ? 'birds' : 'animals';
     var Who = who.charAt(0).toUpperCase() + who.slice(1);
 
     if (fr >= 0.55 && tr < -0.25) {
@@ -462,8 +462,9 @@
            'services - about 25.9 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +
            'decide whether a species is in range - except elk and moose, which use the USGS map, and whitetail, ' +
            'which use both - and when waterfowl normally arrive, how many are normally ' +
-           'present by date, and which birds the decoy, goose and upland advice names. They do not decide ' +
-           'how good a place is, except that for upland birds they say which bird\'s cover to judge it by.',
+           'present by date, and which birds the decoy, goose and upland advice names. Each upland bird\'s ' +
+           'own map is drawn from its own records. They do not decide how good a place is, except that for ' +
+           'all upland birds together they say which bird\'s cover to judge it by.',
         l: 'CC BY 4.0 and CC0 1.0', lu: CC_BY }
     ] },
     { group: 'Regulations', items: [

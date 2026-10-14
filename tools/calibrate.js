@@ -13,11 +13,19 @@
    Run it after changing any species' weights, movement curve, habitat key or
    pressure sensitivity - those all shift the raw range. */
 (function () {
-  var SPECIES = ['ducks', 'canada-goose', 'elk', 'whitetail', 'muledeer',
-                 'moose', 'pronghorn', 'turkey', 'upland', 'trout'];
+  var SPECIES = OG.models.SPECIES.map(function (s) { return s.id; });
   var LAT_STEP = 1.8, LON_STEP = 1.8, DAY_STEP = 5;
 
+  /* A bird with a small range - Mearns quail is a corner of two states -
+     puts only a handful of lattice points in range, so those are sampled
+     again on a lattice three times as fine. */
   function anchors(spId) {
+    var a = anchorsAt(spId, 1);
+    return a.n < 2000 ? anchorsAt(spId, 3) : a;
+  }
+
+  function anchorsAt(spId, fine) {
+    var LAT_STEP = 1.8 / fine, LON_STEP = 1.8 / fine;
     var vals = [];
     for (var t = -170; t <= 195; t += DAY_STEP) {
       var doy = OG.env.doyFor(t);

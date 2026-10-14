@@ -209,7 +209,7 @@
       start: '10-01', end: '01-31', status: 'LIMITED',
       bag: 'Differs by bird: pheasant, quail and grouse each carry their own limit',
       note: 'This single record stands in for several species with different seasons and limits. ' +
-            'Pheasant, quail, and the grouse species are regulated separately.',
+            'Pheasant, quail, and the grouse species are regulated separately - pick the bird from the species list.',
       hours: 'daylight', source: 'State wildlife agency' }),
 
     rule({ states: ['MT', 'WY', 'CO', 'UT', 'NM', 'AR', 'MO', 'PA', 'NY', 'MI', 'WI', 'MN', 'ID', 'OR', 'CA', 'TN', 'NC', 'VA', 'WV'],
@@ -218,6 +218,81 @@
       note: 'Trout regulations change between individual river sections. Reach-level rules are not modeled in this build.',
       hours: 'none', source: 'State wildlife agency' })
   ];
+
+
+  /* ---------- Upland birds, one at a time ----------
+
+     The single upland record above stands in for every bird in every
+     state, which was the best that could be said while "upland birds"
+     was one entry. With a bird picked by name it would say the wrong
+     thing: sage grouse open from October to January in Washington,
+     where there is no season, or Mearns quail in Texas.
+
+     So each bird has its own record, and only for the states listed
+     for it. THE LISTS AND DATES ARE FROM GENERAL KNOWLEDGE AND HAVE NOT
+     BEEN CHECKED AGAINST ANY AGENCY - placeholders like everything else
+     in this file. They are drawn short on purpose. A state left off a
+     bird's list comes back UNKNOWN, with the notice that there may be
+     no season there at all, and that is the safe way to be wrong. The
+     birds whose seasons are draw-only or closed in many places are
+     marked PERMIT throughout. */
+  var UPLAND_NOTE = 'Placeholder window, not an actual season. Dates, zones and limits are set by the state and ' +
+    'differ within it. Confirm with the state agency before you hunt.';
+
+  [
+    { id: 'pheasant', type: 'Pheasant season', start: '10-01', end: '01-31', status: 'LIMITED',
+      states: ['SD', 'ND', 'NE', 'KS', 'IA', 'MN', 'MT', 'CO', 'WY', 'ID', 'UT', 'WA', 'OR', 'CA', 'NV', 'NM', 'TX', 'OK',
+               'MO', 'IL', 'IN', 'OH', 'MI', 'WI', 'PA', 'NY', 'NJ', 'MD', 'DE', 'CT', 'MA', 'RI', 'NH'],
+      bag: 'Roosters only in most states. Daily limit varies.' },
+    { id: 'bobwhite', type: 'Bobwhite quail season', start: '10-25', end: '02-28', status: 'LIMITED',
+      states: ['TX', 'OK', 'KS', 'NE', 'MO', 'IA', 'IL', 'IN', 'KY', 'TN', 'AR', 'LA', 'MS', 'AL', 'GA', 'FL', 'SC', 'NC', 'VA'],
+      bag: 'Daily limit varies by state.' },
+    { id: 'ruffed-grouse', type: 'Ruffed grouse season', start: '09-01', end: '01-31', status: 'LIMITED',
+      states: ['ME', 'NH', 'VT', 'MA', 'NY', 'PA', 'WV', 'VA', 'NC', 'MI', 'WI', 'MN', 'MT', 'ID', 'WA', 'OR', 'WY', 'UT'],
+      bag: 'Daily limit varies by state.' },
+    { id: 'sharptail', type: 'Sharp-tailed grouse season', start: '09-01', end: '01-31', status: 'LIMITED',
+      states: ['MT', 'ND', 'SD', 'NE', 'MN', 'WY'],
+      bag: 'Daily limit varies by state. Often combined with other prairie grouse.' },
+    { id: 'sharptail', type: 'Sharp-tailed grouse season', start: '09-01', end: '01-31', status: 'PERMIT',
+      states: ['ID', 'UT', 'CO', 'MI'],
+      bag: 'Permit or validation required where a season exists.' },
+    { id: 'prairie-chicken', type: 'Prairie chicken season', start: '09-01', end: '01-31', status: 'PERMIT',
+      states: ['KS', 'NE', 'SD', 'MN', 'CO'],
+      bag: 'Permit or special validation in several states. Units and limits vary.' },
+    { id: 'hun', type: 'Hungarian partridge season', start: '09-01', end: '01-31', status: 'LIMITED',
+      states: ['MT', 'ND', 'SD', 'ID', 'OR', 'WA', 'NV', 'UT', 'WY', 'MN', 'IA'],
+      bag: 'Daily limit varies by state.' },
+    { id: 'chukar', type: 'Chukar season', start: '09-15', end: '02-15', status: 'LIMITED',
+      states: ['ID', 'OR', 'WA', 'NV', 'UT', 'CA', 'MT', 'WY', 'CO'],
+      bag: 'Daily limit varies by state.' },
+    { id: 'sage-grouse', type: 'Sage grouse season', start: '09-01', end: '10-31', status: 'PERMIT',
+      states: ['WY', 'MT', 'NV', 'ID', 'OR', 'UT', 'CO', 'CA'],
+      bag: 'Very short seasons. Draw permit or tag in most states, and whole areas closed.' },
+    { id: 'valley-quail', type: 'California quail season', start: '09-15', end: '01-31', status: 'LIMITED',
+      states: ['CA', 'OR', 'WA', 'ID', 'NV', 'UT'],
+      bag: 'Daily limit varies by state.' },
+    { id: 'gambels-quail', type: 'Gambel\'s quail season', start: '10-01', end: '02-15', status: 'LIMITED',
+      states: ['AZ', 'NV', 'CA', 'UT', 'NM', 'CO'],
+      bag: 'Daily limit varies by state, often combined with other quail.' },
+    { id: 'scaled-quail', type: 'Scaled quail season', start: '10-15', end: '02-28', status: 'LIMITED',
+      states: ['TX', 'NM', 'AZ', 'CO', 'OK', 'KS'],
+      bag: 'Daily limit varies by state, often combined with other quail.' },
+    { id: 'mearns-quail', type: 'Mearns quail season', start: '11-15', end: '02-15', status: 'LIMITED',
+      states: ['AZ', 'NM'],
+      bag: 'Daily limit varies by state.' },
+    { id: 'mountain-quail', type: 'Mountain quail season', start: '09-01', end: '01-31', status: 'PERMIT',
+      states: ['CA', 'OR', 'NV', 'WA'],
+      bag: 'Closed in parts of each state. Low daily limits.' },
+    { id: 'blue-grouse', type: 'Dusky and sooty grouse season', start: '09-01', end: '01-31', status: 'LIMITED',
+      states: ['WA', 'OR', 'CA', 'ID', 'MT', 'WY', 'CO', 'UT', 'NV', 'NM', 'AZ'],
+      bag: 'Daily limit varies by state, often combined with other forest grouse.' },
+    { id: 'spruce-grouse', type: 'Spruce grouse season', start: '09-01', end: '01-01', status: 'PERMIT',
+      states: ['MN', 'MT', 'ID', 'WA'],
+      bag: 'Protected in most other states where it occurs.' }
+  ].forEach(function (b) {
+    RULES.push(rule({ states: b.states, species: [b.id], type: b.type, start: b.start, end: b.end,
+      status: b.status, bag: b.bag, note: UPLAND_NOTE, hours: 'daylight', source: 'State wildlife agency' }));
+  });
 
   /* Special management areas. A handful of real refuges, included to exercise
      the warning path - the restrictions themselves are not modeled. */

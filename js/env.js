@@ -346,6 +346,7 @@
     if (goose == null) goose = wf;
 
     var out = {
+      lon: lon, lat: lat,
       elev: elev, waterfowl: wf, goose: goose, trout: trout, elk: elk,
       whitetail: whitetail, muledeer: muledeer, moose: moose,
       turkey: turkey, upland: upland, pronghorn: pronghorn,
@@ -876,9 +877,27 @@
     return names[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
   }
 
+  /* Habitat for one species out of a habitat reading.
+
+     Everything the reading carries was looked up when it was made. The
+     upland birds are not - there are fifteen of them and the map asks
+     about one at a time - so each is fetched here the first time it is
+     asked for and kept on the reading. With no raster to ask, the
+     all-birds surface stands in, as the hand-made one does for every
+     other species. */
+  function habOf(hab, key) {
+    var v = hab[key];
+    if (v !== undefined) return v;
+    var hg = global.OG && global.OG.habgrid;
+    v = hg && hg.ready ? hg.at(key, hab.lon, hab.lat) : null;
+    if (v == null) v = hab.upland || 0;
+    hab[key] = v;
+    return v;
+  }
+
   global.OG = global.OG || {};
   global.OG.env = {
-    conditions: conditions, probe: probe, habitat: habitat, elevFt: elevFt, sun: sun,
+    conditions: conditions, probe: probe, habitat: habitat, habOf: habOf, elevFt: elevFt, sun: sun,
     freezeIndex: freezeIndex, freezeGain: freezeGain, freezeDepth: freezeDepth,
     modelWaterTemp: modelWaterTemp,
     doyFor: doyFor,

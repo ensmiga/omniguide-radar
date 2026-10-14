@@ -299,6 +299,54 @@
     };
   }
 
+  /* ---------- Upland birds ----------
+
+     One movement model for all of them - it is about the dog's nose more
+     than about the bird - and one entry a bird, each on its own habitat
+     and range surface (see BIRDS in ingest/habitat.mjs). "All upland
+     birds" is the same model on the best bird a place has. */
+  function uplandMovement(key, coverHi) {
+    return function (wx, hab, doy) {
+      /* Scent holds in cool, damp, lightly moving air and dies in hot, dry,
+         windy conditions. For a dog hunter that matters more than the birds. */
+      var scent = clamp01(0.30 + 0.45 * clamp01(ramp(58 - wx.tempF, -10, 34)) +
+                          0.25 * clamp01(wx.cloud) + 0.22 * clamp01(wx.precip * 2) -
+                          0.30 * clamp01(ramp(wx.windSpd, 12, 28)));
+      var season = clamp01(ramp(doy, 270, 292));
+      var cover = env.habOf(hab, key);
+      return blend([
+        { w: 1.9, v: scent, hi: 'Cool damp air holding scent well for the dog',
+          lo: 'Hot, dry or windy - scenting conditions will be poor' },
+        { w: 1.5, v: clamp01(cover * 1.3), hi: coverHi, lo: 'Little holding cover here' },
+        { w: 1.2, v: 0.25 + 0.75 * season, hi: 'Inside the normal upland season window',
+          lo: 'Early in the fall - cover is still heavy and birds are scattered' },
+        { w: 1.1, v: 1 - clamp01(ramp(wx.windSpd, 14, 32)),
+          hi: 'Manageable wind', lo: 'Heavy wind pushes birds into the thickest cover and makes them run' },
+        { w: 1.0, v: clamp01(wx.snowDepth * 1.5 + 0.35),
+          hi: 'Snow concentrating birds in heavy cover', lo: null },
+        { w: 0.9, v: clamp01(ramp(38 - wx.tempF, -14, 22)),
+          hi: 'Cold holding birds tight instead of running', lo: 'Warm - expect running birds and a hot dog' }
+      ]);
+    };
+  }
+
+  function uplandBird(id, name, taxa, blurb) {
+    return {
+      id: id, name: name, group: 'upland', pursuit: 'hunt',
+      migratory: false, habKey: id, taxa: taxa,
+      pressureSens: 0.09,
+      distWeight: 0.30,
+      /* One floor for all fifteen. On the test list the thinnest real
+         ground for any of them reads 0.25 (bobwhite in west Kentucky,
+         mountain quail in the Mendocino) and the strongest place a
+         bird is not reads 0.18 (blue grouse on the Snake River Plain). */
+      habFloor: 0.20, rangeFloor: 0.025,
+      weights: { hab: 0.40, move: 0.36, mig: 0, wx: 0.24 },
+      blurb: blurb,
+      movement: uplandMovement(id, 'Good cover for this bird')
+    };
+  }
+
   var SPECIES = [
     {
       id: 'ducks', name: 'Ducks', group: 'waterfowl', pursuit: 'hunt',
@@ -350,7 +398,7 @@
       }
     },
     {
-      id: 'canada-goose', name: 'Canada goose', group: 'waterfowl', pursuit: 'hunt',
+      id: 'canada-goose', name: 'Geese', group: 'waterfowl', pursuit: 'hunt',
       chronTaxa: ['Branta canadensis', 'Anser caerulescens', 'Anser albifrons'],
       distKey: 'goose',
       migratory: true, migPeak: 322, migWidth: 40, habKey: 'goose',
@@ -361,8 +409,8 @@
          (Merrymeeting Bay, 0.09) and the Everglades (0.06). */
       habFloor: 0.07, rangeFloor: 0.015,
       weights: { hab: 0.24, move: 0.36, mig: 0.22, wx: 0.18 },
-      blurb: 'Field feeder, scored on grain and pasture within reach of roost water. Reads snow cover and ' +
-             'feed availability more than freeze. Snow and white-fronted geese are named where the records show them.',
+      blurb: 'Canada, snow and white-fronted geese. Field feeders, scored on grain and pasture within reach of ' +
+             'roost water. Season dates shown are for Canada geese; the others are set separately.',
       movement: function (wx, hab) {
         var c = duckCommon(wx, hab);
         return blend([
@@ -560,7 +608,7 @@
       }
     },
     {
-      id: 'upland', name: 'Upland birds', group: 'upland', pursuit: 'hunt',
+      id: 'upland', name: 'All upland birds', group: 'upland', pursuit: 'hunt',
       migratory: false, habKey: 'upland',
       pressureSens: 0.09,
       distWeight: 0.30,
@@ -570,30 +618,40 @@
          0.22) and the salt pan at Badwater (0.15). */
       habFloor: 0.18, rangeFloor: 0.025,
       weights: { hab: 0.40, move: 0.36, mig: 0, wx: 0.24 },
-      blurb: 'Pheasant, partridge, quail, grouse and chukar together, each place scored on the bird its cover ' +
-             'fits. Scenting conditions for the dog drive most of the rest.',
-      movement: function (wx, hab, doy) {
-        /* Scent holds in cool, damp, lightly moving air and dies in hot, dry,
-           windy conditions. For a dog hunter that matters more than the birds. */
-        var scent = clamp01(0.30 + 0.45 * clamp01(ramp(58 - wx.tempF, -10, 34)) +
-                            0.25 * clamp01(wx.cloud) + 0.22 * clamp01(wx.precip * 2) -
-                            0.30 * clamp01(ramp(wx.windSpd, 12, 28)));
-        var season = clamp01(ramp(doy, 270, 292));
-        return blend([
-          { w: 1.9, v: scent, hi: 'Cool damp air holding scent well for the dog',
-            lo: 'Hot, dry or windy - scenting conditions will be poor' },
-          { w: 1.5, v: clamp01(hab.upland * 1.3), hi: 'Good cover for the birds recorded here', lo: 'Little holding cover here' },
-          { w: 1.2, v: 0.25 + 0.75 * season, hi: 'Inside the normal upland season window',
-            lo: 'Early in the fall - cover is still heavy and birds are scattered' },
-          { w: 1.1, v: 1 - clamp01(ramp(wx.windSpd, 14, 32)),
-            hi: 'Manageable wind', lo: 'Heavy wind pushes birds into the thickest cover and makes them run' },
-          { w: 1.0, v: clamp01(wx.snowDepth * 1.5 + 0.35),
-            hi: 'Snow concentrating birds in heavy cover', lo: null },
-          { w: 0.9, v: clamp01(ramp(38 - wx.tempF, -14, 22)),
-            hi: 'Cold holding birds tight instead of running', lo: 'Warm - expect running birds and a hot dog' }
-        ]);
-      }
+      blurb: 'Every upland bird together, each place scored on the bird its cover fits best. Pick a bird ' +
+             'from the list for its own map.',
+      movement: uplandMovement('upland', 'Good cover for the birds recorded here')
     },
+    uplandBird('pheasant', 'Pheasant', ['Phasianus colchicus'],
+      'Farmland bird: grain with grass beside it, where pheasants are recorded.'),
+    uplandBird('bobwhite', 'Bobwhite quail', ['Colinus virginianus'],
+      'Grass, brush and open pine, where bobwhite are recorded.'),
+    uplandBird('ruffed-grouse', 'Ruffed grouse', ['Bonasa umbellus'],
+      'Young, thick woods. Counts for most where winters are long.'),
+    uplandBird('sharptail', 'Sharp-tailed grouse', ['Tympanuchus phasianellus'],
+      'Native grass and brushy draws of the northern plains. Closed or permit-only in several states.'),
+    uplandBird('prairie-chicken', 'Prairie chicken', ['Tympanuchus cupido'],
+      'Tallgrass and Sandhills prairie. Closed or permit-only in several states.'),
+    uplandBird('hun', 'Hungarian partridge', ['Perdix perdix'],
+      'Small-grain country with grass edges.'),
+    uplandBird('chukar', 'Chukar', ['Alectoris chukar'],
+      'Steep, rocky, brushy slopes of the interior West.'),
+    uplandBird('sage-grouse', 'Sage grouse', ['Centrocercus urophasianus'],
+      'Sagebrush. Seasons are short, permit-only or closed across much of the range.'),
+    uplandBird('valley-quail', 'California (valley) quail', ['Callipepla californica'],
+      'Brushy cover near water, from the Pacific coast to the Great Basin.'),
+    uplandBird('gambels-quail', 'Gambel\'s quail', ['Callipepla gambelii'],
+      'Desert scrub and washes of the Southwest.'),
+    uplandBird('scaled-quail', 'Scaled quail', ['Callipepla squamata'],
+      'Desert grassland of the southern plains and the Chihuahuan desert.'),
+    uplandBird('mearns-quail', 'Mearns quail', ['Cyrtonyx montezumae'],
+      'Oak and grass hillsides of the borderlands. Not open in every state it lives in.'),
+    uplandBird('mountain-quail', 'Mountain quail', ['Oreortyx pictus'],
+      'Brushy mountain slopes of the far West. Closed in parts of its range.'),
+    uplandBird('blue-grouse', 'Blue grouse (dusky and sooty)', ['Dendragapus obscurus', 'Dendragapus fuliginosus'],
+      'Conifer ridges and mountain parks of the West.'),
+    uplandBird('spruce-grouse', 'Spruce grouse', ['Canachites canadensis'],
+      'Northern conifer forest and bog. Protected in several states.'),
     {
       id: 'trout', name: 'Trout', group: 'fishing', pursuit: 'fish', preview: true,
       migratory: false, habKey: 'trout',
@@ -646,16 +704,31 @@
      below the same basin in September. Regenerate with tools/calibrate.js
      after changing any species model. */
   var CAL = {
-    'ducks':        [2.6, 48.5],
-    'canada-goose': [3.2, 47.4],
-    'elk':          [8.5, 78.2],
-    'whitetail':    [11.1, 81.1],
-    'muledeer':     [16.5, 76.9],
-    'moose':        [8.1, 71.9],
-    'pronghorn':    [9.5, 76.6],
-    'turkey':       [19.8, 77.6],
-    'upland':       [23.1, 81.8],
-    'trout':        [14.6, 81.1]
+    'ducks':           [2.6, 48.5],
+    'canada-goose':    [3.2, 47.4],
+    'elk':             [8.5, 78.2],
+    'whitetail':       [11.1, 81.1],
+    'muledeer':        [16.5, 76.9],
+    'moose':           [8.1, 71.9],
+    'pronghorn':       [9.5, 76.6],
+    'turkey':          [19.8, 77.6],
+    'upland':          [23.0, 80.4],
+    'pheasant':        [24.7, 85.1],
+    'bobwhite':        [26.0, 81.8],
+    'ruffed-grouse':   [27.2, 78.5],
+    'sharptail':       [31.8, 88.1],
+    'prairie-chicken': [27.5, 86.1],
+    'hun':             [24.4, 85.4],
+    'chukar':          [23.4, 82.0],
+    'sage-grouse':     [24.1, 85.6],
+    'valley-quail':    [23.7, 85.1],
+    'gambels-quail':   [27.0, 85.2],
+    'scaled-quail':    [25.6, 84.5],
+    'mearns-quail':    [21.1, 79.9],
+    'mountain-quail':  [25.2, 81.2],
+    'blue-grouse':     [24.6, 85.6],
+    'spruce-grouse':   [24.4, 81.5],
+    'trout':           [14.6, 81.1]
   };
   var CAL_LO = 8, CAL_HI = 94;   // the scores those two anchors map to
 
@@ -679,7 +752,7 @@
 
   function confidence(lon, lat, t, wx, hab, sp, pressureIdx) {
     var lead = clamp01(1 - t / 8.5);
-    var obs = clamp01(pressureIdx * 0.8 + hab[sp.habKey] * 0.4);   // more people here means more reports
+    var obs = clamp01(pressureIdx * 0.8 + env.habOf(hab, sp.habKey) * 0.4);   // more people here means more reports
     var sensor = env.fbm(lon * 0.7, lat * 0.7, 77);
     var frontUnc = wx.frontal;
     var habQual = hab.region || hab.water ? 1 : 0.5;
@@ -738,7 +811,7 @@
     var wxs = weatherScore(wx, sp);
     var w = sp.weights;
 
-    var habModel = hab[sp.habKey];
+    var habModel = env.habOf(hab, sp.habKey);
     var dIdx = distAt(lon, lat, sp.distKey || sp.id);
     var dw = sp.distWeight == null ? 0.3 : sp.distWeight;
     var habV = habModel;
@@ -963,7 +1036,7 @@
       a += 0.55 * bell(h - (sr + 2.6), 1.3);                 // mid-morning strutting
       a += 0.45 * bell(h - 12.5, 2.0);
       a += 0.60 * bell(h - (ss - 1.2), 1.2);                 // return to roost
-    } else if (sp.id === 'upland') {
+    } else if (sp.group === 'upland') {
       /* Dog work, not animal movement: scent improves once the dew burns off
          and falls away in the heat of the afternoon. */
       a += 0.85 * bell(h - (sr + 1.8), 1.8);

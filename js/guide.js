@@ -380,13 +380,13 @@
           'realism - several hundred white decoys and as much motion as you can make.'
         : 'Mostly ' + GOOSE_NAMES[lead.taxon] + ' in the records here at this time of year' +
           (mix[1] && mix[1].share > 0.2 ? ', with ' + GOOSE_NAMES[mix[1].taxon] + ' behind them.' : '.'));
-      /* The season this page shows is the Canada goose season. The other
-         geese are set separately, so say so wherever one is named. */
-      if (mix.some(function (m) { return m.taxon !== 'Branta canadensis' && m.share > 0.2; })) {
-        rec.push('The season shown here is for Canada geese. Snow and white-fronted geese have their own ' +
-          'seasons and limits. Check them with the state agency before you hunt.');
-      }
     }
+    /* The entry is "Geese" and the season this page shows is the Canada
+       goose season. Said every time, not only where another goose is
+       named: the heading alone would let someone read those dates as
+       covering snow geese. */
+    rec.push('Season dates shown here are for Canada geese. Snow, Ross\'s and white-fronted geese have their ' +
+      'own seasons and limits. Check them with the state agency before you hunt.');
     if (wx.snowDepth > 0.25) rec.push('Snow is covering feed. Birds will go to fields that are blown clear or ' +
       'still showing grain, and a white cover over the blind matters more than anything else today.');
     if (wx.freeze > 0.5 || wx.tempF < 20) rec.push('In hard cold, geese sit on the roost until mid-morning and ' +
@@ -617,6 +617,20 @@
     'Dendragapus obscurus': 'mountain', 'Dendragapus fuliginosus': 'mountain'
   };
 
+  /* The birds whose rules differ most from place to place. Said wherever
+     one is named. General knowledge, not checked against any agency:
+     each ends by sending the reader to the state, which is the point. */
+  var UPLAND_CAUTION = {
+    'sage grouse': 'Sage grouse seasons are short, permit-only or closed across much of their range.',
+    'spruce grouse': 'Spruce grouse are protected in several states and easy to mistake for a ruffed grouse. ' +
+      'Be sure of the bird before you shoot.',
+    'prairie chicken': 'Prairie chicken seasons are closed or permit-only in several states, and the lesser ' +
+      'prairie chicken of the southern plains is protected. Be sure which bird you are on and what the state allows.',
+    'sharp-tailed grouse': 'Sharp-tailed grouse are closed or permit-only in several states. Check before you hunt.',
+    'Mearns quail': 'Mearns quail are not open in every state they live in. Check before you hunt.',
+    'mountain quail': 'Mountain quail are closed in parts of their range. Check before you hunt.'
+  };
+
   /* The birds worth naming here. First the one this ground was scored
      on - the bird whose cover it is, among those recorded round here -
      and then the others by how often they are recorded. Most recorded
@@ -625,8 +639,19 @@
      the hay meadows. */
   function uplandBirds(sc) {
     var hg = global.OG.habgrid;
-    if (!hg || !hg.compReady) return null;
-    var comp = hg.composition('upland', sc.lon, sc.lat);
+    var chosen = sc.species && sc.species.taxa;
+    var comp = hg && hg.compReady ? hg.composition('upland', sc.lon, sc.lat) : null;
+    /* A bird picked from the list is the bird the plan is about. The
+       others recorded here are named after it and nothing more. Of
+       the two blue grouse, whichever is recorded here. */
+    if (chosen) {
+      var mine = chosen[0], mineShare = 0, others = [];
+      (comp || []).forEach(function (c) {
+        if (chosen.indexOf(c.taxon) >= 0) { if (c.share > mineShare) { mine = c.taxon; mineShare = c.share; } }
+        else if (c.share >= 0.12 && UPLAND_NAME[c.taxon]) others.push(c);
+      });
+      return [{ taxon: mine, share: mineShare }].concat(others.slice(0, 2));
+    }
     if (!comp) return null;
     var out = comp.filter(function (c) { return c.share >= 0.12 && UPLAND_NAME[c.taxon]; }).slice(0, 3);
     var lead = hg.uplandLeadAt ? hg.uplandLeadAt(sc.lon, sc.lat) : null;
@@ -713,16 +738,22 @@
 
     if (birds) {
       var names = birds.map(function (b) { return UPLAND_NAME[b.taxon]; });
-      rec.push('This is ' + names[0] + ' ground' +
-        (names.length > 1 ? ', with ' + names.slice(1).join(' and ') + ' recorded here too.' : '.') + ' ' + play.first);
+      var picked = !!(sc.species && sc.species.taxa);
+      if (picked) {
+        rec.push(play.first);
+        if (names.length > 1) rec.push('Also recorded here: ' + names.slice(1).join(' and ') + '.');
+      } else {
+        rec.push('This is ' + names[0] + ' ground' +
+          (names.length > 1 ? ', with ' + names.slice(1).join(' and ') + ' recorded here too.' : '.') + ' ' + play.first);
+      }
       /* Seasons are set bird by bird, and several of these are closed
          or permit-only in places. Say so wherever a bird is named. */
-      rec.push('Seasons and limits are set bird by bird, and not every bird named here is legal to take in ' +
-        'every state. Check each one with the state agency before you hunt.');
-      if (names.indexOf('sage grouse') >= 0) rec.push('Sage grouse seasons are short, permit-only or closed ' +
-        'across much of their range.');
-      if (names.indexOf('spruce grouse') >= 0) rec.push('Spruce grouse are protected in several states and ' +
-        'easy to mistake for a ruffed grouse. Be sure of the bird before you shoot.');
+      rec.push(picked && names.length === 1
+        ? 'Seasons, limits and open areas for ' + names[0] + ' are set state by state, and not every state it ' +
+          'lives in has a season. Check with the state agency before you hunt.'
+        : 'Seasons and limits are set bird by bird, and not every bird named here is legal to take in ' +
+          'every state. Check each one with the state agency before you hunt.');
+      names.forEach(function (nm) { if (UPLAND_CAUTION[nm]) rec.push(UPLAND_CAUTION[nm]); });
     } else {
       rec.push(play.first);
     }
@@ -1122,7 +1153,7 @@
       }
     }
 
-    if (sp.id === 'upland') {
+    if (sp.group === 'upland') {
       /* What the cover means depends on the bird. */
       var ub = uplandBirds(sc);
       var uk = ub ? UPLAND_KIND[ub[0].taxon] : 'field';

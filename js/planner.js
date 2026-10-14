@@ -225,7 +225,7 @@
     wx.lon = lon; wx.lat = lat;          // the rut calendar is regional
     var mv = sp.movement(wx, hab, doy);
     var mig = climateMigration(lon, lat, week, sp, hab, wx.freeze);
-    var habV = hab[sp.habKey];
+    var habV = env.habOf(hab, sp.habKey);
     var w = sp.weights;
     var wMig = mig.applies ? w.mig : 0;
     /* A week the water is normally locked is not a week to hunt it,

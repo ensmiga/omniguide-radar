@@ -1300,15 +1300,15 @@ const UPLAND_BIRDS = {
   'Tympanuchus cupido':        { 71: 1.00, 81: 0.60, 82: 0.50 },
   'Centrocercus urophasianus': { 52: 1.00, 71: 0.45 },
   'Colinus virginianus':       { 71: 1.00, 52: 0.95, 82: 0.60, 42: 0.53, 81: 0.47, 43: 0.35, 41: 0.18 },
-  'Callipepla californica':    { 52: 1.00, 90: 0.85, 71: 0.65, 43: 0.65, 82: 0.50, 81: 0.50, 41: 0.50, 42: 0.40 },
+  'Callipepla californica':    { 52: 1.00, 90: 0.85, 71: 0.65, 82: 0.50, 81: 0.50, 41: 0.45, 43: 0.40, 42: 0.10 },
   'Callipepla gambelii':       { 52: 1.00, 90: 0.60, 71: 0.50, 42: 0.30, 82: 0.30 },
   'Callipepla squamata':       { 71: 1.00, 52: 0.95, 81: 0.35 },
-  'Cyrtonyx montezumae':       { 42: 1.00, 71: 1.00, 43: 0.90, 52: 0.85, 41: 0.80 },
+  'Cyrtonyx montezumae':       { 42: 1.00, 71: 1.00, 43: 0.90, 41: 0.80, 52: 0.30 },
   'Oreortyx pictus':           { 52: 1.00, 43: 0.80, 42: 0.75, 41: 0.60 },
   'Alectoris chukar':          { 52: 1.00, 71: 0.85, 31: 0.45 },
   'Bonasa umbellus':           { 43: 1.00, 41: 0.95, 52: 0.90, 90: 0.85, 42: 0.55 },
-  'Dendragapus obscurus':      { 42: 1.00, 43: 1.00, 41: 0.85, 52: 0.65, 71: 0.45 },
-  'Dendragapus fuliginosus':   { 42: 1.00, 43: 1.00, 52: 0.65, 41: 0.60 },
+  'Dendragapus obscurus':      { 42: 1.00, 43: 1.00, 41: 0.85, 52: 0.15, 71: 0.15 },
+  'Dendragapus fuliginosus':   { 42: 1.00, 43: 1.00, 41: 0.60, 52: 0.15 },
   'Canachites canadensis':     { 42: 1.00, 90: 0.90, 43: 0.70 }
 };
 const UPLAND_WORTH = {
@@ -1322,6 +1322,25 @@ const UPLAND_COUNTS_IN_FULL = 0.25;       // share of the upland records round a
 const UPLAND_ROUND = 4;                   // cells either way the records are pooled over
 const CHUKAR_STEEP = [120, 450];          // feet of relief inside the cell
 
+/* Three things the one-bird maps showed up, each of them hidden while
+   another bird's cover was there to take the cell:
+
+   Valley quail had conifer forest at 0.40, and were on the crest of the
+   Oregon Cascades and in the middle of the Olympics. Now 0.10.
+
+   The blue grouse had sagebrush at 0.65, and the lava desert east of
+   Arco, Idaho read 0.60 for them. They use the sage at the edge of
+   timber, not sage on its own: 0.15.
+
+   Mearns quail are birds of oak and grass on hills, and had desert
+   brush at 0.85: the floor of the Sulphur Springs valley read 0.83
+   beside the Chiricahuas at 0.91. Brush is now 0.30, and the flattest
+   ground is faded as well. Only faded, and only the flattest, because
+   relief does not tell these apart the way it does for chukar - the
+   Sonoita grasslands, which are the real thing, read 212 feet and the
+   valley floors 125 to 163. */
+const MEARNS_HILLS = [60, 180];           // feet of relief inside the cell
+
 /* Ruffed grouse do best where winter is long: the aspen and birch
    country of the Lake States and the north-east. Land cover cannot tell
    that from an oak ridge in West Virginia - both are deciduous forest -
@@ -1332,6 +1351,14 @@ const CHUKAR_STEEP = [120, 450];          // feet of relief inside the cell
    of grouse. */
 const GROUSE_WINTER = [18, 28], GROUSE_SOUTH = 0.65;
 
+/* Pheasants and Huns are farmland birds that need grass in the farmland.
+   Scored as a plain sum, a cell of unbroken native grass came out the
+   best pheasant ground there is, and so did a cell of unbroken corn.
+   For these two the grain and the grass each count for a part, and the
+   lesser of the two counts again: [each, both]. A judgement, like the
+   table above. */
+const GRAIN_AND_GRASS = { 'Phasianus colchicus': [0.40, 2.0], 'Perdix perdix': [0.50, 1.5] };
+
 function uplandSuit(lc, reliefFt, perTaxon, januaryF) {
   const names = Object.keys(UPLAND_BIRDS).filter((n) => perTaxon[n]);
   const near = {}, total = new Float32Array(NCELL);
@@ -1339,34 +1366,53 @@ function uplandSuit(lc, reliefFt, perTaxon, januaryF) {
     near[n] = smooth(perTaxon[n], UPLAND_ROUND);
     for (let k = 0; k < NCELL; k++) total[k] += near[n][k];
   }
-  const rows = names.map((n) => [n, Object.keys(UPLAND_BIRDS[n]).map((c) => [lc.counts.get(+c), UPLAND_BIRDS[n][c]])]);
+  const rows = names.map((n) => [n, Object.keys(UPLAND_BIRDS[n]).map((c) => [lc.counts.get(+c), UPLAND_BIRDS[n][c], +c])]);
   const bareArr = lc.counts.get(31);
   const out = new Float32Array(NCELL), lead = new Uint8Array(NCELL);
+  /* How well the cover fits each bird, whether or not the bird is
+     there: what the one-bird maps are made from. */
+  const fits = {};
+  for (const n of names) fits[n] = new Float32Array(NCELL);
   for (let k = 0; k < NCELL; k++) {
-    if (!lc.total[k] || total[k] <= 0) continue;
+    if (!lc.total[k]) continue;
     const bare = bareArr ? bareArr[k] / lc.total[k] : 0;
     let best = 0, bestFit = 0, who = 0;
     for (let i = 0; i < rows.length; i++) {
       const n = rows[i][0], pairs = rows[i][1];
-      const share = near[n][k] / total[k];
-      if (share <= 0) continue;
-      let fit = 0;
-      for (const [arr, w] of pairs) if (arr) fit += w * arr[k] / lc.total[k];
+      let fit = 0, grain = 0;
+      for (const [arr, w, c] of pairs) {
+        if (!arr) continue;
+        const part = arr[k] / lc.total[k];
+        if (c === 82 && GRAIN_AND_GRASS[n]) grain = part;
+        else fit += w * part;
+      }
+      if (GRAIN_AND_GRASS[n]) {
+        const g = GRAIN_AND_GRASS[n];
+        fit = clamp01(g[0] * (grain + fit) + g[1] * Math.min(grain, fit));
+      }
       if (n === 'Alectoris chukar') {
         fit *= clamp01(((isFinite(reliefFt[k]) ? reliefFt[k] : 0) - CHUKAR_STEEP[0]) / (CHUKAR_STEEP[1] - CHUKAR_STEEP[0]));
       } else {
+        if (n === 'Cyrtonyx montezumae') {
+          fit *= clamp01(((isFinite(reliefFt[k]) ? reliefFt[k] : 0) - MEARNS_HILLS[0]) / (MEARNS_HILLS[1] - MEARNS_HILLS[0]));
+        }
         /* Brush mapped beside bare playa, dune or salt pan is the
            thinnest brush there is, and it was counting the same as a
            brushy foothill. Rock is cover to a chukar and to nothing
            else here, so chukar keep their own term above. */
         fit *= (1 - bare) * (1 - bare);
       }
-      fit *= Math.min(1, share / UPLAND_COUNTS_IN_FULL);
-      let worth = UPLAND_WORTH[n];
+      let winter = 1;
       if (n === 'Bonasa umbellus' && januaryF && isFinite(januaryF[k])) {
-        worth *= GROUSE_SOUTH + (1 - GROUSE_SOUTH) *
+        winter = GROUSE_SOUTH + (1 - GROUSE_SOUTH) *
           clamp01((GROUSE_WINTER[1] - januaryF[k]) / (GROUSE_WINTER[1] - GROUSE_WINTER[0]));
       }
+      fits[n][k] = fit * winter;
+      if (total[k] <= 0) continue;
+      const share = near[n][k] / total[k];
+      if (share <= 0) continue;
+      fit *= Math.min(1, share / UPLAND_COUNTS_IN_FULL);
+      const worth = UPLAND_WORTH[n] * winter;
       if (fit > bestFit) { bestFit = fit; who = i + 1; }
       if (fit * worth > best) best = fit * worth;
     }
@@ -1374,8 +1420,38 @@ function uplandSuit(lc, reliefFt, perTaxon, januaryF) {
   }
   /* The bird the cover fits best is kept as well: it is the one the
      advice should be about on this ground. */
-  return { val: out, lead: lead, names: [''].concat(names) };
+  return { val: out, lead: lead, names: [''].concat(names), fits: fits };
 }
+
+/* ---------- upland, one bird at a time ----------
+
+   "Upland birds" on the map was one surface for sixteen birds, and the
+   only place it said which bird was a line in the plan. Each bird a
+   hunter would name gets its own surface as well: how well the cover
+   fits it, from uplandSuit, and where it is recorded, counted and
+   gated exactly as the other species are - its share of all the game
+   records in a place, against its own best.
+
+   The two blue grouse are one entry. They were one species until 2006,
+   their ranges do not overlap, and nobody plans a hunt for one of them
+   by name. */
+const BIRDS = {
+  'pheasant':        ['Phasianus colchicus'],
+  'bobwhite':        ['Colinus virginianus'],
+  'ruffed-grouse':   ['Bonasa umbellus'],
+  'sharptail':       ['Tympanuchus phasianellus'],
+  'prairie-chicken': ['Tympanuchus cupido'],
+  'hun':             ['Perdix perdix'],
+  'chukar':          ['Alectoris chukar'],
+  'sage-grouse':     ['Centrocercus urophasianus'],
+  'valley-quail':    ['Callipepla californica'],
+  'gambels-quail':   ['Callipepla gambelii'],
+  'scaled-quail':    ['Callipepla squamata'],
+  'mearns-quail':    ['Cyrtonyx montezumae'],
+  'mountain-quail':  ['Oreortyx pictus'],
+  'blue-grouse':     ['Dendragapus obscurus', 'Dendragapus fuliginosus'],
+  'spruce-grouse':   ['Canachites canadensis']
+};
 
 /* ---------- geese ----------
 
@@ -1775,6 +1851,55 @@ async function main() {
     let above = 0;
     for (let k = 0; k < NCELL; k++) if (vals[k] > 18) above++;   // suitability only
     report.push(sp + ': ' + above + ' cells above the range floor');
+  }
+  /* The upland birds one at a time - see BIRDS. */
+  if (uplandBest && uplandTaxa) {
+    const band = ELEV.upland;
+    for (const bird of Object.keys(BIRDS)) {
+      const taxa = BIRDS[bird].filter((n) => uplandTaxa[n] && uplandBest.fits[n]);
+      if (!taxa.length) continue;
+      const occB = new Float32Array(NCELL);
+      let tot = 0;
+      for (const n of taxa) for (let k = 0; k < NCELL; k++) { occB[k] += uplandTaxa[n][k]; tot += uplandTaxa[n][k]; }
+      if (tot > 0) for (let k = 0; k < NCELL; k++) occB[k] /= tot;
+      const occS = smooth(occB, 3);
+      const share = new Float32Array(NCELL);
+      for (let k = 0; k < NCELL; k++) share[k] = effortS[k] > 1e-9 ? occS[k] / effortS[k] : 0;
+      const nz = Array.from(share).filter((v) => v > 0).sort((a, b) => a - b);
+      const p97 = nz.length ? nz[Math.floor(nz.length * 0.97)] : 1;
+
+      const pv = new Uint8Array(PRES_NLON * PRES_NLAT);
+      for (let iy = 0; iy < NLAT; iy++) {
+        const cy = Math.floor((iy * D) / PRES_D);
+        for (let ix = 0; ix < NLON; ix++) {
+          const cx = Math.floor((ix * D) / PRES_D);
+          const q = Math.round(255 * clamp01(Math.pow(clamp01(share[iy * NLON + ix] / p97), 0.45)));
+          const o = cy * PRES_NLON + cx;
+          if (q > pv[o]) pv[o] = q;
+        }
+      }
+      presOut[bird] = Buffer.from(pv).toString('base64');
+
+      const vals = new Uint8Array(NCELL);
+      let above = 0;
+      for (let iy = 0; iy < NLAT; iy++) {
+        const cy = Math.floor((iy * D) / PRES_D);
+        for (let ix = 0; ix < NLON; ix++) {
+          const k = iy * NLON + ix;
+          if (!lc.total[k]) continue;
+          /* Nothing where the bird has no record anywhere near. The
+             range gate would take it to nothing at runtime anyway, and
+             a plane that is mostly zeros costs almost nothing to send. */
+          if (!pv[cy * PRES_NLON + Math.floor((ix * D) / PRES_D)]) continue;
+          let f = 0;
+          for (const n of taxa) if (uplandBest.fits[n][k] > f) f = uplandBest.fits[n][k];
+          vals[k] = Math.round(clamp01(f * elevFactor(ev.meanFt[k], band)) * 255);
+          if (vals[k] > 18) above++;
+        }
+      }
+      out[bird] = Buffer.from(vals).toString('base64');
+      report.push(bird + ': ' + above + ' cells above the range floor');
+    }
   }
   process.stderr.write('  ' + report.join('\n  ') + '\n');
 
