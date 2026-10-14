@@ -2360,14 +2360,19 @@
       var about = section('What is real in this build');
 
       about.appendChild(el('p', null, 'Measured, from live sources: the forecast, water, snow, terrain and ' +
-        'land cover. Modelled from real code on top of those: the species behaviour, migration, confidence ' +
-        'and strategy engines. Invented: the regulation dates, and nothing else.'));
+        'land cover at the pin. Built from published data: habitat, range and hunting pressure. Modelled ' +
+        'on top of those: species behaviour, migration, confidence and the advice. Not real: the season ' +
+        'dates, which are placeholders.'));
 
+      /* Counted from the data that is loaded, so these cannot go stale. */
+      var wxg = global.WX_GRID || null;
+      var towns = global.US_CITIES ? global.US_CITIES.length : 0;
       var real = el('ul', 'drivers pos');
       [
-        'Forecast: 987 points over the lower 48, every three hours for eight days, from the Open-Meteo ' +
-          'multi-model blend. Bilinearly interpolated and lapse-corrected to the terrain elevation of ' +
-          'the point being scored. ' + App.wxNote(),
+        'Forecast: ' + (wxg ? wxg.npts.toLocaleString() : 'a grid of') + ' points over the lower 48, every ' +
+          (wxg ? wxg.stepH : 3) + ' hours for ' + (wxg ? Math.round(wxg.steps * wxg.stepH / 24) : 8) +
+          ' days, from the Open-Meteo multi-model blend. Bilinearly interpolated and lapse-corrected to the ' +
+          'terrain elevation of the point being scored. ' + App.wxNote(),
         'Water: ' + (global.OG.gauges ? global.OG.gauges.count.toLocaleString() : 0) + ' USGS gauges. ' +
           'Where one is within ' + (global.OG.gauges ? global.OG.gauges.maxMiles : 25) + ' miles, water ' +
           'temperature and discharge are measured rather than modelled.',
@@ -2376,10 +2381,11 @@
           '. It assimilates observations, so for today it replaces the forecast model’s own snow field.',
         'Terrain: elevation tiles read at the clicked coordinate, giving slope, aspect, relief and ' +
           'drainage at roughly 13 m rather than a regional average.',
-        'Land cover: NLCD 2021, sampled at the pin and on a ring around it.',
+        'Land cover at the pin: NLCD 2021, sampled at the point and on a ring around it.',
         'Climate: NOAA 1991-2020 daily normals from ' +
           (global.OG.planner ? global.OG.planner.stations : 0) + ' stations, for Plan a hunt.',
-        'Geography: Census state and county boundaries, Natural Earth water, 17,028 towns from GeoNames.',
+        'Geography: Census state and county boundaries, Natural Earth water' +
+          (towns ? ', ' + towns.toLocaleString() + ' towns from GeoNames.' : '.'),
         'Solar geometry and legal shooting light are computed, not looked up.'
       ].forEach(function (t) { real.appendChild(el('li', null, t)); });
       about.appendChild(real);
@@ -2387,22 +2393,42 @@
       about.appendChild(el('p', null, 'The data above refreshes several times a day on its own. Between ' +
         'refreshes it is a snapshot, so the age shown next to the forecast is the number that matters.'));
 
+      /* What the map is built from. Fixed until the build is run again. */
+      var built = el('ul', 'drivers pos');
+      [
+        'Habitat: NLCD 2021 land cover and elevation at a tenth of a degree, scored species by species, ' +
+          'and bird by bird for upland birds.',
+        'Range: USGS Gap Analysis Project range maps for elk and moose; the same maps together with ' +
+          'occurrence records for whitetail and turkey; occurrence records alone for everything else ' +
+          '(GBIF, 2015-2025, only records licensed CC BY or CC0). Each species is checked against a list ' +
+          'of places where the answer is known - nearly 1,400 in all.',
+        'Trout water: summer water temperature from USGS gauges, and established populations from the ' +
+          'USGS Nonindigenous Aquatic Species database.',
+        'Hunting pressure: how much developed land is within about an hour’s drive, from NLCD.'
+      ].forEach(function (t) { built.appendChild(el('li', null, t)); });
+      about.appendChild(built);
+
       var notReal = el('ul', 'drivers neg');
       [
         'Season dates are placeholders. They are framework envelopes shaped like real seasons, not real ' +
-          'seasons, and they are the one thing here that can get you cited. Confirm with the agency.',
-        'Species models are uncalibrated. The weights are reasoned, not fitted to outcome data, because ' +
-          'there is no outcome data yet.',
-        'Species range uses occurrence records as a presence signal, which is coarser than a real ' +
-          'abundance estimate.',
-        'Hunting pressure is a proxy from metro proximity, not measured pressure.',
+          'seasons, and they are the one thing here that can get you cited. Which states have a season ' +
+          'for each upland bird, and which have a fall turkey season, is also unchecked. Confirm with ' +
+          'the agency.',
+        'The species models have not been tested against hunting results. The weights are judgement, not ' +
+          'fitted to harvest or success data, because there is none yet. The score scale is calibrated so ' +
+          'that 90 means near the best a species gets anywhere, but that is a rescaling, not a test.',
+        'Range says where a species lives, not how many there are. Scores rate the ground and the ' +
+          'conditions, not the size of a herd or a flock.',
+        'The written advice - tactics, setups, hatches and flies - is from general knowledge and has not ' +
+          'been reviewed by a guide.',
+        'Hunting pressure is estimated from nearby development, not counted.',
         'Alaska and Hawaii are not covered.'
       ].forEach(function (t) { notReal.appendChild(el('li', null, t)); });
       about.appendChild(notReal);
 
       about.appendChild(el('p', 'note', 'The map projection is Web Mercator so raster basemaps line up. ' +
-        'Relief and satellite imagery are Esri tile services; the opportunity surface is sampled on a ' +
-        'world-space lattice and upscaled, which is why there are no longer any hexagons.'));
+        'Relief, topo and satellite imagery are USGS National Map services; the opportunity surface is ' +
+        'sampled on a world-space lattice and upscaled.'));
       root.appendChild(about);
       return root;
     });
