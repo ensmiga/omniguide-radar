@@ -3451,7 +3451,9 @@
       /* Which layers those are is the radar's to say - see hasFlow. The
          Movement layer only animates for waterfowl, and repainting a
          still map sixty times a second is wasted battery. */
-      if (App.dirty || radar.hasFlow(App.state.layer, App.state.species)) {
+      /* pending: the colour layer is still being scored a slice a frame
+         after a zoom - see fieldLevels in radar.js. */
+      if (App.dirty || radar.pending || radar.hasFlow(App.state.layer, App.state.species)) {
         radar.draw();
         App.dirty = false;
       }

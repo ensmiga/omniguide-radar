@@ -478,6 +478,52 @@
   var fieldAux = new Map();       // numeric key -> wind direction, for streamlines
   var fieldStamp = '';
 
+  /* One lattice per zoom step, kept.
+
+     The lattice spacing used to follow the zoom exactly, so every turn of
+     the wheel was a new lattice: the whole colour layer was thrown away
+     and every sample scored again from nothing. Measured in a 600 px wide
+     window, a redraw from the cache took 7 ms and each zoom step 120 to
+     220 ms - and a wide screen has two or three times the samples.
+
+     The spacing now snaps to half-octave steps, so zooming within a step
+     reuses everything, and the last few steps are kept, so zooming back
+     is free. Samples land 7.6 to 10.7 screen pixels apart instead of
+     exactly 9. A step not yet scored is filled over several frames, a
+     slice at a time, and until a sample is ready the nearest one from a
+     step that is already scored stands in for it. */
+  var fieldLevels = new Map();    // level -> { vals, aux, nodeWorld }
+  var FIELD_KEEP = 4;             // zoom steps kept
+  /* Milliseconds of scoring per frame: a little while the view is moving,
+     so it keeps up with the wheel, and more once it has stopped, so the
+     new step sharpens quickly. */
+  var FIELD_BUDGET_MOVING = 10, FIELD_BUDGET_STILL = 30, FIELD_STILL_MS = 200;
+
+  function fieldLevel(level) {
+    var L = fieldLevels.get(level);
+    if (!L) {
+      L = { vals: new Map(), aux: new Map(), nodeWorld: Math.pow(2, -level / 2) };
+      fieldLevels.set(level, L);
+      if (fieldLevels.size > FIELD_KEEP) {
+        var far = null, fd = -1;
+        fieldLevels.forEach(function (v, k) { var d = Math.abs(k - level); if (d > fd) { fd = d; far = k; } });
+        fieldLevels.delete(far);
+      }
+    }
+    return L;
+  }
+
+  /* A ready value for this spot from another zoom step, nearest step first. */
+  function standIn(level, wx, wy) {
+    var best = NaN, bd = 99;
+    fieldLevels.forEach(function (L, k) {
+      if (k === level || Math.abs(k - level) >= bd) return;
+      var v = L.vals.get(fkey(Math.round(wx / L.nodeWorld), Math.round(wy / L.nodeWorld)));
+      if (v !== undefined) { best = v; bd = Math.abs(k - level); }
+    });
+    return best;
+  }
+
   function fkey(gx, gy) { return (gx + 32768) * 65536 + (gy + 32768); }
 
   Radar.prototype.fieldValue = function (gx, gy, nodeWorld, spId, layer, t, day, ent) {
@@ -548,13 +594,18 @@
        lattice was stepping straight over it. A cold field build costs
        43 ms at 15 px and cached redraws cost 3 ms, so there was room to
        pay for this. */
-    var nodeWorld = 9 / z;
+    /* Snapped to the nearest half octave - see fieldLevels. */
+    var level = Math.round(2 * Math.log2(z / 9));
     /* oppMode is in the stamp because Spot and Day are different numbers
        for the same cell - without it, switching the toggle would redraw
-       from the cache and show the old surface. */
-    var stamp = [spId, layer, this.app.state.oppMode, t, nodeWorld.toFixed(6),
+       from the cache and show the old surface. The zoom is not: each
+       step has its own lattice. */
+    var stamp = [spId, layer, this.app.state.oppMode, t,
                  ent.pro ? 1 : 0, ent.state, ent.species].join('|');
-    if (stamp !== fieldStamp) { fieldVals.clear(); fieldAux.clear(); fieldStamp = stamp; }
+    if (stamp !== fieldStamp) { fieldLevels.clear(); fieldStamp = stamp; }
+    var lvl = fieldLevel(level);
+    var nodeWorld = lvl.nodeWorld;
+    fieldVals = lvl.vals; fieldAux = lvl.aux;
 
     var tl = this.toWorld(0, 0, [0, 0]), br = this.toWorld(this.w, this.h, [0, 0]);
     var gx0 = Math.floor(tl[0] / nodeWorld) - 1, gx1 = Math.ceil(br[0] / nodeWorld) + 1;
@@ -583,9 +634,22 @@
     var alpha = Math.round(255 * opacity);
     var softAlpha = wxl && (layer === 'precip' || layer === 'snowpack');
 
+    var now = performance.now(), vk = z + ':' + this.view.cx + ':' + this.view.cy;
+    if (vk !== this._viewKey) { this._viewKey = vk; this._movedAt = now; }
+    var deadline = now + (now - (this._movedAt || 0) < FIELD_STILL_MS ? FIELD_BUDGET_MOVING : FIELD_BUDGET_STILL);
+    var behind = false;
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        var v = this.fieldValue(gx0 + c, gy0 + r, nodeWorld, spId, layer, t, day, ent);
+        var gx = gx0 + c, gy = gy0 + r;
+        var v = fieldVals.get(fkey(gx, gy));
+        if (v === undefined) {
+          if (!behind && performance.now() < deadline) {
+            v = this.fieldValue(gx, gy, nodeWorld, spId, layer, t, day, ent);
+          } else {
+            behind = true;
+            v = standIn(level, gx * nodeWorld, gy * nodeWorld);
+          }
+        }
         var o = (r * cols + c) * 4;
         if (v !== v) continue;                                  // NaN: transparent
         var col, a;
@@ -636,6 +700,8 @@
     ctx.restore();
 
     this.field = { gx0: gx0, gy0: gy0, cols: cols, rows: rows, nodeWorld: nodeWorld };
+    /* More to score: ask for another frame. */
+    this.pending = behind;
   };
 
   /* Bilinear read-back of the field the last frame drew, for streamlines and
