@@ -299,6 +299,83 @@
     };
   }
 
+  /* ---------- When bears are out ----------
+
+     A bear's year is the den, then spring green-up, a summer lull with the
+     breeding season in it, and the fall, when it eats for the winter and is
+     on its feet most.
+
+     When it dens is read from the winter: the normal mean air temperature
+     of the third week of January (NOAA 1991-2020, see climo.js), taken at
+     no higher than 7,000 ft because bears feed below the peaks in the fall.
+     The dates first moved with latitude alone, and that put the den two
+     weeks late in northern Minnesota - into November, where the state's
+     season closes in mid October - and two to three weeks early in
+     Pennsylvania and the Smokies, which marked down the Pennsylvania
+     season the week before Thanksgiving. The same latitude has a harder
+     winter in Minnesota than in Montana or Maine, and the winter is the
+     better guide.
+
+     West of the plains the den comes about three weeks sooner for the same
+     winter: there the fall food is berries, which finish, and in the east
+     it is acorns and beechnuts, which lie on the ground into December.
+     All of the slopes are a judgement, set so the dates fall where the den
+     is generally said to: late October in northern Minnesota and the high
+     Rockies, November in Maine, Idaho and Montana, early December in
+     Pennsylvania, late December through the southern mountains, and out
+     from late February in Florida to mid April in the north. Where the
+     winter is mild many bears never den at all - males most of all - so
+     on the Gulf coast and in Florida half of them are counted as up
+     through the den months. */
+  var bearDenCache = new Map();
+  function bearDen(lon, lat, elevFt) {
+    var key = lon == null ? null : Math.round(lon * 40) * 4096 + Math.round(lat * 40);
+    var hit = key == null ? undefined : bearDenCache.get(key);
+    if (hit !== undefined) return hit;
+    var cl = (key != null && global.OG.climo) ? global.OG.climo.at(lon, lat, 2, elevFt) : null;
+    var r;
+    if (cl) {
+      var jan = cl.tmean + Math.max(0, (elevFt || 0) - 7000) * 0.00357;
+      var west = clamp01((-100 - lon) / 4);
+      r = { denIn: clamp(305 + 2.4 * (jan - 7) - 20 * west, 295, 365),
+            denOut: clamp(102 - (jan - 7) + 5 * west, 40, 120),
+            mild: clamp01((jan - 40) / 10) };
+    } else {
+      /* No normals: by latitude, high ground counting as further north. */
+      var la = (lat == null ? 42 : lat) + clamp(((elevFt || 0) - 2000) / 1000, 0, 6) * 1.2;
+      r = { denIn: clamp(325 + (45 - la) * 2.5, 300, 365),
+            denOut: clamp(105 - (45 - la) * 2.5, 50, 120),
+            mild: lat != null && lat < 31.5 ? 1 : 0 };
+    }
+    if (key != null) {
+      if (bearDenCache.size > 40000) bearDenCache.clear();
+      bearDenCache.set(key, r);
+    }
+    return r;
+  }
+
+  /* The fall peak is the eating before the den, so it moves with the den:
+     early September in northern Minnesota, mid October in Pennsylvania,
+     late October in the southern mountains. It was the 12th of September
+     everywhere, which made the hot end of summer the best fall week on the
+     Carolina coast and left spring the best time of year there. Day of
+     year in, and what part of the year it is out. */
+  function bearSeason(doy, lon, lat, elevFt) {
+    /* The map's day count runs on past the end of the year. */
+    doy = (((doy - 1) % 365) + 365) % 365 + 1;
+    var d = bearDen(lon, lat, elevFt);
+    var denIn = d.denIn, denOut = d.denOut;
+    var inDen = doy >= denIn || doy < denOut;
+    var awake = inDen ? 0 : clamp01(Math.min((doy - denOut) / 18, (denIn - doy) / 18));
+    var spring = Math.exp(-Math.pow((doy - (denOut + 38)) / 24, 2));
+    var fallPeak = clamp(denIn - 55, 245, 300);
+    var fall = Math.exp(-Math.pow((doy - fallPeak) / 42, 2));
+    var v = awake * clamp01(0.45 + 0.4 * spring + 0.55 * fall);
+    var phase = inDen ? 'den' : doy < denOut + 70 ? 'spring' : doy < 213 ? 'summer' : 'fall';
+    return { v: Math.max(0.08 + 0.27 * d.mild, v), phase: phase, denIn: denIn, denOut: denOut,
+             fallPeak: fallPeak, mild: d.mild, awake: awake };
+  }
+
   /* ---------- When turkeys gobble ----------
 
      The spring peak was the 25th of April everywhere. Turkeys in south
@@ -598,6 +675,43 @@
       }
     },
     {
+      id: 'bear', name: 'Black bear', group: 'biggame', pursuit: 'hunt',
+      migratory: false, habKey: 'bear',
+      pressureSens: 0.08,
+      distWeight: 0.40,
+      /* The test list leaves anything from 0.00 to 0.48 open: no place
+         without bears reads above nothing, and the thinnest real bear
+         ground, the southern Sierra, reads 0.48. 0.15 drops the fringe of
+         open ground with a sliver of timber beside it. */
+      habFloor: 0.15, rangeFloor: 0.03,
+      weights: { hab: 0.42, move: 0.36, mig: 0, wx: 0.22 },
+      blurb: 'Black bear. Spring green-up and the fall feed before the den; food, cover and a nose that ' +
+             'misses nothing. Grizzlies are protected wherever they live in the lower 48.',
+      movement: function (wx, hab, doy) {
+        var bs = bearSeason(doy, hab.lon, hab.lat, hab.elev);
+        return blend([
+          { w: 2.0, v: bs.v,
+            hi: bs.phase === 'spring' ? 'Spring green-up - bears out of the den and feeding hard'
+              : bs.phase === 'fall' ? 'Fall feeding - bears putting on fat before the den'
+              : 'Bears up and feeding',
+            lo: bs.phase === 'den' ? 'Bears are in the den here at this time of year'
+              : 'Summer lull - bears scattered and breeding' },
+          { w: 1.5, v: pref(wx.tempF, 50, 24),
+            hi: 'Cool enough that bears feed into the morning and start early in the evening',
+            lo: wx.tempF > 65 ? 'Warm - bears bed in shade and feed only at the edges of the day'
+                              : 'Cold enough to slow bears down' },
+          { w: 1.3, v: clamp01(hab.bear * 1.3), hi: 'Timber with food in it - mast, berries, openings',
+            lo: 'Thin bear country' },
+          { w: 1.0, v: 1 - clamp01((wx.precip - 0.15) * 2.2),
+            hi: 'Dry or a light drizzle - bears keep moving in light rain', lo: 'Heavy rain - bears tuck into cover' },
+          { w: 1.0, v: 1 - clamp01(ramp(wx.windSpd, 12, 30)),
+            hi: 'Steady enough wind to keep your scent off the bear', lo: 'Strong, swirling wind - a bear\'s nose will find you' },
+          { w: 0.6, v: 0.4 + 0.6 * clamp01(0.5 - wx.pressTrend * 0.5),
+            hi: 'Falling pressure ahead of weather', lo: null }
+        ]);
+      }
+    },
+    {
       id: 'turkey', name: 'Wild turkey', group: 'turkey', pursuit: 'hunt',
       migratory: false, habKey: 'turkey',
       pressureSens: 0.11,
@@ -746,6 +860,7 @@
     'muledeer':        [16.5, 76.9],
     'moose':           [8.1, 71.9],
     'pronghorn':       [9.5, 76.6],
+    'bear':            [10.2, 78.3],
     'turkey':          [39.0, 89.4],
     'upland':          [23.0, 80.4],
     'pheasant':        [24.7, 85.1],
@@ -841,8 +956,15 @@
   var HAB_ENOUGH = 0.33, HAB_THIN = 0.25;
 
   /* Measured seasonal presence for the groups that have a calendar,
-     nothing for those that do not move. */
-  function presenceFactor(sp, lat, doy) {
+     nothing for those that do not move - and for bears, whether they are
+     out of the den. A denned bear is not there to be hunted, and without
+     this a January in northern Minnesota scored 82: the den only marked
+     down the movement third of the score. */
+  function presenceFactor(sp, lat, doy, elevFt, lon) {
+    if (sp.id === 'bear') {
+      var bs = bearSeason(doy, lon, lat, elevFt);
+      return Math.max(0.5 * bs.mild, bs.awake);
+    }
     var hg = global.OG.habgrid;
     if (!sp.chronTaxa || !hg || !hg.seasonalPresence) return null;
     return hg.seasonalPresence(sp.chronTaxa, lat, doy);
@@ -965,7 +1087,7 @@
        is read from understates the swing and some birds are resident;
        the rest follows how much of its peak presence the group
        normally has at this latitude by this date. See habgrid.js. */
-    var present = presenceFactor(sp, lat, doy);
+    var present = presenceFactor(sp, lat, doy, hab.elev, lon);
     var shown = present == null ? 1 : PRESENT_FLOOR + (1 - PRESENT_FLOOR) * present;
     /* The rows of the breakdown keep their own values. They were
        being scaled in place, so the panel showed Habitat 97 in its
@@ -1080,6 +1202,17 @@
       a += 0.80 * bell(h - (sr + 1.0), 1.5);
       a += 0.70 * bell(h - (ss - 1.3), 1.4);
       a += 0.65 * bell(h - 12.5, 3.4);
+    } else if (sp.id === 'bear') {
+      /* Some at dawn, most in the last two hours of light, and more
+         through the middle of the day when it is cool. The midday term
+         was up to 0.60 and wide, and on a cold morning it outlasted the
+         evening above the cut the best-window finder uses: Idaho in May
+         and the Bitterroot in September both came out best from 11:15
+         to 2. A shoulder, not a peak. */
+      var coolB = clamp01(ramp(60 - wx.tempF, 0, 25));
+      a += 0.70 * bell(h - (sr + 0.6), 1.2);
+      a += 1.00 * bell(h - (ss - 1.0), 1.3);
+      a += (0.10 + 0.22 * coolB) * bell(h - 12.5, 2.6);
     } else if (sp.id === 'turkey') {
       a += 1.00 * bell(h - (sr + 0.35), 0.7);                // fly-down gobbling
       a += 0.55 * bell(h - (sr + 2.6), 1.3);                 // mid-morning strutting
@@ -1487,7 +1620,7 @@
     hourlyActivity: hourlyActivity,
     huntingPressure: huntingPressure, migration: migration, rutStage: rutStage,
     freezeLock: freezeLock, presenceFactor: presenceFactor, PRESENT_FLOOR: PRESENT_FLOOR,
-    gobblePeak: gobblePeak,
+    gobblePeak: gobblePeak, bearSeason: bearSeason,
     HAB_ENOUGH: HAB_ENOUGH, HAB_THIN: HAB_THIN,
     toScore: toScore, weatherScore: weatherScore
   };

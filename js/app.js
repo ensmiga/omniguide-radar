@@ -255,11 +255,16 @@
       };
     }
     if (fr >= 0.55 && tr > 0.25) {
+      /* Back to the usual hours - which for a bear are the evening. This
+         said "first light" to everyone, beside a bear plan whose peak
+         window was 4:30 to 6:45 in the afternoon. */
+      var lw = plan.legalWindow || plan.bioWindow;
+      var usual = lw && lw.startMin >= 12 * 60 ? 'The evening is' : 'First light is';
       return {
         head: 'A front has just passed',
         body: 'Pressure is rising ' + tr.toFixed(1) + ' hPa every three hours behind the boundary. ' +
           'The push came with the front; what is left is cold air and ' + who + ' that have already ' +
-          'moved. First light is the better bet again.'
+          'moved. ' + usual + ' the better bet again.'
       };
     }
     if (fr >= 0.35) {
@@ -429,7 +434,7 @@
         d: 'Weather data by Open-Meteo.com. The forecast grid, a blend of NBM, GFS, HRRR and ICON, refreshed several times a day.',
         l: 'CC BY 4.0', lu: CC_BY },
       { n: 'NOAA NCEI', u: 'https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals',
-        d: '1991-2020 daily climate normals, 494 stations. Everything beyond the forecast window.', l: 'Public domain' },
+        d: '1991-2020 daily climate normals, 494 stations. Everything beyond the forecast window, and when black bears den.', l: 'Public domain' },
       { n: 'USGS NWIS', u: 'https://waterservices.usgs.gov/',
         d: 'About 9,500 stream gauges: discharge and water temperature now, and at the 2,000 or so with a ' +
            'record, the mean water temperature for July and August - which is what says where water stays ' +
@@ -461,20 +466,22 @@
     { group: 'Species range and records', items: [
       { n: 'USGS Gap Analysis Project', u: 'https://doi.org/10.5066/F7Q81B3R',
         d: 'Species Range Maps CONUS_2001 (2018): every sub-watershed in the country marked by state range ' +
-           'data and expert review, 2008 to 2014. It is the range for elk and moose, and for whitetail and ' +
-           'turkey it is used alongside the records. Wandering animals and historical range are left out. Added from the ' +
+           'data and expert review, 2008 to 2014. It is the range for elk, moose and black bear, and for whitetail ' +
+           'and turkey it is used alongside the records. Its grizzly range is used only to warn black bear ' +
+           'hunters. Wandering animals and historical range are left out. Added from the ' +
            'state agencies concerned: elk released since at Black River State Forest in Wisconsin, Peck ' +
-           'Ranch in Missouri and Tomblin WMA in West Virginia, and the three prairie moose units of ' +
-           'north-west North Dakota.',
+           'Ranch in Missouri and Tomblin WMA in West Virginia, the three prairie moose units of ' +
+           'north-west North Dakota, and for black bear the Gila National Forest, the core of New Mexico\'s ' +
+           'bear zone 10, which the map leaves out (boundary from the USDA Forest Service).',
         l: 'Public domain' },
       { n: 'USGS Nonindigenous Aquatic Species database', u: 'https://nas.er.usgs.gov/',
         d: 'Self-sustaining populations of brown, rainbow, brook and cutthroat trout outside their native ' +
            'range, from agency surveys. One of the things that says where trout are. Stocking records, ' +
            'which are most of that database, are not used.', l: 'Public domain' },
       { n: 'GBIF', u: 'https://www.gbif.org/', gbif: true,
-        d: 'Occurrence records 2015-2025 for 44 taxa, counted in full through the GBIF maps and statistics ' +
+        d: 'Occurrence records 2015-2025 for 45 taxa, counted in full through the GBIF maps and statistics ' +
            'services - about 25.9 million. Only records individually licensed CC BY 4.0 or CC0 are used. They ' +
-           'decide whether a species is in range - except elk and moose, which use the USGS map, and whitetail ' +
+           'decide whether a species is in range - except elk, moose and black bear, which use the USGS map, and whitetail ' +
            'and turkey, which use both - and when waterfowl normally arrive, how many are normally ' +
            'present by date, and which birds the decoy, goose and upland advice names. Each upland bird\'s ' +
            'own map is drawn from its own records. They do not decide how good a place is, except that for ' +
@@ -1072,7 +1079,7 @@
       subtotal = afterLive;
     }
     if (shownF < 0.995) {
-      tbl.appendChild(calcRow('· Birds normally here by this date',
+      tbl.appendChild(calcRow(plan.species.id === 'bear' ? '· Bears normally out of the den by this date' : '· Birds normally here by this date',
         Math.round((bd.presence || 0) * 100) + '% of peak', '×' + shownF.toFixed(2),
         '→ ' + (subtotal * shownF).toFixed(1), 'calcsub'));
     }
@@ -2398,7 +2405,7 @@
       [
         'Habitat: NLCD 2021 land cover and elevation at a tenth of a degree, scored species by species, ' +
           'and bird by bird for upland birds.',
-        'Range: USGS Gap Analysis Project range maps for elk and moose; the same maps together with ' +
+        'Range: USGS Gap Analysis Project range maps for elk, moose and black bear; the same maps together with ' +
           'occurrence records for whitetail and turkey; occurrence records alone for everything else ' +
           '(GBIF, 2015-2025, only records licensed CC BY or CC0). Each species is checked against a list ' +
           'of places where the answer is known - nearly 1,400 in all.',

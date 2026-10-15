@@ -68,6 +68,8 @@ const SUIT = {
   muledeer:  { 52: 1.00, 71: 0.72, 42: 0.62, 43: 0.62, 41: 0.50, 31: 0.30, 82: 0.22, 81: 0.30, 90: 0.25 },
   whitetail: { 41: 1.00, 43: 0.95, 90: 0.90, 82: 0.76, 81: 0.70, 42: 0.60, 52: 0.48, 21: 0.34, 95: 0.45 },
   moose:     { 90: 1.00, 95: 0.86, 42: 0.80, 43: 0.75, 41: 0.60, 52: 0.52, 11: 0.40, 71: 0.20 },
+  /* Not used as a table - see bearSuit - but a species needs a row to exist. */
+  bear:      { 41: 1.00, 43: 1.00, 90: 0.95, 42: 0.80 },
   pronghorn: { 71: 1.00, 52: 0.86, 81: 0.50, 82: 0.36, 31: 0.30, 21: 0.10 },
   /* Not used as a table - see turkeySuit - but a species needs a row to exist. */
   turkey:    { 41: 1.00, 43: 0.90, 42: 0.75, 90: 0.60 },
@@ -156,6 +158,7 @@ const ELEV = {
      being shaved by the same ramp. */
   whitetail: [-400, -300, 7500, 10000],
   moose:     [0, 400, 11000, 12500],
+  bear:      [-400, -300, 11000, 12500],
   pronghorn: [800, 3000, 10000, 11500],
   turkey:    [-400, -300, 9300, 10300],
   upland:    [-400, -300, 10500, 12000],
@@ -171,6 +174,7 @@ const TAXA = {
   muledeer:  ['Odocoileus hemionus'],
   whitetail: ['Odocoileus virginianus'],
   moose:     ['Alces alces'],
+  bear:      ['Ursus americanus'],
   pronghorn: ['Antilocapra americana'],
   turkey:    ['Meleagris gallopavo'],
   /* Sixteen birds, not nine. The first list was the birds of the plains
@@ -1553,6 +1557,50 @@ function turkeySuit(lc, presence) {
   return { recorded: recorded, mapped: mapped };
 }
 
+/* ---------- black bear ----------
+
+   Timber first - mast in the hardwoods, cover in the conifers - and the
+   wooded swamps of the south-east coast, which hold some of the densest
+   bear populations there are. Then open ground: brush for its berries,
+   fields for corn, wheat and peanuts, pasture and orchards. A bear uses
+   open ground from the timber beside it and not otherwise, so open ground
+   counts in proportion to the timber in and around the cell.
+
+   Scored as a plain table, with brush at 0.45, every sagebrush basin the
+   USGS map's watersheds reach came in as bear range: Wyoming, Utah,
+   Idaho, Oregon and Washington each read 77 to 80 percent, and the Snake
+   River Plain 0.29. And fields counted for little whatever was beside
+   them, so the coastal plain of North Carolina - swamp and farmland, and
+   as many bears as anywhere - read 0.44, below the Bighorns.
+
+   Water is left out of the sum rather than counted against it: a cell
+   that is half Pamlico Sound or half Lake Tahoe is half the ground, not
+   half-good ground. Only where there is a fair amount of land, so that a
+   shoreline cell is not stretched into something it is not. */
+const BEAR_TIMBER = { 41: 1.00, 43: 1.00, 90: 0.95, 42: 0.80 };
+const BEAR_OPEN = { 52: 0.50, 82: 0.45, 81: 0.35, 95: 0.30, 71: 0.20, 21: 0.15 };
+const BEAR_BESIDE = 0.15;          // timber share, in the cell or round it, at which open ground counts in full
+
+function bearSuit(lc) {
+  const frac = (cls, k) => { const a = lc.counts.get(cls); return a ? a[k] / lc.total[k] : 0; };
+  const landOf = (k) => { const land = 1 - frac(11, k) - frac(12, k); return land >= 0.25 ? land : 1; };
+  const part = (table, k) => {
+    let v = 0;
+    for (const c of Object.keys(table)) { const a = lc.counts.get(+c); if (a) v += table[c] * a[k] / lc.total[k]; }
+    return v / landOf(k);
+  };
+  const forest = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) if (lc.total[k]) forest[k] = frac(41, k) + frac(42, k) + frac(43, k) + frac(90, k);
+  const nearForest = smooth(forest, 1);
+  const out = new Float32Array(NCELL);
+  for (let k = 0; k < NCELL; k++) {
+    if (!lc.total[k]) continue;
+    const beside = clamp01(Math.max(forest[k], nearForest[k]) / BEAR_BESIDE);
+    out[k] = clamp01(part(BEAR_TIMBER, k) + part(BEAR_OPEN, k) * beside);
+  }
+  return out;
+}
+
 /* ---------- geese ----------
 
    Geese were scored on the duck surface, which is water and marsh with
@@ -1786,7 +1834,11 @@ async function main() {
     let tot = 0;
     for (let k = 0; k < NCELL; k++) tot += occ[sp][k];
     if (tot > 0) for (let k = 0; k < NCELL; k++) occ[sp][k] /= tot;
-    if (sp !== 'goose') for (let k = 0; k < NCELL; k++) effort[k] += occ[sp][k];
+    /* Bear stays out of the effort sum, as geese do. Its range is the USGS
+       map, so its records are not asked much - and adding a species to
+       the sum moves every other species' presence plane, which their
+       thresholds were measured on. */
+    if (sp !== 'goose' && sp !== 'bear') for (let k = 0; k < NCELL; k++) effort[k] += occ[sp][k];
     if (sp === 'upland') uplandTaxa = perTaxon;
   }
 
@@ -1816,7 +1868,7 @@ async function main() {
     const gobblers = sp === 'turkey'
       ? turkeySuit(lc, Float32Array.from(share, (v) => clamp01(Math.pow(clamp01(v / p97), 0.45)))) : null;
     const ducks = sp === 'waterfowl' ? waterfowlSuit(lc, rice) : sp === 'goose' ? gooseSuit(lc, rice)
-      : gobblers ? gobblers.recorded : null;
+      : gobblers ? gobblers.recorded : sp === 'bear' ? bearSuit(lc) : null;
     const birds = sp === 'upland' && uplandTaxa
       ? (uplandBest = uplandSuit(lc, ev.reliefFt, uplandTaxa, normalsGrid(ev.meanFt, 0, 3))).val : null;
     for (let k = 0; k < NCELL; k++) {

@@ -218,6 +218,49 @@ const SPECIES = {
     shapes: [1353601],
     keep: [1],
     added: []
+  },
+
+  /* BLACK BEAR.
+
+     The records cannot do it: openly licensed black bear photographs run
+     to 234 in the Great Smoky Mountains and 4 across the whole of
+     northern Minnesota, which is a map of where people walk with phones.
+     The USGS map is used outright, as for elk and moose.
+
+     Against 56 places bears are and 28 they are not it has 54 and 27. One
+     of the two misses was the test, not the map: the point chosen for the
+     Atchafalaya sat between the basin's two bear populations, and is now
+     at Krotz Springs, in the northern one. The other is a hole in the map.
+     It has no bears in the eastern Gila Wilderness, the Aldo Leopold or the
+     Black Range - the middle of New Mexico's bear zone 10, whose units
+     carry the state's largest bear limit, 197 a season (19.31.11 NMAC,
+     New Mexico Register, 21 November 2023). The Gila National Forest is
+     added, as the Forest Service draws it; the habitat surface decides
+     what inside it is bear ground and what is desert.
+
+     The Louisiana and Florida subspecies have maps of their own, and both
+     lie wholly inside this one. One shape, known native range. */
+  bear: {
+    item: '59f5e250e4b063d5d307dde5',
+    name: 'American Black Bear (Ursus americanus) mABBEx_CONUS_2001v1 Range Map',
+    shapes: [671364],
+    keep: [1],
+    added: [
+      { name: 'Gila National Forest, New Mexico', usfs: 'Gila National Forest',
+        by: 'New Mexico Department of Game and Fish, bear zone 10 (19.31.11 NMAC); boundary from the USDA Forest Service' }
+    ]
+  },
+
+  /* GRIZZLY. Not a game species anywhere in the lower 48 - it is federally
+     protected - and not scored. It is here so that a black bear plan can
+     say when it is in grizzly country. Known range only; historical range
+     is in the table and not in the shape. */
+  grizzly: {
+    item: '59f5e1c9e4b063d5d307dae7',
+    name: 'Brown Bear (Ursus arctos) mBRBEx_CONUS_2001v1 Range Map',
+    shapes: [49528],
+    keep: [1],
+    added: []
   }
 };
 
@@ -345,10 +388,53 @@ function rasterise(shp, sp) {
   return inside;
 }
 
-/* Additions are a circle round a release site, or a box where the state
-   describes a hunting unit by the highways round it. */
+/* A national forest by name, from the Forest Service's administrative
+   boundaries (public domain), kept in the cache after the first fetch. */
+async function usfsRings(name) {
+  mkdirSync(CACHE, { recursive: true });
+  const path = join(CACHE, 'usfs-' + name.replace(/[^A-Za-z]+/g, '-') + '.json');
+  if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf8'));
+  const url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer/1/query?where=' +
+    encodeURIComponent("FORESTNAME='" + name + "'") + '&outFields=FORESTNAME&returnGeometry=true&outSR=4326&geometryPrecision=4&f=json';
+  const j = await (await fetch(url, { headers: { 'user-agent': 'omniguide-ingest' } })).json();
+  if (!j.features || j.features.length !== 1) throw new Error('Forest Service boundary for ' + name + ': ' + (j.features ? j.features.length : 0) + ' features');
+  const rings = j.features[0].geometry.rings;
+  writeFileSync(path, JSON.stringify(rings));
+  return rings;
+}
+
+/* Even-odd fill of lon/lat rings onto the sample points. */
+function fillRings(inside, rings) {
+  const rows = Array.from({ length: H }, () => []);
+  for (const r of rings) {
+    for (let i = 1; i < r.length; i++) {
+      const x0 = (r[i - 1][0] - LON0) / d, y0 = (r[i - 1][1] - LAT0) / d;
+      const x1 = (r[i][0] - LON0) / d, y1 = (r[i][1] - LAT0) / d;
+      if (y0 === y1) continue;
+      const lo = Math.min(y0, y1), hi = Math.max(y0, y1);
+      for (let j = Math.max(0, Math.ceil(lo - 0.5)); j <= Math.min(H - 1, Math.floor(hi - 0.5)); j++) {
+        const yc = j + 0.5;
+        if (yc < lo || yc >= hi) continue;
+        rows[j].push(x0 + (x1 - x0) * (yc - y0) / (y1 - y0));
+      }
+    }
+  }
+  for (let j = 0; j < H; j++) {
+    const xs = rows[j];
+    if (!xs.length) continue;
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      for (let i = Math.max(0, Math.ceil(xs[k] - 0.5)); i <= Math.min(W - 1, Math.floor(xs[k + 1] - 0.5)); i++) inside[j * W + i] = 1;
+    }
+  }
+}
+
+/* Additions are a circle round a release site, a box where the state
+   describes a hunting unit by the highways round it, or a national forest
+   drawn as the Forest Service draws it. */
 function addAreas(inside, list) {
   for (const c of list) {
+    if (c.rings) { fillRings(inside, c.rings); continue; }
     if (c.box) {
       for (let j = Math.max(0, Math.floor((c.box[1] - LAT0) / d)); j < Math.min(H, Math.ceil((c.box[3] - LAT0) / d)); j++) {
         for (let i = Math.max(0, Math.floor((c.box[0] - LON0) / d)); i < Math.min(W, Math.ceil((c.box[2] - LON0) / d)); i++) inside[j * W + i] = 1;
@@ -394,6 +480,7 @@ const out = {
 
 for (const [id, sp] of Object.entries(SPECIES)) {
   const zip = await fetchArchive(sp);
+  for (const c of sp.added) if (c.usfs) c.rings = await usfsRings(c.usfs);
   const inside = rasterise(unzip(zip, /\.shp$/i), sp);
   const mapped = toCells(inside).touched;
   addAreas(inside, sp.added);

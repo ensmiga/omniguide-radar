@@ -235,7 +235,7 @@
     var thin = models.HAB_THIN == null ? 1
       : models.HAB_THIN + (1 - models.HAB_THIN) * clamp01(habV / models.HAB_ENOUGH);
     /* And scaled by how many of the birds are normally here yet. */
-    var present = models.presenceFactor ? models.presenceFactor(sp, lat, doy) : null;
+    var present = models.presenceFactor ? models.presenceFactor(sp, lat, doy, hab.elev, lon) : null;
     var shown = present == null ? 1 : models.PRESENT_FLOOR + (1 - models.PRESENT_FLOOR) * present;
 
     /* What a day of ordinary weather would score in this week, on the

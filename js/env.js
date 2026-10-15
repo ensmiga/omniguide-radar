@@ -295,6 +295,9 @@
     var upland = clamp01(0.05 + g.upland * 0.92 + openness * 0.12 + (detail - 0.5) * 0.16);
     var pronghorn = clamp01(g.pronghorn * 0.95 * (0.5 + 0.6 * openness) +
                             (detail - 0.5) * 0.12);
+    /* No hand-drawn surface for bear; if the raster is missing, timbered
+       game country stands in for it. */
+    var bear = clamp01(0.5 * turkey + 0.3 * moose + 0.2 * elk);
 
     /* REAL HABITAT OVERRIDE.
 
@@ -329,6 +332,7 @@
       if ((r = hg.at('turkey', lon, lat)) != null) { turkey = r; realSrc.turkey = true; }
       if ((r = hg.at('upland', lon, lat)) != null) { upland = r; realSrc.upland = true; }
       if ((r = hg.at('pronghorn', lon, lat)) != null) { pronghorn = r; realSrc.pronghorn = true; }
+      if ((r = hg.at('bear', lon, lat)) != null) { bear = r; realSrc.bear = true; }
       if ((r = hg.at('trout', lon, lat)) != null) { trout = r; realSrc.trout = true; }
       /* The kind of water, from land cover. The regions above were the
          only source, and outside them everywhere read as "any reliable
@@ -349,7 +353,7 @@
       lon: lon, lat: lat,
       elev: elev, waterfowl: wf, goose: goose, trout: trout, elk: elk,
       whitetail: whitetail, muledeer: muledeer, moose: moose,
-      turkey: turkey, upland: upland, pronghorn: pronghorn,
+      turkey: turkey, upland: upland, pronghorn: pronghorn, bear: bear,
       cls: cls, region: region, water: tw, waterCls: tcls,
       openness: openness, realHab: realSrc,
       /* Evidence that water here stays open when it turns hard - see

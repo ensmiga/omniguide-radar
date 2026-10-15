@@ -445,6 +445,7 @@
 
   function bigGamePlan(sc, legal, win, doy) {
     if (sc.species.id === 'elk') return elkPlan(sc, legal, win, doy);
+    if (sc.species.id === 'bear') return bearPlan(sc, legal, win, doy);
     var wx = sc.wx, id = sc.species.id;
     /* The rut is read from the calendar, never from the movement score:
        weather decides how much of it shows in daylight, not whether it
@@ -545,6 +546,100 @@
                                         : 'Steady conditions for a longer shot, off a bipod or pack' }
       ];
     }
+    return { headline: rec[0], recommendation: rec, setup: setup };
+  }
+
+  /* ---------- Black bear strategy ----------
+
+     Where in the year it is decides the hunt: spring bears are on the
+     first green, fall bears on whatever food is heaviest, and a denned bear
+     is not on the map at all. In open western country that is spot and
+     stalk from a glassing point; in eastern timber you cannot glass, so you
+     wait where the food is. Every plan says the same three things about
+     the law, because they are where bear hunters get into trouble:
+     methods differ state to state, sows with cubs are protected nearly
+     everywhere, and a grizzly is not a big black bear. */
+  function grizzlyNear(lon, lat) {
+    var hg = global.OG.habgrid;
+    if (!hg || !hg.publishedAt) return 0;
+    var best = 0;
+    for (var dy = -0.6; dy <= 0.61; dy += 0.3) {
+      for (var dx = -0.8; dx <= 0.81; dx += 0.4) {
+        var v = hg.publishedAt('grizzly', lon + dx, lat + dy);
+        if (v != null && v > best) best = v;
+        if (best >= 1) return 1;
+      }
+    }
+    return best;
+  }
+  var GRIZZLY_STATES = { MT: 1, WY: 1, ID: 1, WA: 1 };
+
+  function bearPlan(sc, legal, win, doy) {
+    var wx = sc.wx, hab = sc.hab;
+    var bs = models.bearSeason ? models.bearSeason(doy, sc.lon, sc.lat, hab && hab.elev) : { phase: 'fall', mild: 0 };
+    /* West of the plains. At 104 W, Big Bend and the Davis Mountains were
+       told about beechnuts, apples and standing corn. */
+    var west = sc.lon < -101;
+    var windName = env.dirName(wx.windFrom);
+    var rec = [], setup = [];
+    var si = geo.stateIndexAt(sc.lon, sc.lat), abbr = si >= 0 ? geo.states[si].abbr : '';
+
+    if (bs.phase === 'den') {
+      rec.push('Bears are normally in the den here at this time of year. There is little to hunt until they ' +
+        'come out' + (bs.mild > 0.25 ? ', though where the winter is this mild many - males especially - never den at all.' : '.'));
+    } else if (bs.phase === 'spring') {
+      rec.push(west
+        ? 'Spring bears are on the first green grass. Glass south-facing slopes, avalanche chutes, old burns ' +
+          'and clearcuts from a high point in the morning and the last two hours of light, then close in on foot.'
+        : 'Spring bears are on the first green: clover and grass along logging roads, clearcuts and creek ' +
+          'bottoms. Watch those openings morning and evening from the downwind side.');
+    } else if (bs.phase === 'summer') {
+      rec.push('This is the summer lull - bears are breeding and spread out, and seasons are mostly closed. ' +
+        'Scout the berry patches and mast stands that will matter in the fall.');
+    } else {
+      rec.push(west
+        ? 'Find the food and glass it. Late summer is berries - huckleberry, chokecherry, serviceberry - and fall ' +
+          'is whatever is left: berries at elevation, acorns and pinyon nuts lower down. Glass from a point at first ' +
+          'and last light and stalk with the wind in your face.'
+        : 'Find the food. Early fall is berries and soft mast, later it is acorns, beechnuts, apples and standing ' +
+          'corn. Hunt the trails between that food and thick bedding cover, from the downwind side.');
+    }
+    rec.push('Wind is ' + windName + ' at ' + Math.round(wx.windSpd) + ' mph. A bear\'s nose is the best in the woods - ' +
+      'keep the wind in your face on every approach and set up downwind of where the bear will come from.');
+    if (wx.tempF > 70) rec.push('Warm at ' + Math.round(wx.tempF) + ' degrees. Bears will bed in shade through the ' +
+      'middle of the day and feed late in the evening - the last hour of light is the one to be ready for.');
+    else if (wx.tempF < 55 && bs.phase !== 'den') rec.push('Cool weather keeps bears feeding longer into the morning ' +
+      'and starting earlier in the evening.');
+
+    /* The law, every time. */
+    rec.push('Bear seasons, methods and limits differ state to state: baiting and hounds are legal in some and ' +
+      'banned in others, and many make it illegal to shoot a cub or a sow with cubs. A lone bear can be a sow ' +
+      'with her cubs out of sight - wait, and look. Check the rules with the state agency before you hunt.');
+    var g = grizzlyNear(sc.lon, sc.lat);
+    if (g > 0) {
+      rec.push('This is grizzly country. Grizzlies are protected, and colour is no guide - a brown or blond ' +
+        'black bear is common and a dark grizzly is too. Know the shoulder hump, the dished face, the short ' +
+        'rounded ears and the long claws, be certain before you shoot, and carry bear spray. Some states ' +
+        'require hunters to pass a bear identification test.');
+    } else if (GRIZZLY_STATES[abbr]) {
+      rec.push('Grizzlies turn up outside their mapped range in this state. Be certain of the bear before you ' +
+        'shoot - they are protected.');
+    }
+    rec.push('Cook bear meat all the way through. It can carry trichinella.');
+
+    setup = [
+      { k: 'Where', v: bs.phase === 'spring'
+          ? (west ? ['South-facing slopes and avalanche chutes greening up', 'Glassing points above them']
+                  : ['Logging roads, clearcuts and creek bottoms greening up', 'The downwind edge of the opening'])
+          : (west ? ['Berry patches and mast within reach of timber', 'A glassing point that covers them']
+                  : ['The food source itself, or the trail from bedding cover to it', 'Thick cover close by: a bear will not walk far in the open']) },
+      { k: 'Wind', v: windName + ' ' + Math.round(wx.windSpd) + ' mph - approach and sit with it in your face' },
+      { k: 'Timing', v: wx.tempF > 65 ? 'The last two hours of light, and first light'
+                                       : 'Morning into mid-morning, and the last two hours of light' },
+      { k: 'Glassing', v: west ? 'Sit and glass more than you walk. Bears turn up feeding in the open, briefly.'
+                               : 'Little in timber - let the food bring the bear to you' },
+      { k: 'Shot', v: 'Wait for a broadside, still bear. Check behind it for cubs before you shoot.' }
+    ];
     return { headline: rec[0], recommendation: rec, setup: setup };
   }
 
@@ -1244,9 +1339,13 @@
 
   function failureModes(sc, legalRes) {
     var f = [];
+    /* "The side of the water" was written for ducks and shown to every
+       species, bears and elk included. */
     if (sc.wx.frontal > 0.5)
       f.push('The front is close to this location. If it arrives a few hours early or late the wind direction flips, ' +
-             'and the side of the water you should be on flips with it. Check the actual wind before you set up.');
+             (sc.species.group === 'waterfowl' ? 'and the side of the water you should be on flips with it.'
+                                               : 'and the side you should approach and sit on flips with it.') +
+             ' Check the actual wind before you set up.');
     if (sc.confidence < 60)
       f.push('Confidence is ' + sc.confidence + '%. Local observation coverage is thin here, so treat the score as a ' +
              'direction rather than a promise.');

@@ -297,6 +297,62 @@
         ['Pennsylvania', -77.50, 41.00]
       ]
     },
+    bear: {
+      /* Black bear country from the Adirondacks to the Gila, the coastal
+         swamps of the Carolinas and Florida, the Louisiana bottoms and the
+         western mountains, against farm country, plains, desert and valley
+         floor. The range is the USGS map with the Gila National Forest
+         added - see ingest/usgs-range.mjs - and the Atchafalaya point is at
+         Krotz Springs, in the basin's northern population; it first sat
+         between the two. */
+      yes: [
+        ['Adirondacks NY', -74.30, 44.10], ['Catskills NY', -74.40, 42.10],
+        ['N Maine', -69.30, 46.30], ['N NH', -71.30, 44.90], ['Vermont', -72.80, 43.80],
+        ['W Massachusetts', -73.00, 42.40], ['NW New Jersey', -74.70, 41.10],
+        ['PA north central', -77.80, 41.50], ['Poconos PA', -75.30, 41.20],
+        ['WV highlands', -79.80, 38.60], ['W Maryland', -79.20, 39.60],
+        ['Shenandoah VA', -78.40, 38.50], ['Great Smokies', -83.50, 35.60],
+        ['N Georgia mountains', -84.00, 34.80], ['Great Dismal Swamp', -76.45, 36.60],
+        ['NC coastal plain', -76.50, 35.50], ['Ocala FL', -81.80, 29.20],
+        ['Osceola NF FL', -82.40, 30.30], ['Big Cypress FL', -81.20, 26.10],
+        ['Apalachicola FL', -85.00, 30.20], ['Okefenokee GA', -82.30, 30.80],
+        ['Ozark NF AR', -93.50, 35.80], ['Ouachitas', -94.30, 34.60],
+        ['Missouri Ozarks', -91.50, 37.00], ['Tensas River LA', -91.30, 32.20],
+        ['N Minnesota', -93.50, 47.30], ['N Wisconsin', -90.40, 45.90],
+        ['UP Michigan', -87.50, 46.40], ['N Lower Michigan', -84.60, 44.80],
+        ['E Kentucky', -83.30, 37.20], ['E Tennessee', -84.20, 36.40],
+        ['NW Montana', -114.50, 48.40], ['Bitterroot MT', -114.30, 46.30],
+        ['Idaho Clearwater', -115.50, 46.50], ['Central Idaho', -115.00, 44.50],
+        ['NE Washington', -117.80, 48.60], ['Olympic Peninsula', -123.50, 47.70],
+        ['Oregon Cascades', -122.00, 44.00], ['Oregon Coast Range', -123.60, 44.30],
+        ['SW Oregon', -123.40, 42.60], ['Klamath Mts CA', -123.30, 41.50],
+        ['Sierra Nevada CA', -120.00, 38.60], ['S Sierra CA', -118.70, 36.00],
+        ['San Bernardino Mts CA', -117.00, 34.20], ['Colorado high country', -106.50, 39.50],
+        ['Colorado SW', -107.90, 37.40], ['NM Sangre de Cristo', -105.50, 36.30],
+        ['NM Gila', -108.30, 33.30], ['AZ Mogollon Rim', -111.00, 34.40],
+        ['AZ White Mts', -109.50, 33.90], ['Utah Uintas', -111.00, 40.70],
+        ['Utah Manti-La Sal', -111.40, 39.40], ['Bighorns WY', -107.30, 44.50],
+        ['Absarokas WY', -109.90, 44.40], ['Lake Tahoe NV', -119.90, 39.10],
+        ['Upper Atchafalaya (Krotz Springs) LA', -91.75, 30.55]
+      ],
+      no: [
+        ['Iowa corn belt', -93.50, 42.00], ['Central Illinois', -89.00, 40.50],
+        ['Central Kansas', -98.00, 38.50], ['Central Nebraska', -99.00, 41.50],
+        ['North Dakota drift prairie', -99.00, 47.50], ['Eastern South Dakota', -97.80, 44.20],
+        ['Texas Panhandle', -102.00, 34.80], ['Permian W Texas', -102.80, 31.00],
+        ['W Oklahoma', -99.40, 35.60], ['Death Valley', -116.90, 36.40],
+        ['Mojave CA', -116.20, 34.80], ['Sonoran AZ', -113.20, 32.80],
+        ['Nevada interior', -116.50, 39.50], ['Bonneville flats', -113.80, 40.75],
+        ['WY Red Desert', -108.80, 41.80], ['Snake River Plain ID', -114.40, 43.00],
+        ['Columbia Basin WA', -119.30, 46.98], ['San Joaquin floor CA', -120.00, 36.50],
+        ['Sacramento Valley floor', -121.90, 39.30], ['Imperial Valley CA', -115.50, 33.00],
+        ['E Colorado plains', -103.00, 39.50], ['E Montana plains', -106.90, 47.30],
+        ['Delmarva', -75.60, 38.60], ['Long Island', -72.80, 40.85],
+        ['Central Indiana', -86.20, 39.80], ['NW Ohio', -84.00, 41.30],
+        ['S Minnesota farmland', -95.00, 44.00],
+        ['Mississippi River Delta coast', -89.40, 29.20]
+      ]
+    },
     turkey: {
       /* Rewritten, because the list it replaces was too easy. That one
          had 46 places and 15, the 15 nearly all desert, and the record

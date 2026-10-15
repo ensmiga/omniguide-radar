@@ -72,39 +72,55 @@
     if (!available()) return null;
     week = ((week % 52) + 52) % 52;
 
+    /* The cache holds the stations' blend at their own heights, and the
+       correction to the ground asked about is made on every call. The
+       finished, corrected value used to be cached under a key with no
+       elevation in it, so every point in an eighth of a degree got the
+       temperature of whichever point had asked first - in the mountains
+       several degrees out, and different from one page load to the next
+       depending on what had been drawn first. */
     var ck = (Math.round(lon * 8) * 4096 + Math.round(lat * 8)) * 64 + week;
-    var hit = cache.get(ck);
-    if (hit !== undefined) return hit;
-
-    var best = neighbours(lon, lat);
-    if (!best.length) { cache.set(ck, null); return null; }
-
-    var wSum = 0, tx = 0, tn = 0, sd = 0, pp = 0, sdW = 0, ppW = 0;
-    for (var b = 0; b < best.length; b++) {
-      var idx = best[b][1];
-      var w = 1 / (best[b][0] + 0.02);
-      var o = idx * 52 + week;
-      if (N.TX[o] === MISSING || N.TN[o] === MISSING) continue;
-      var lapse = (N.elev[idx] - (terrainFt == null ? N.elev[idx] : terrainFt)) * LAPSE_F_PER_FT;
-      tx += (N.TX[o] / 10 + lapse) * w;
-      tn += (N.TN[o] / 10 + lapse) * w;
-      wSum += w;
-      if (N.SD[o] !== MISSING) { sd += (N.SD[o] / 10) * w; sdW += w; }
-      if (N.PP[o] !== MISSING) { pp += N.PP[o] * w; ppW += w; }
+    var blend = cache.get(ck);
+    if (blend === undefined) {
+      blend = null;
+      var best = neighbours(lon, lat);
+      var wSum = 0, tx = 0, tn = 0, el = 0, sd = 0, pp = 0, sdW = 0, ppW = 0;
+      for (var b = 0; b < best.length; b++) {
+        var idx = best[b][1];
+        var w = 1 / (best[b][0] + 0.02);
+        var o = idx * 52 + week;
+        if (N.TX[o] === MISSING || N.TN[o] === MISSING) continue;
+        tx += (N.TX[o] / 10) * w;
+        tn += (N.TN[o] / 10) * w;
+        el += N.elev[idx] * w;
+        wSum += w;
+        if (N.SD[o] !== MISSING) { sd += (N.SD[o] / 10) * w; sdW += w; }
+        if (N.PP[o] !== MISSING) { pp += N.PP[o] * w; ppW += w; }
+      }
+      if (wSum > 0) {
+        blend = {
+          tmax: tx / wSum, tmin: tn / wSum, elev: el / wSum,
+          snowIn: sdW > 0 ? sd / sdW : 0,
+          precipProb: ppW > 0 ? pp / ppW : 20,
+          nearestMiles: Math.sqrt(best[0][0]) * 69
+        };
+      }
+      if (cache.size > 60000) cache.clear();
+      cache.set(ck, blend);
     }
-    if (wSum <= 0) { cache.set(ck, null); return null; }
+    if (!blend) return null;
 
-    var out = {
-      tmax: tx / wSum,
-      tmin: tn / wSum,
-      tmean: (tx + tn) / (2 * wSum),
-      snowIn: sdW > 0 ? sd / sdW : 0,
-      precipProb: ppW > 0 ? pp / ppW : 20,
-      nearestMiles: Math.sqrt(best[0][0]) * 69
+    /* The same as correcting each station and then blending: the
+       correction is a straight line in height. */
+    var lapse = terrainFt == null ? 0 : (blend.elev - terrainFt) * LAPSE_F_PER_FT;
+    return {
+      tmax: blend.tmax + lapse,
+      tmin: blend.tmin + lapse,
+      tmean: (blend.tmax + blend.tmin) / 2 + lapse,
+      snowIn: blend.snowIn,
+      precipProb: blend.precipProb,
+      nearestMiles: blend.nearestMiles
     };
-    if (cache.size > 60000) cache.clear();
-    cache.set(ck, out);
-    return out;
   }
 
   /* Shape of the day. Coldest a little before sunrise, warmest mid

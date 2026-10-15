@@ -114,7 +114,7 @@
      North Carolina, bobwhite 0.05 to 0.15 in Idaho, Montana and North
      Dakota. The places each is known for start at 0.29 and 0.44. */
   var RANGE_KNEE = {
-    elk: 0.50, moose: 0.50, whitetail: 0.25, muledeer: 0.25, pronghorn: 0.25,
+    elk: 0.50, moose: 0.50, bear: 0.50, whitetail: 0.25, muledeer: 0.25, pronghorn: 0.25,
     turkey: 0.40, upland: 0.15, waterfowl: 0.10, goose: 0.15, trout: 0.25,
     pheasant: 0.30, bobwhite: 0.30, 'mearns-quail': 0.45
   };

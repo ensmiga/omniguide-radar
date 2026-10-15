@@ -330,6 +330,67 @@
       status: b.status, bag: b.bag, note: UPLAND_NOTE, hours: 'daylight', source: 'State wildlife agency' }));
   });
 
+  /* ---------- Black bear ----------
+
+     A fall season where one exists, and a spring season in the western
+     states that have one. THE LISTS ARE FROM GENERAL KNOWLEDGE AND HAVE
+     NOT BEEN CHECKED AGAINST ANY AGENCY, and are drawn short: a state left
+     off reads as unverified, with the notice that there may be no season
+     at all. Grizzlies are protected everywhere in the lower 48.
+
+     Florida and Louisiana hunt bears again, both by lottery permit and
+     both in December: Florida 6 to 28 December 2025, its first hunt in ten
+     years, 172
+     permits in four bear management units (FWC, reported 30 December
+     2025); Louisiana in December 2024 and again 6 to 21 December 2025, 26
+     permits in three bear areas, Louisiana residents only (LDWF, 7 January
+     2026). Neither had announced a 2026 hunt when this was written.
+
+     Three states with bears protect them outright, and say so rather than
+     reading as unverified: Texas lists the black bear as threatened and it
+     is against the law to hunt one (TPWD, Bear Safety); Alabama has no
+     open season and taking a bear is illegal at any time (Code of Alabama
+     9-11-481); Mississippi keeps it on the state protected list, and a
+     season would need both a new law and its removal from that list
+     (MDWFP, reported 1 September 2026). */
+  var BEAR_NOTE = 'Placeholder window, not an actual season. Units, dates, methods and limits are set by the ' +
+    'state: baiting and hounds are legal in some states and banned in others, and many protect cubs and ' +
+    'sows with cubs. Confirm with the state agency before you hunt.';
+  /* Outer envelopes by region, as for the birds: wide at the edges, so
+     that a week reads as possibly open rather than wrongly closed. One
+     window of 15 August to 31 December for every state had the upper
+     Midwest open into December, where the seasons are September and
+     October and the bears are in the den by November. */
+  [
+    { states: ['MN', 'WI', 'MI'], start: '09-01', end: '10-31' },
+    { states: ['ME', 'NH', 'VT', 'NY', 'MA'], start: '08-25', end: '12-20' },
+    { states: ['PA', 'NJ', 'MD', 'WV', 'VA', 'NC', 'TN', 'KY', 'GA', 'SC'], start: '09-01', end: '01-07' },
+    { states: ['AR', 'MO', 'OK'], start: '09-15', end: '12-31' },
+    { states: ['ID', 'MT', 'WY', 'CO', 'UT', 'NM', 'WA'], start: '08-01', end: '11-30' },
+    { states: ['OR', 'CA', 'AZ'], start: '08-01', end: '12-31' }
+  ].forEach(function (b) {
+    RULES.push(rule({ states: b.states, species: ['bear'], type: 'Fall black bear season', start: b.start, end: b.end,
+      status: 'LIMITED', bag: 'Usually one bear. Many units by permit or quota.', note: BEAR_NOTE,
+      hours: 'daylight', source: 'State wildlife agency' }));
+  });
+  RULES.push(rule({ states: ['NV'], species: ['bear'], type: 'Fall black bear season', start: '09-01', end: '12-31',
+    status: 'PERMIT', bag: 'By draw tag.', note: BEAR_NOTE, hours: 'daylight', source: 'State wildlife agency' }));
+  RULES.push(rule({ states: ['TX', 'AL', 'MS'], species: ['bear'], type: 'No black bear season', start: '01-01', end: '12-31',
+    status: 'CLOSED', bag: null, closure: 'Black bears are protected in this state and may not be hunted.',
+    note: null, hours: 'daylight', source: 'State wildlife agency' }));
+  RULES.push(rule({ states: ['FL'], species: ['bear'], type: 'December black bear hunt', start: '12-01', end: '12-31',
+    status: 'PERMIT', bag: 'By lottery permit, in a few bear management units.', note: BEAR_NOTE,
+    hours: 'daylight', source: 'State wildlife agency' }));
+  RULES.push(rule({ states: ['LA'], species: ['bear'], type: 'December black bear hunt', start: '12-01', end: '12-31',
+    status: 'PERMIT', bag: 'By lottery permit, in a few bear areas. Louisiana residents only.', note: BEAR_NOTE,
+    hours: 'daylight', source: 'State wildlife agency' }));
+  RULES.push(rule({ states: ['ID', 'MT', 'WY', 'AZ'], species: ['bear'], type: 'Spring black bear season',
+    start: '04-01', end: '06-30', status: 'LIMITED', bag: 'Usually one bear. Some units by permit.', note: BEAR_NOTE,
+    hours: 'daylight', source: 'State wildlife agency' }));
+  RULES.push(rule({ states: ['OR', 'WA', 'UT'], species: ['bear'], type: 'Spring black bear season',
+    start: '04-01', end: '06-30', status: 'PERMIT', bag: 'By permit or draw.', note: BEAR_NOTE,
+    hours: 'daylight', source: 'State wildlife agency' }));
+
   /* Special management areas. A handful of real refuges, included to exercise
      the warning path - the restrictions themselves are not modeled. */
   var SPECIAL = [
@@ -417,8 +478,11 @@
         'Do not hunt or fish on the strength of this map - confirm with the state agency first.';
     } else {
       status = best.status;
+      /* A rule that is itself a closure says what it closes, rather than
+         reporting that a closure is "within its window". */
       reason = best.active
-        ? best.rule.type + ' is within its placeholder window.'
+        ? (best.rule.status === 'CLOSED' ? best.rule.type + '. ' + best.rule.closure + ' Confirm with the state agency.'
+                                         : best.rule.type + ' is within its placeholder window.')
         : 'No placeholder season window covers this date.';
     }
     if (status === 'OPEN' && special) {
