@@ -98,6 +98,7 @@
   };
 
   var LEGAL_RGB = { 90: [63, 167, 118], 65: [214, 160, 54], 45: [150, 120, 200], 15: [104, 120, 128], 0: [130, 140, 146] };
+  var LOCKED_RGB = [128, 138, 134], UNKNOWN_RGB = [130, 140, 146];
 
   var STATUS_COLOR = {
     OPEN: 'rgba(63,167,118,0.72)', LIMITED: 'rgba(214,160,54,0.72)',
@@ -629,9 +630,9 @@
      browser's own bilinear filtering is what turns a lattice of numbers into
      a continuous surface. */
 
+  /* The lattice the last frame drew, for fieldAt. */
   var fieldVals = new Map();      // numeric key -> display value, NaN = nothing here
   var fieldAux = new Map();       // numeric key -> wind direction, for streamlines
-  var fieldStamp = '';
 
   /* One lattice per zoom step, kept.
 
@@ -647,43 +648,89 @@
      exactly 9. A step not yet scored is filled over several frames, a
      slice at a time, and until a sample is ready the nearest one from a
      step that is already scored stands in for it. */
-  var fieldLevels = new Map();    // level -> { vals, aux, nodeWorld }
-  var FIELD_KEEP = 4;             // zoom steps kept
+  var FIELD_KEEP = 4;             // zoom steps kept, for each time
   /* Milliseconds of scoring per frame: a little while the view is moving,
      so it keeps up with the wheel, and more once it has stopped, so the
      new step sharpens quickly. */
   var FIELD_BUDGET_MOVING = 10, FIELD_BUDGET_STILL = 30, FIELD_STILL_MS = 200;
 
-  function fieldLevel(level) {
-    var L = fieldLevels.get(level);
+  /* ---------- Time ----------
+
+     Each time on the timeline keeps its own lattices. A new time used to
+     throw the colour layer away, so every step of Play - one every 0.15
+     seconds - blanked the map and painted it back in from the top, and
+     nothing could be watched changing. Now the time on screen stays on
+     screen while the next one is scored out of sight, and once that is
+     complete the map crossfades to it: the value at each sample slides
+     from one forecast step to the next. The pictures in between are only
+     that - a blend of two real three-hour steps, as a radar loop smooths
+     between scans. Play waits for each step to arrive (see the frame loop
+     in app.js) and spends what is left of each frame getting the step
+     after it ready. Zooming is unchanged: within a time, a zoom step not
+     yet scored still fills in over a few frames behind stand-ins. */
+  var frames = new Map();         // t -> Map(level -> { vals, aux, nodeWorld }), oldest first
+  var FRAME_KEEP = 5;             // times kept
+  var frameStamp = '';
+  var shownT = null;              // the time on screen
+  var blend = null;               // { from, to, start, dur } while crossfading
+  var BLEND_PLAY_MS = 520, BLEND_STEP_MS = 260, FIELD_BUDGET_PLAY = 16;
+
+  function frameFor(t) {
+    var F = frames.get(t);
+    if (F) { frames.delete(t); frames.set(t, F); return F; }
+    F = new Map();
+    frames.set(t, F);
+    if (frames.size > FRAME_KEEP) {
+      var keep = {};
+      keep[t] = 1;
+      if (shownT !== null) keep[shownT] = 1;
+      if (blend) { keep[blend.from] = 1; keep[blend.to] = 1; }
+      var old = [];
+      frames.forEach(function (v, k) { if (!keep[k]) old.push(k); });
+      for (var i = 0; i < old.length && frames.size > FRAME_KEEP; i++) frames.delete(old[i]);
+    }
+    return F;
+  }
+
+  function fieldLevel(F, level) {
+    var L = F.get(level);
     if (!L) {
       L = { vals: new Map(), aux: new Map(), nodeWorld: Math.pow(2, -level / 2) };
-      fieldLevels.set(level, L);
-      if (fieldLevels.size > FIELD_KEEP) {
+      F.set(level, L);
+      if (F.size > FIELD_KEEP) {
         var far = null, fd = -1;
-        fieldLevels.forEach(function (v, k) { var d = Math.abs(k - level); if (d > fd) { fd = d; far = k; } });
-        fieldLevels.delete(far);
+        F.forEach(function (v, k) { var d = Math.abs(k - level); if (d > fd) { fd = d; far = k; } });
+        F.delete(far);
       }
     }
     return L;
   }
 
-  /* A ready value for this spot from another zoom step, nearest step first. */
-  function standIn(level, wx, wy) {
-    var best = NaN, bd = 99;
-    fieldLevels.forEach(function (L, k) {
+  /* A ready value for this spot: from another zoom step of the same time,
+     nearest step first, or failing that from the same step of another. */
+  function standIn(F, level, wx, wy) {
+    var best = NaN, bd = 99, found = false;
+    F.forEach(function (L, k) {
       if (k === level || Math.abs(k - level) >= bd) return;
       var v = L.vals.get(fkey(Math.round(wx / L.nodeWorld), Math.round(wy / L.nodeWorld)));
-      if (v !== undefined) { best = v; bd = Math.abs(k - level); }
+      if (v !== undefined) { best = v; bd = Math.abs(k - level); found = true; }
+    });
+    if (found) return best;
+    frames.forEach(function (G) {
+      if (found || G === F) return;
+      var L = G.get(level);
+      if (!L) return;
+      var v = L.vals.get(fkey(Math.round(wx / L.nodeWorld), Math.round(wy / L.nodeWorld)));
+      if (v !== undefined) { best = v; found = true; }
     });
     return best;
   }
 
   function fkey(gx, gy) { return (gx + 32768) * 65536 + (gy + 32768); }
 
-  Radar.prototype.fieldValue = function (gx, gy, nodeWorld, spId, layer, t, day, ent) {
-    var k = fkey(gx, gy);
-    var v = fieldVals.get(k);
+  Radar.prototype.fieldValue = function (L, gx, gy, spId, layer, t, day, ent) {
+    var k = fkey(gx, gy), nodeWorld = L.nodeWorld;
+    var v = L.vals.get(k);
     if (v !== undefined) return v;
 
     var ll = geo.unproject(gx * nodeWorld, gy * nodeWorld, this._ll || (this._ll = [0, 0]));
@@ -729,10 +776,29 @@
         }
       }
     }
-    if (fieldVals.size > 400000) { fieldVals.clear(); fieldAux.clear(); }
-    fieldVals.set(k, out);
-    fieldAux.set(k, aux);
+    if (L.vals.size > 400000) { L.vals.clear(); L.aux.clear(); }
+    L.vals.set(k, out);
+    L.aux.set(k, aux);
     return out;
+  };
+
+  /* Score whatever of the view this time still lacks, until the deadline.
+     True once it is all there. */
+  Radar.prototype.fillFrame = function (t, level, gx0, gx1, gy0, gy1, spId, layer, ent, deadline) {
+    var L = fieldLevel(frameFor(t), level), day = Math.floor(t);
+    for (var gy = gy0; gy <= gy1; gy++) {
+      for (var gx = gx0; gx <= gx1; gx++) {
+        if (L.vals.get(fkey(gx, gy)) !== undefined) continue;
+        if (performance.now() >= deadline) return false;
+        this.fieldValue(L, gx, gy, spId, layer, t, day, ent);
+      }
+    }
+    return true;
+  };
+
+  /* Has the map finished arriving at this time? Play waits on it. */
+  Radar.prototype.settled = function (t) {
+    return shownT === t && !blend && !this.pending;
   };
 
   var STATUS_ORDER = { OPEN: 90, LIMITED: 65, PERMIT: 45, CLOSED: 15, UNKNOWN: 0 };
@@ -749,24 +815,28 @@
        lattice was stepping straight over it. A cold field build costs
        43 ms at 15 px and cached redraws cost 3 ms, so there was room to
        pay for this. */
-    /* Snapped to the nearest half octave - see fieldLevels. */
+    /* Snapped to the nearest half octave - see fieldLevel. */
     var level = Math.round(2 * Math.log2(z / 9));
     /* oppMode is in the stamp because Spot and Day are different numbers
        for the same cell - without it, switching the toggle would redraw
        from the cache and show the old surface. The zoom is not: each
        step has its own lattice. */
-    var stamp = [spId, layer, this.app.state.oppMode, t,
+    /* The time is not in the stamp either: each time has its own
+       lattices - see Time, above. */
+    var stamp = [spId, layer, this.app.state.oppMode,
                  ent.pro ? 1 : 0, ent.state, ent.species].join('|');
-    if (stamp !== fieldStamp) { fieldLevels.clear(); fieldStamp = stamp; }
-    var lvl = fieldLevel(level);
-    var nodeWorld = lvl.nodeWorld;
-    fieldVals = lvl.vals; fieldAux = lvl.aux;
+    if (stamp !== frameStamp) { frames.clear(); frameStamp = stamp; shownT = null; blend = null; }
+    if (shownT === null) shownT = t;
+    var nodeWorld = Math.pow(2, -level / 2);
 
     var tl = this.toWorld(0, 0, [0, 0]), br = this.toWorld(this.w, this.h, [0, 0]);
     var gx0 = Math.floor(tl[0] / nodeWorld) - 1, gx1 = Math.ceil(br[0] / nodeWorld) + 1;
     var gy0 = Math.floor(tl[1] / nodeWorld) - 1, gy1 = Math.ceil(br[1] / nodeWorld) + 1;
     var cols = gx1 - gx0 + 1, rows = gy1 - gy0 + 1;
-    if (cols < 2 || rows < 2 || cols * rows > 60000) return;
+    if (cols < 2 || rows < 2 || cols * rows > 60000) {
+      shownT = t; blend = null; this.pending = false;     // nothing drawn, so nothing to wait for
+      return;
+    }
 
     if (!this._fc) {
       this._fc = document.createElement('canvas');
@@ -791,45 +861,107 @@
 
     var now = performance.now(), vk = z + ':' + this.view.cx + ':' + this.view.cy;
     if (vk !== this._viewKey) { this._viewKey = vk; this._movedAt = now; }
-    var deadline = now + (now - (this._movedAt || 0) < FIELD_STILL_MS ? FIELD_BUDGET_MOVING : FIELD_BUDGET_STILL);
+    var playing = !!this.app.state.playing;
+    var deadline = now + (playing ? FIELD_BUDGET_PLAY
+      : now - (this._movedAt || 0) < FIELD_STILL_MS ? FIELD_BUDGET_MOVING : FIELD_BUDGET_STILL);
+
+    /* Colour and alpha for one value; alpha 0 for nothing. */
+    function paint(v, out) {
+      if (v !== v) { out[3] = 0; return; }                    // NaN: transparent
+      var col, a;
+      if (v === -1) { col = LOCKED_RGB; a = 46; }             // locked preview
+      else if (legalMode) {
+        col = LEGAL_RGB[v] || UNKNOWN_RGB;
+        a = Math.round(alpha * 0.8);
+      } else if (wxl) {
+        col = wxl.ramp((v - lo) / span);
+        /* Precipitation and snow read better fading in from nothing than
+           as a wall of colour over dry ground. */
+        /* Snow comes in faster than rain: a couple of inches on the ground
+           is worth seeing, and at the rain rate it was a faint tint. Full
+           strength from four inches. */
+        a = softAlpha
+          ? Math.round(alpha * Math.min(1, Math.max(0, (v - lo) / span) * (layer === 'snowpack' ? 6 : 2.4)))
+          : alpha;
+      } else {
+        col = rampRGB(v / 100);
+        a = alpha;
+      }
+      out[0] = col[0]; out[1] = col[1]; out[2] = col[2]; out[3] = a;
+    }
+
+    /* Mid-crossfade, how far along. */
+    var f = 0;
+    if (blend) {
+      f = (now - blend.start) / blend.dur;
+      if (f >= 1) { shownT = blend.to; blend = null; f = 0; }
+    }
+    var tA = blend ? blend.from : shownT, tB = blend ? blend.to : null;
+    var FA = frameFor(tA), A = fieldLevel(FA, level);
+    var FB = blend ? frameFor(tB) : null, B = blend ? fieldLevel(FB, level) : null;
+    var dA = Math.floor(tA), dB = blend ? Math.floor(tB) : 0;
+    /* Scores and weather slide from one value to the next; the legal
+       status and the locked preview are categories, so they fade. */
+    var slide = !legalMode;
+    var ca = [0, 0, 0, 0], cb = [0, 0, 0, 0];
+
     var behind = false;
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        var gx = gx0 + c, gy = gy0 + r;
-        var v = fieldVals.get(fkey(gx, gy));
+        var gx = gx0 + c, gy = gy0 + r, key = fkey(gx, gy);
+        var v = A.vals.get(key);
         if (v === undefined) {
           if (!behind && performance.now() < deadline) {
-            v = this.fieldValue(gx, gy, nodeWorld, spId, layer, t, day, ent);
+            v = this.fieldValue(A, gx, gy, spId, layer, tA, dA, ent);
           } else {
             behind = true;
-            v = standIn(level, gx * nodeWorld, gy * nodeWorld);
+            v = standIn(FA, level, gx * nodeWorld, gy * nodeWorld);
           }
         }
         var o = (r * cols + c) * 4;
-        if (v !== v) continue;                                  // NaN: transparent
-        var col, a;
-        if (v === -1) { col = [128, 138, 134]; a = 46; }         // locked preview
-        else if (legalMode) {
-          col = LEGAL_RGB[v] || [130, 140, 146];
-          a = Math.round(alpha * 0.8);
-        } else if (wxl) {
-          col = wxl.ramp((v - lo) / span);
-          /* Precipitation and snow read better fading in from nothing than
-             as a wall of colour over dry ground. */
-          /* Snow comes in faster than rain: a couple of inches on the ground
-             is worth seeing, and at the rain rate it was a faint tint. Full
-             strength from four inches. */
-          a = softAlpha
-            ? Math.round(alpha * Math.min(1, Math.max(0, (v - lo) / span) * (layer === 'snowpack' ? 6 : 2.4)))
-            : alpha;
+        if (B) {
+          var vb = B.vals.get(key);
+          if (vb === undefined) {
+            if (!behind && performance.now() < deadline) {
+              vb = this.fieldValue(B, gx, gy, spId, layer, tB, dB, ent);
+            } else {
+              behind = true;
+              vb = standIn(FB, level, gx * nodeWorld, gy * nodeWorld);
+            }
+          }
+          if (slide && v === v && vb === vb && v >= 0 && vb >= 0) {
+            paint(v + (vb - v) * f, ca);
+          } else {
+            paint(v, ca); paint(vb, cb);
+            if (!ca[3]) { ca[0] = cb[0]; ca[1] = cb[1]; ca[2] = cb[2]; ca[3] = Math.round(cb[3] * f); }
+            else if (!cb[3]) ca[3] = Math.round(ca[3] * (1 - f));
+            else {
+              ca[0] += (cb[0] - ca[0]) * f; ca[1] += (cb[1] - ca[1]) * f;
+              ca[2] += (cb[2] - ca[2]) * f; ca[3] += (cb[3] - ca[3]) * f;
+            }
+          }
         } else {
-          col = rampRGB(v / 100);
-          a = alpha;
+          paint(v, ca);
         }
-        data[o] = col[0]; data[o + 1] = col[1]; data[o + 2] = col[2]; data[o + 3] = a;
+        if (!ca[3]) continue;
+        data[o] = ca[0]; data[o + 1] = ca[1]; data[o + 2] = ca[2]; data[o + 3] = ca[3];
       }
     }
     this._fcx.putImageData(img, 0, 0);
+
+    /* A new time asked for: score it out of sight, and once it is all
+       there, crossfade to it. */
+    if (!blend && t !== shownT && !behind &&
+        this.fillFrame(t, level, gx0, gx1, gy0, gy1, spId, layer, ent, deadline)) {
+      blend = { from: shownT, to: t, start: performance.now(), dur: playing ? BLEND_PLAY_MS : BLEND_STEP_MS };
+    }
+    /* Playing: the step after, with whatever time this frame has left. */
+    if (playing && !behind && this.app.nextPlayT && performance.now() < deadline) {
+      var tn = this.app.nextPlayT(blend ? blend.to : t);
+      if (tn !== shownT) this.fillFrame(tn, level, gx0, gx1, gy0, gy1, spId, layer, ent, deadline);
+    }
+    var shown = B && f > 0.5 ? B : A;
+    fieldVals = shown.vals; fieldAux = shown.aux;
 
     var p = this._pt;
     this.toScreen(gx0 * nodeWorld, gy0 * nodeWorld, p);
@@ -855,8 +987,9 @@
     ctx.restore();
 
     this.field = { gx0: gx0, gy0: gy0, cols: cols, rows: rows, nodeWorld: nodeWorld };
-    /* More to score: ask for another frame. */
-    this.pending = behind;
+    /* More to score, a crossfade running or a new time not yet on screen:
+       ask for another frame. */
+    this.pending = behind || !!blend || t !== shownT;
   };
 
   /* Bilinear read-back of the field the last frame drew, for streamlines and

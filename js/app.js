@@ -2470,6 +2470,11 @@
      the same instant. Showing a value between two forecast steps would be
      false precision anyway. */
   var STEP_T = 3 / 24;
+  /* The step Play goes to after t, back to the start after the last. */
+  App.nextPlayT = function (t) {
+    var nt = t + STEP_T;
+    return nt > SPAN - STEP_T ? 0 : snapT(nt);
+  };
   function snapT(t) {
     var s = Math.round(t / STEP_T) * STEP_T;
     return Math.max(0, Math.min(SPAN - STEP_T, s));
@@ -3684,21 +3689,28 @@
       setTimeout(function () { maybeStartTour(newVisitor); }, 700);
     });
 
-    var last = performance.now(), playAccum = 0;
+    var last = performance.now(), playHold = 0;
+    var PLAY_HOLD = 0.12;           // seconds each step is held once it has arrived
     function frame(now) {
       var dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (App.state.playing) {
-        /* Playback advances one forecast step at a time rather than sliding
-           continuously, so every frame is a real model step. */
-        playAccum += dt * 0.85;
-        if (playAccum >= STEP_T) {
-          var steps = Math.floor(playAccum / STEP_T);
-          playAccum -= steps * STEP_T;
-          var nt = App.state.t + steps * STEP_T;
-          App.state.t = nt > SPAN - STEP_T ? 0 : snapT(nt);
-          App.dirty = true;
-          syncControls();
+        /* One forecast step at a time, and the next only once the map has
+           finished arriving at this one - scored and crossfaded in, see
+           Time in radar.js. It used to step every 0.15 seconds whatever
+           the map had managed, so the colour layer never caught up and
+           flashed in from the top on every step. The pace is now how fast
+           a step can be scored, plus a short hold to read it. */
+        if (radar.settled(App.state.t)) {
+          playHold += dt;
+          if (playHold >= PLAY_HOLD) {
+            playHold = 0;
+            App.state.t = App.nextPlayT(App.state.t);
+            App.dirty = true;
+            syncControls();
+          }
+        } else {
+          playHold = 0;
         }
       }
       /* Layers with moving particles have to redraw every frame or the
