@@ -1987,17 +1987,21 @@
     var ctx = this.ctx, p = this._pt;
     var w = geo.project(sel.lon, sel.lat, [0, 0]);
     this.toScreen(w[0], w[1], p);
+    /* Bright red, on a white edge: the amber it was disappeared into the
+       warm end of the colour scale, and the best ground is red too. */
     ctx.save();
-    ctx.strokeStyle = '#E8A93A';
-    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(p[0], p[1], 11, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
     ctx.moveTo(p[0] - 19, p[1]); ctx.lineTo(p[0] - 13, p[1]);
     ctx.moveTo(p[0] + 13, p[1]); ctx.lineTo(p[0] + 19, p[1]);
     ctx.moveTo(p[0], p[1] - 19); ctx.lineTo(p[0], p[1] - 13);
     ctx.moveTo(p[0], p[1] + 13); ctx.lineTo(p[0], p[1] + 19);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.strokeStyle = '#FF1A1A';
+    ctx.lineWidth = 2.5;
     ctx.stroke();
     ctx.restore();
   };
