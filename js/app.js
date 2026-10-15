@@ -28,6 +28,23 @@
 
   /* ---------- App ---------- */
 
+  /* Pro by default while the app is being tried out, so everything can be
+     seen; there is no payment flow yet. Account's demo controls still
+     switch back to Free. A setting saved before this - including the free
+     state the app saves for a new visitor from their location - is moved
+     to Pro once; after that, switching to Free is remembered. Set DEMO_PRO
+     to false to go back to starting everyone on Free. */
+  var DEMO_PRO = true;
+  function newEnt() {
+    return { pro: DEMO_PRO, state: 'MT', species: 'ducks', changed: Date.now(), demoPro: DEMO_PRO ? 1 : 0 };
+  }
+  function startEnt() {
+    var e = load('og.ent', null);
+    if (!e) return newEnt();
+    if (DEMO_PRO && !e.demoPro) { e.pro = true; e.demoPro = 1; save('og.ent', e); }
+    return e;
+  }
+
   /* Species ids changed when the individual duck species were merged, so an
      entitlement stored under an old id falls back rather than breaking. */
   function validSpecies(id) {
@@ -45,7 +62,7 @@
       selection: null,
       spots: load('og.spots', DEFAULT_SPOTS),
       logs: load('og.logs', []),
-      ent: load('og.ent', { pro: false, state: 'MT', species: 'ducks', changed: Date.now() })
+      ent: startEnt()
     },
     dirty: true,
     _theme: null
@@ -2384,6 +2401,8 @@
       root.appendChild(s);
 
       var p = section('Demo controls');
+      if (DEMO_PRO) p.appendChild(el('p', 'note', 'This test build starts everyone on Pro so every feature can be ' +
+        'tried. No payment is set up. Switch back to Free to see what a free account sees.'));
       var proBtn = el('button', 'btn' + (ent.pro ? '' : ' primary'), ent.pro ? 'Switch back to Free' : 'Simulate Pro');
       proBtn.addEventListener('click', function () {
         st.ent.pro = !st.ent.pro;
@@ -2399,7 +2418,7 @@
         try { ['og.spots', 'og.logs', 'og.ent'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
         st.spots = DEFAULT_SPOTS.slice();
         st.logs = [];
-        st.ent = { pro: false, state: 'MT', species: 'ducks', changed: Date.now() };
+        st.ent = newEnt();
         spotScoreCache.clear();
         radarNS.clearScores();
         App.dirty = true;
@@ -3940,7 +3959,7 @@
             return;
           }
           if (!App.state.gps) App.state.gps = { lon: lon, lat: lat, accuracy: pos.coords.accuracy };
-          if (load('og.ent', null) === null && !App.state.ent.pro) {
+          if (load('og.ent', null) === null) {
             App.state.ent.state = geo.states[si].abbr;
             save('og.ent', App.state.ent);
             radarNS.clearScores();
