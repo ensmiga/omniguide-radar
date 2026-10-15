@@ -537,11 +537,61 @@
       habFloor: 0.02, rangeFloor: 0.03,
       weights: { hab: 0.38, move: 0.38, mig: 0, wx: 0.24 },
       blurb: 'Preview model. Thermals, rut stage and terrain rather than flyway dynamics.',
+      /* THE ELK YEAR.
+
+         The seasonal planner put the best elk week of the year in deep
+         winter. Colorado's high country (-106.5, 39.5) came out January
+         79 against September 72, the Clearwater (-115.5, 46.5) January
+         88 against September 80, and ten of eleven herds sampled, from
+         the Oregon coast to Pennsylvania, peaked between mid November
+         and January. Kentucky's best week was in the rut, and its
+         January still a point above its September (OG.planner.horizon,
+         52 weeks, 2026-10-14).
+
+         Two cold-season terms did it. Temperature pays for cold all the
+         way down to 26 F, and the snow term paid for snow lying on the
+         ground, so the depth of winter collected both in full: in
+         Colorado 16 points in January against 4 in September. The rut,
+         weighted 1.5 and never below a quarter, could move the score by
+         about 7.
+
+         The year should run the other way. The rut in late September,
+         when bulls bugle and come to a call; the October and November
+         rifle seasons, when the first snows move elk off summer range;
+         and deep winter on winter range, where elk move as little as
+         they can and most seasons are closed. So:
+
+         The rut is weighted 3.0. Its swing, 2.25, now exceeds the most
+         temperature can move, 1.6, which is what it has to beat:
+         September is warm across most elk country - typical daytime 48
+         to 72 F at those eleven herds, against 13 to 39 F in January.
+
+         Snow moves elk while winter is arriving, not once it has
+         arrived. The snow term fades out as freezeDeep rises - the
+         seven-week cold balance env.js keeps for ice, 0 until shallow
+         water has locked and 1 after about seven weeks averaging 26 F.
+
+         Deep winter is a term of its own on that same balance, weighted
+         so midwinter comes down to about the summer level rather than
+         below it. That level is a judgement.
+
+         The temperature curve is left as it was. Flattening it to full
+         credit at 40 F was tried with the rest of this and made the
+         mild-winter herds worse: the Oregon Coast Range went to January
+         78 against September 77, and the Gila and Kentucky to a tie,
+         because there cool lasts all winter and the cold balance never
+         builds.
+
+         The elk anchors in CAL were measured again after this, 8.5 to
+         78.0 before and 9.4 to 74.7 after on the same day. */
       movement: function (wx, hab, doy) {
         var rs = rutStage('elk', doy, wx.lon, wx.lat), rut = rs.v;
-        return blend([
-          { w: 1.6, v: clamp01(ramp(52 - wx.tempF, -8, 26)), hi: 'Cool enough to keep elk on their feet past first light', lo: 'Warm - elk bedded in dark timber early' },
-          { w: 1.5, v: 0.25 + 0.75 * rut,
+        var deep = wx.freezeDeep || 0;
+        var mv = blend([
+          /* Not said in deep winter, where the line below says the opposite. */
+          { w: 1.6, v: clamp01(ramp(52 - wx.tempF, -8, 26)),
+            hi: deep >= 0.66 ? null : 'Cool enough to keep elk on their feet past first light', lo: 'Warm - elk bedded in dark timber early' },
+          { w: 3.0, v: 0.25 + 0.75 * rut,
             hi: rutText(rs, 'Peak rut - bulls bugling and holding cows',
                         'Rut building - bulls starting to bugle and gather cows',
                         'Rut winding down - a few bulls still with cows'),
@@ -549,9 +599,15 @@
                             : 'Rut is over - movement is feed-driven only' },
           { w: 1.3, v: pref(wx.windSpd, 7, 6), hi: 'Light, predictable thermals', lo: 'Wind too strong for a quiet approach and consistent thermals' },
           { w: 1.1, v: clamp01(hab.elk * 1.3), hi: 'Timber, benches and meadow edges in the right elevation band', lo: 'Marginal elk country' },
-          { w: 0.9, v: clamp01(wx.snowDepth * 1.6 + ramp(-wx.temp24, 2, 16) * 0.6), hi: 'Weather pushing elk toward lower feed', lo: null },
-          { w: 0.8, v: 0.4 + 0.6 * pref(wx.cloud, 0.65, 0.4), hi: 'Overcast extending morning movement' }
+          { w: 0.9, v: clamp01(wx.snowDepth * 1.6 + ramp(-wx.temp24, 2, 16) * 0.6) * (1 - deep),
+            hi: 'Weather pushing elk toward lower feed', lo: null },
+          { w: 0.8, v: 0.4 + 0.6 * pref(wx.cloud, 0.65, 0.4), hi: 'Overcast extending morning movement' },
+          { w: 1.2, v: 1 - deep }
         ]);
+        /* blend() only reports a term that has something to say when it
+           is high, and outside winter this one has nothing to say. */
+        if (deep >= 0.66) mv.neg.push({ t: 'Deep winter - elk are on winter range, moving as little as they can', s: 1.2 * deep });
+        return mv;
       }
     },
     {
@@ -855,7 +911,7 @@
   var CAL = {
     'ducks':           [2.6, 48.5],
     'canada-goose':    [3.2, 47.4],
-    'elk':             [8.5, 78.2],
+    'elk':             [9.4, 74.7],
     'whitetail':       [11.1, 81.1],
     'muledeer':        [16.5, 76.9],
     'moose':           [8.1, 71.9],
