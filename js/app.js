@@ -1421,8 +1421,10 @@
     return r;
   }
 
-  function renderLeague() {
-    var box = $('#league');
+  /* Into the dock, or into the Top spots sheet on a phone. */
+  var lgSheet = null;
+  function renderLeague(box) {
+    box = box && box.nodeType ? box : $('#league');
     if (!box) return;
     var st = App.state, spName = App.speciesName(st.species), pro = App.entitlement().pro;
     var hour = env.hhmm(Math.round((st.t - Math.floor(st.t)) * 1440));
@@ -1434,7 +1436,7 @@
 
     if (!lg.rows || lg.key !== leagueKey()) {
       box.appendChild(el('p', 'lg-note', 'Ranking the country…'));
-      computeLeague(renderLeague);
+      computeLeague(function () { renderLeague(box); });
       return;
     }
     var rows = lg.rows, day = lg.day;
@@ -1554,8 +1556,38 @@
     set(open);
     /* Follow the species, the hour and the spots while it is open. */
     setInterval(function () {
-      if (dock.classList.contains('open') && lg.key !== leagueKey() && !lg.job) renderLeague();
+      if (lg.key === leagueKey() || lg.job) return;
+      if (dock.classList.contains('open')) renderLeague();
+      if (lgSheet && lgSheet.isConnected && !panel.hidden) renderLeague(lgSheet);
     }, 700);
+  }
+
+  function openLeagueSheet() {
+    openPanel('Top spots', function () {
+      lgSheet = el('div', 'lg-sheet');
+      renderLeague(lgSheet);
+      return lgSheet;
+    });
+  }
+
+  /* The tab bar's last button: what the header holds besides the four
+     tabs. */
+  function renderMorePanel() {
+    openPanel('More', function () {
+      var list = el('div', 'morelist');
+      [
+        ['Log an outing', function () { renderLogPanel(); }],
+        ['Account and access', renderAccountPanel],
+        ['Data sources and credits', renderSourcesPanel],
+        ['Switch light and dark', function () { var t = $('#themebtn'); if (t) t.click(); }],
+        ['Show the tour again', function () { startTour(); }]
+      ].forEach(function (it) {
+        var b = el('button', 'btn', it[0]);
+        b.addEventListener('click', it[1]);
+        list.appendChild(b);
+      });
+      return list;
+    });
   }
 
   function renderSpotsPanel() {
@@ -2995,9 +3027,7 @@
       title: 'Tap a place for its plan',
       body: 'Tap anywhere on the map for the OmniGuide Plan at that exact point: the score and why, the best ' +
         'hours, how to set up, the next seven days and the season reference. Scroll or pinch to zoom.' },
-    { target: function () {
-        return $('#layerdock').classList.contains('open') ? $('#layers') : $('#layertab');
-      },
+    { target: function () { return tourVisible($('#layers')) || $('#layertab'); },
       title: 'Layers',
       body: 'Spot compares a place with the whole country - where to go. Day compares today with the rest of ' +
         'that place\'s season - whether to go today. Below them are movement, migration, legal status, ' +
@@ -3006,17 +3036,18 @@
       title: 'Move through the week',
       body: 'Drag the slider through the next seven days, three hours at a time. Night and legal light are ' +
         'shaded, each day button jumps to first light, and Play runs the week.' },
-    { target: function () { return $('#btn-plan'); },
+    { target: function () { return tourVisible($('#btn-plan')) || $('#tab-plan'); },
       title: 'Plan a hunt',
       body: 'Choose a place and see its best weeks of the year, worked out from thirty years of climate ' +
         'records.' },
     { target: function () {
+        if (!tourVisible($('#leaguedock'))) return $('#tab-top');
         return $('#leaguedock').classList.contains('open') ? $('#league') : $('#leaguetab');
       },
-      title: 'League tables',
+      title: function () { return tourVisible($('#leaguedock')) ? 'League tables' : 'Top spots'; },
       body: 'The best places in the country today and tomorrow, the states doing best, and how your saved ' +
         'spots rank.' },
-    { target: function () { return $('.tools'); },
+    { target: function () { return tourVisible($('.tools')) || $('#tabbar'); },
       title: 'Spots, alerts and your log',
       body: 'Save the places you hunt, see alerts when one of them is about to get better, and keep a log ' +
         'of each outing. Account shows your plan - the free plan covers one state and one species in full - ' +
@@ -3136,7 +3167,7 @@
     function show() {
       var s = steps[i], last = i === steps.length - 1;
       count.textContent = (i + 1) + ' of ' + steps.length;
-      head.textContent = s.title;
+      head.textContent = typeof s.title === 'function' ? s.title() : s.title;
       body.textContent = s.body;
       back.hidden = i === 0;
       next.textContent = last ? 'Done' : i === 0 ? 'Show me' : 'Next';
@@ -3664,6 +3695,93 @@
       }
       goTo(hit.lon, hit.lat, hit.zoom || 0.4, hit.kind === 'coords');
     });
+    search.addEventListener('change', closeSearch);
+    function closeSearch() {
+      document.body.classList.remove('search-open');
+      var sb = $('#btn-search');
+      if (sb) sb.setAttribute('aria-expanded', 'false');
+    }
+    var searchBtn = $('#btn-search');
+    if (searchBtn) searchBtn.addEventListener('click', function () {
+      var open = document.body.classList.toggle('search-open');
+      searchBtn.setAttribute('aria-expanded', String(open));
+      if (open) search.focus(); else search.blur();
+    });
+
+    /* ---------- Phone ---------- */
+
+    /* The tab bar opens the same panels as the header. */
+    var TABS = { 'tab-plan': renderPlannerPanel, 'tab-top': openLeagueSheet, 'tab-spots': renderSpotsPanel,
+                 'tab-alerts': renderAlertsPanel, 'tab-more': renderMorePanel };
+    Object.keys(TABS).forEach(function (id) {
+      var b = $('#' + id);
+      if (b) b.addEventListener('click', function () { TABS[id](); });
+    });
+
+    /* Locate and Mark here on the map follow the header buttons. */
+    var fabLoc = $('#fab-locate'), fabMark = $('#fab-mark');
+    if (fabLoc && fabMark) {
+      fabLoc.addEventListener('click', function () { gpsBtn.click(); });
+      fabMark.addEventListener('click', function () { markBtn.click(); });
+      var mirror = function () {
+        fabLoc.classList.toggle('on', gpsBtn.classList.contains('on'));
+        fabLoc.classList.toggle('busy', gpsBtn.textContent === 'Locating');
+        fabMark.hidden = markBtn.hidden;
+      };
+      new MutationObserver(mirror).observe(gpsBtn, { attributes: true, childList: true, characterData: true, subtree: true });
+      new MutationObserver(mirror).observe(markBtn, { attributes: true });
+    }
+
+    /* The legend is one line on a phone until it is tapped, and the
+       buttons on the map sit just above it, whatever its height. */
+    var legendEl = $('#legend');
+    legendEl.addEventListener('click', function (e) {
+      if (e.target.closest('a, button')) return;
+      legendEl.classList.toggle('expanded');
+      placeFabs();
+    });
+    function placeFabs() {
+      var h = legendEl.offsetHeight;
+      $('#stage').style.setProperty('--legend-h', (h ? h + 16 : 86) + 'px');
+    }
+    new ResizeObserver(placeFabs).observe(legendEl);
+
+    /* A sheet can be pulled down to close it. */
+    (function () {
+      var head = $('#panel-head'), y0 = null, dy = 0;
+      head.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' || window.innerWidth > 720 || e.target.closest('button')) return;
+        y0 = e.clientY; dy = 0;
+        panel.classList.add('dragging');
+        try { head.setPointerCapture(e.pointerId); } catch (err) { /* not a live pointer */ }
+      });
+      head.addEventListener('pointermove', function (e) {
+        if (y0 === null) return;
+        dy = Math.max(0, e.clientY - y0);
+        panel.style.transform = 'translateY(' + dy + 'px)';
+      });
+      function end() {
+        if (y0 === null) return;
+        y0 = null;
+        panel.classList.remove('dragging');
+        panel.style.transform = '';
+        if (dy > 90) closePanel();
+      }
+      head.addEventListener('pointerup', end);
+      head.addEventListener('pointercancel', end);
+    })();
+
+    /* Installable and usable offline - see sw.js. A service worker is
+       only allowed over https, or on localhost while developing. */
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+    function offlineNote() {
+      toast('No connection. Showing what was last downloaded - ' + App.wxNote().replace(/^\s+/, ''));
+    }
+    if (navigator.onLine === false) offlineNote();
+    window.addEventListener('offline', offlineNote);
+    window.addEventListener('online', function () { toast('Back online.'); });
 
     wireMap(canvas, radar);
 
@@ -3693,6 +3811,8 @@
       var dot = $('#alertdot');
       dot.hidden = false;
       dot.textContent = String(n);
+      var tdot = $('#tabdot');
+      if (tdot) { tdot.hidden = false; tdot.textContent = String(n); }
     }
 
     $('#boot').remove();

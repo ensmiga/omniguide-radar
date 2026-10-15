@@ -4,6 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Predictive outdoor intelligence for hunters and anglers.">
+<!-- Installable: see manifest.webmanifest and sw.js. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OmniGuide">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#FAF9F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121C18" media="(prefers-color-scheme: dark)">
 <title>OmniGuide Radar</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -199,6 +210,16 @@
     background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
     font-size: 12.5px; line-height: 1.4; color: var(--text);
   }
+  /* Phone-only controls; the phone block at the end shows them. */
+  #tabbar, #btn-search, #fabs { display: none; }
+  #btn-search svg, #tabbar svg, .fab svg {
+    fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  #tab-more svg, .fab svg .dot { fill: currentColor; stroke: none; }
+  .morelist { display: grid; gap: 8px; }
+  .morelist .btn { text-align: left; padding: 13px 15px; }
+  .lg-sheet { display: flex; flex-direction: column; gap: 6px; }
+  .lg-sheet .lg-h { display: none; }
   .badge {
     position: absolute;
     top: -2px; right: -2px;
@@ -1296,6 +1317,99 @@
     .kv dd { margin-bottom: 7px; }
     .hrow { grid-template-columns: 100px 1fr 54px; }
   }
+
+  /* ---------- Phone ----------
+
+     Phone first. The header was four rows - brand, species, search and
+     two rows of tool buttons - and with the timeline and the legend the
+     map had about half of a 375 x 812 screen. Now: one row of header,
+     the tools in a tab bar at the bottom, a two-row timeline, a legend
+     that is one line until it is tapped, and Locate on the map. Inputs
+     are 16 px, below which an iPhone zooms the page when one is tapped. */
+  @media (max-width: 720px) {
+    html, body { overscroll-behavior: none; }
+    #topbar { flex-wrap: nowrap; gap: 8px; padding: 6px 10px; }
+    .brand b { font-size: 17px; }
+    /* A zero basis, or the longest bird name sets its width and it wraps. */
+    #ctrl-species { flex: 1 1 0; min-width: 0; }
+    #ctrl-species > label, #pursuit, #topbar .grow, #topbar .tools, #ctrl-search { display: none; }
+    #species { flex: 1 1 auto; min-width: 0; width: 100%; font-size: 16px; padding: 7px 8px; }
+    #btn-search { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; color: var(--text); }
+    #btn-search svg { width: 22px; height: 22px; }
+    body.search-open #topbar { flex-wrap: wrap; }
+    body.search-open #ctrl-search { display: flex; flex: 1 0 100%; order: 5; }
+    #search { width: 100% !important; font-size: 16px; padding: 8px 10px; }
+    select, input[type="text"], input[type="number"], textarea { font-size: 16px; }
+
+    #layerdock { top: 8px; left: 8px; right: 8px; height: auto; }
+    #layertab { display: none; }
+    #layerdock:not(.open) #layers { display: flex; }
+    #layers { flex: 1 1 auto; min-width: 0; border-left: 1px solid var(--line); border-radius: 10px; padding: 5px 6px; scrollbar-width: none; }
+    #layers::-webkit-scrollbar { display: none; }
+    #leaguedock, #zoomctl { display: none; }
+    #toast { top: 58px; }
+
+    #legend { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 7px 11px 8px; cursor: pointer; }
+    #legend .lg-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    #legend .lg-title::after {
+      content: 'What is this?'; font-family: var(--body); font-size: 11px; letter-spacing: 0;
+      text-transform: none; color: var(--muted);
+    }
+    #legend.expanded .lg-title::after { content: 'Less'; }
+    #legend .lg-note { display: none; }
+    #legend.expanded .lg-note { display: block; }
+    .lg-keys { grid-template-columns: repeat(3, auto); gap: 3px 12px; justify-content: start; }
+
+    #fabs {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+      position: absolute; right: 10px; bottom: var(--legend-h, 86px); z-index: 6;
+    }
+    .fab {
+      width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+      background: color-mix(in srgb, var(--surface) 94%, transparent); color: var(--text);
+      border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(8px);
+    }
+    .fab svg { width: 24px; height: 24px; }
+    .fab.on { color: var(--accent); border-color: var(--accent); }
+    .fab.busy svg { opacity: 0.45; }
+    .fab-text {
+      width: auto; height: 38px; border-radius: 999px; padding: 0 15px;
+      font-family: var(--disp); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+      background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+    }
+    .fab[hidden] { display: none; }
+
+    #timeline { flex-wrap: wrap; gap: 6px 10px; padding: 6px 10px 7px; }
+    #daychips, .tlkey { display: none; }
+    #play { order: 1; padding: 7px 16px; font-size: 12px; }
+    #timelabel { order: 2; flex: 1 1 auto; text-align: right; font-size: 12px; }
+    #scrubwrap { order: 3; flex: 1 0 100%; min-width: 0; }
+
+    #tabbar {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      background: var(--surface); border-top: 1px solid var(--line);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    #tabbar button {
+      position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; min-height: 54px; padding: 6px 2px 5px; background: none; border: 0; cursor: pointer;
+      color: var(--muted); font-family: var(--disp); font-size: 10.5px; letter-spacing: 0.08em;
+      text-transform: uppercase; -webkit-tap-highlight-color: transparent;
+    }
+    #tabbar svg { width: 23px; height: 23px; }
+    #tabbar button[aria-current="true"] { color: var(--text); }
+    #tab-plan { color: var(--accent); font-weight: 600; }
+    #tabbar .badge { top: 4px; right: auto; left: calc(50% + 5px); }
+
+    #panel { padding-top: 0; }
+    #panel-head { position: relative; padding-top: 18px; touch-action: none; }
+    #panel-head::before {
+      content: ''; position: absolute; top: 7px; left: 50%; width: 40px; height: 4px; margin-left: -20px;
+      border-radius: 2px; background: var(--line);
+    }
+    #panel-close { width: 36px; height: 36px; font-size: 18px; }
+    #panel.dragging { transition: none; }
+  }
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
   }
@@ -1317,16 +1431,18 @@
       <span>Know where &middot; Know when &middot; Know how</span>
     </div>
 
-    <div class="ctrl">
+    <div class="ctrl" id="ctrl-species">
       <label for="species">Species</label>
       <select id="species"></select>
       <span class="chip" id="pursuit">Hunting</span>
     </div>
 
-    <div class="ctrl">
+    <div class="ctrl" id="ctrl-search">
       <label for="search" class="sr">Search</label>
       <input type="text" id="search" placeholder="Town, region, or 45.33, -107.95" style="width:208px">
     </div>
+    <!-- Phones: the search box opens from this, under the bar. -->
+    <button class="tool tool-icon" id="btn-search" aria-label="Search places" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg></button>
 
     <div class="grow"></div>
 
@@ -1364,6 +1480,12 @@
       <button id="zoom-in" title="Zoom in">+</button>
       <button id="zoom-out" title="Zoom out">&minus;</button>
     </div>
+    <!-- Phones: Locate on the map, where a thumb finds it, and Mark here once
+         there is a fix. They act through the header buttons of the same name. -->
+    <div id="fabs">
+      <button class="fab fab-text" id="fab-mark" hidden>Mark here</button>
+      <button class="fab" id="fab-locate" aria-label="Show my location"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.5" class="dot"/></svg></button>
+    </div>
     <div id="legend"></div>
     <div id="notice">
       <b>Not legal advice.</b> Season information is an unverified reference. Confirm every season,
@@ -1400,6 +1522,16 @@
       <span><i class="k-legal"></i>Legal light</span>
     </div>
   </footer>
+
+  <!-- Phones: the header's tools, down within reach of a thumb. Each opens
+       the same panel as its header button. -->
+  <nav id="tabbar" aria-label="Main">
+    <button id="tab-plan"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg><span>Plan</span></button>
+    <button id="tab-top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v4.5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.8 2.8 0 0 0 2.8 4M16 6h2.5a2.8 2.8 0 0 1-2.8 4M12 12.5V16M9 20h6M10 16h4v4h-4z"/></svg><span>Top spots</span></button>
+    <button id="tab-spots"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span>Spots</span></button>
+    <button id="tab-alerts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Alerts</span><i class="badge" id="tabdot" hidden></i></button>
+    <button id="tab-more"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg><span>More</span></button>
+  </nav>
 </div>
 
 <div id="scrim" hidden></div>
@@ -1411,43 +1543,43 @@
   <div id="panel-body"></div>
 </aside>
 
-<script src="js/us-topo.js?v=tmxege"></script>
-<script src="js/us-cities.js?v=tmxege"></script>
-<script src="js/gbif-credits.js?v=tmxege"></script>
-<script src="js/tile-cover.js?v=tmxege"></script>
-<script src="js/hydro.js?v=tmxege"></script>
-<script src="js/wx-grid.js?v=tmxege"></script>
-<script src="js/geo.js?v=tmxege"></script>
-<script src="js/wx.js?v=tmxege"></script>
+<script src="js/us-topo.js?v=tmxff4"></script>
+<script src="js/us-cities.js?v=tmxff4"></script>
+<script src="js/gbif-credits.js?v=tmxff4"></script>
+<script src="js/tile-cover.js?v=tmxff4"></script>
+<script src="js/hydro.js?v=tmxff4"></script>
+<script src="js/wx-grid.js?v=tmxff4"></script>
+<script src="js/geo.js?v=tmxff4"></script>
+<script src="js/wx.js?v=tmxff4"></script>
 <!-- The baked habitat raster and its reader load before env.js, which
      consults them inside habitat() and falls back to its own synthetic
      surface if either is missing. -->
-<script src="js/normals.js?v=tmxege"></script>
-<script src="js/climo.js?v=tmxege"></script>
-<script src="js/habitat-grid.js?v=tmxege"></script>
-<script src="js/range-grid.js?v=tmxege"></script>
-<script src="js/elev-grid.js?v=tmxege"></script>
-<script src="js/water-grid.js?v=tmxege"></script>
-<script src="js/habgrid.js?v=tmxege"></script>
-<script src="js/trout-waters.js?v=tmxege"></script>
-<script src="js/env.js?v=tmxege"></script>
-<script src="js/models.js?v=tmxege"></script>
-<script src="js/closures.js?v=tmxege"></script>
-<script src="js/regs.js?v=tmxege"></script>
-<script src="js/snow.js?v=tmxege"></script>
-<script src="js/snowfield.js?v=tmxege"></script>
-<script src="js/gauges.js?v=tmxege"></script>
-<script src="js/gaugefield.js?v=tmxege"></script>
-<script src="js/openwater.js?v=tmxege"></script>
-<script src="js/duckwater.js?v=tmxege"></script>
-<script src="js/flyshops.js?v=tmxege"></script>
-<script src="js/patterns.js?v=tmxege"></script>
-<script src="js/terrain.js?v=tmxege"></script>
-<script src="js/landcover.js?v=tmxege"></script>
-<script src="js/guide.js?v=tmxege"></script>
-<script src="js/planner.js?v=tmxege"></script>
-<script src="js/radar.js?v=tmxege"></script>
-<script src="js/app.js?v=tmxege"></script>
+<script src="js/normals.js?v=tmxff4"></script>
+<script src="js/climo.js?v=tmxff4"></script>
+<script src="js/habitat-grid.js?v=tmxff4"></script>
+<script src="js/range-grid.js?v=tmxff4"></script>
+<script src="js/elev-grid.js?v=tmxff4"></script>
+<script src="js/water-grid.js?v=tmxff4"></script>
+<script src="js/habgrid.js?v=tmxff4"></script>
+<script src="js/trout-waters.js?v=tmxff4"></script>
+<script src="js/env.js?v=tmxff4"></script>
+<script src="js/models.js?v=tmxff4"></script>
+<script src="js/closures.js?v=tmxff4"></script>
+<script src="js/regs.js?v=tmxff4"></script>
+<script src="js/snow.js?v=tmxff4"></script>
+<script src="js/snowfield.js?v=tmxff4"></script>
+<script src="js/gauges.js?v=tmxff4"></script>
+<script src="js/gaugefield.js?v=tmxff4"></script>
+<script src="js/openwater.js?v=tmxff4"></script>
+<script src="js/duckwater.js?v=tmxff4"></script>
+<script src="js/flyshops.js?v=tmxff4"></script>
+<script src="js/patterns.js?v=tmxff4"></script>
+<script src="js/terrain.js?v=tmxff4"></script>
+<script src="js/landcover.js?v=tmxff4"></script>
+<script src="js/guide.js?v=tmxff4"></script>
+<script src="js/planner.js?v=tmxff4"></script>
+<script src="js/radar.js?v=tmxff4"></script>
+<script src="js/app.js?v=tmxff4"></script>
 <script>
   (function () {
     var x = document.getElementById('notice-x');

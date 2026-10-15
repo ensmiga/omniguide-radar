@@ -1765,7 +1765,16 @@
   };
 
   /* The legend goes full width at phone sizes, so map chrome lifts above it. */
-  Radar.prototype.bottomPad = function () { return this.w < 720 ? 104 : 16; };
+  /* On a phone the legend is a full-width box along the bottom, of a
+     height that changes with the layer and when it is tapped open. */
+  Radar.prototype.bottomPad = function () {
+    if (this.w >= 720) return 16;
+    var lg = document.getElementById('legend');
+    return lg && lg.offsetHeight ? lg.offsetHeight + 18 : 104;
+  };
+  /* And the Locate button sits at the bottom right, so the scale bar and
+     the place name move to the left. */
+  Radar.prototype.phoneLeft = function () { return this.w < 720 ? 14 : null; };
 
   /* How far in from the right the canvas-drawn chrome has to start so it
      clears the legend. Measured from the live element rather than
@@ -1796,7 +1805,8 @@
     var px = pick / milesPer100px * 100;
     var label = pick < 1 ? Math.round(pick * 5280) + ' ft' : pick + ' mi';
 
-    var x1 = this.w - this.rightInset(), x0 = x1 - px, y = this.h - this.bottomPad();
+    var left = this.phoneLeft();
+    var x1 = left != null ? left + px : this.w - this.rightInset(), x0 = x1 - px, y = this.h - this.bottomPad();
     ctx.save();
     ctx.strokeStyle = th.halo;
     ctx.lineWidth = 3.5;
@@ -1809,13 +1819,14 @@
     ctx.lineWidth = 1.4;
     ctx.stroke();
     ctx.font = '600 10.5px "IBM Plex Mono", monospace';
-    ctx.textAlign = 'right';
+    var lx = left != null ? x0 : x1;
+    ctx.textAlign = left != null ? 'left' : 'right';
     ctx.textBaseline = 'bottom';
     ctx.lineWidth = 3;
     ctx.strokeStyle = th.halo;
-    ctx.strokeText(label, x1, y - 6);
+    ctx.strokeText(label, lx, y - 6);
     ctx.fillStyle = th.label;
-    ctx.fillText(label, x1, y - 6);
+    ctx.fillText(label, lx, y - 6);
     ctx.restore();
   };
 
@@ -1838,7 +1849,8 @@
     ctx.font = '600 11.5px "Saira Condensed", sans-serif';
     ctx.letterSpacing = '1.5px';
     var w = ctx.measureText(text).width;
-    var x = this.w - this.rightInset() - w, y = this.h - this.bottomPad() - 22;
+    var x = this.phoneLeft() != null ? this.phoneLeft() : this.w - this.rightInset() - w;
+    var y = this.h - this.bottomPad() - 22;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.lineWidth = 3.5;
