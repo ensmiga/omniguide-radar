@@ -74,7 +74,7 @@
       outRange: cs.getPropertyValue('--map-outrange').trim(),
       graticule: cs.getPropertyValue('--graticule').trim(),
       micro: cs.getPropertyValue('--micro').trim(),
-      label: cs.getPropertyValue('--text').trim()
+      label: cs.getPropertyValue('--map-label').trim()
     };
     if (ground === 'ww') {
       /* Ink for paper. Deliberately not the light theme's values -
@@ -2934,7 +2934,7 @@
      this browser. Account can run it again. A step whose control is not on
      screen - hidden at this width - is skipped rather than pointing at
      nothing. */
-  var TOUR_DONE = 'og.tour';           // localStorage: '1' once finished or turned off
+  var TOUR_KEY = 'og.tour';            // localStorage: 'due' for a new visitor, '1' once finished or turned off
   var TOUR_LATER = 'og.tour.later';    // sessionStorage: put off for this visit
 
   function tourVisible(n) {
@@ -2993,12 +2993,25 @@
         'or fish.' }
   ];
 
-  function tourWanted() {
+  /* Only for someone new. A visitor is new when they accept the
+     acknowledgment for the first time; that marks the tour as due, and
+     it stays due - through "Remind me later" - until it is finished or
+     turned off. Anyone who had already accepted the acknowledgment
+     before the tour existed never has it marked, so never sees it
+     unless they ask for it from Account. */
+  function tourWanted(newVisitor) {
     try {
-      if (localStorage.getItem(TOUR_DONE) === '1') return false;
+      var st = localStorage.getItem(TOUR_KEY);
+      if (st === '1') return false;
+      if (newVisitor) { localStorage.setItem(TOUR_KEY, 'due'); st = 'due'; }
+      if (st !== 'due') return false;
       if (sessionStorage.getItem(TOUR_LATER) === '1') return false;
-    } catch (e) { /* storage blocked: show it, and the buttons still close it */ }
-    return true;
+      return true;
+    } catch (e) {
+      /* Storage blocked: nothing can be remembered, so show it only on
+         the visit that accepts the acknowledgment. */
+      return !!newVisitor;
+    }
   }
 
   var tourOpen = false;
@@ -3101,7 +3114,7 @@
 
     function close(forever) {
       try {
-        if (forever) localStorage.setItem(TOUR_DONE, '1');
+        if (forever) localStorage.setItem(TOUR_KEY, '1');
         else sessionStorage.setItem(TOUR_LATER, '1');
       } catch (e) {}
       window.removeEventListener('resize', place);
@@ -3135,7 +3148,7 @@
     show();
   }
 
-  function maybeStartTour() { if (tourWanted()) startTour(); }
+  function maybeStartTour(newVisitor) { if (tourWanted(newVisitor)) startTour(); }
   App.startTour = startTour;
 
   /* ---------- Boot ---------- */
@@ -3146,7 +3159,7 @@
   function requireAcknowledgment(done) {
     var seen = false;
     try { seen = localStorage.getItem('og.ack') === '2'; } catch (e) {}
-    if (seen) { done(); return; }
+    if (seen) { done(false); return; }
 
     var veil = el('div', 'ackveil');
     var card = el('div', 'ackcard');
@@ -3166,7 +3179,7 @@
     btn.addEventListener('click', function () {
       try { localStorage.setItem('og.ack', '2'); } catch (e) {}
       veil.remove();
-      done();
+      done(true);
     });
     card.appendChild(btn);
     veil.appendChild(card);
@@ -3651,7 +3664,9 @@
     $('#boot').remove();
     /* The tour comes after the acknowledgment, never on top of it, and
        after the first paint so it has something to point at. */
-    requireAcknowledgment(function () { setTimeout(maybeStartTour, 700); });
+    requireAcknowledgment(function (newVisitor) {
+      setTimeout(function () { maybeStartTour(newVisitor); }, 700);
+    });
 
     var last = performance.now(), playAccum = 0;
     function frame(now) {
