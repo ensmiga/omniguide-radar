@@ -170,7 +170,9 @@
     var si = geo.stateIndexAt(lon, lat);
     if (si < 0) return 'UNKNOWN';
     var z = regs.zoneFor(geo.states[si].abbr, lon, lat);
-    var k = z.id + ':' + spId + ':' + day;
+    /* Keyed by zone, which is right for seasons - and wrong inside a
+       national park or the Tahoe closure, so those carry their own key. */
+    var k = z.id + ':' + (regs.closureAt ? regs.closureAt(lon, lat) : '') + ':' + spId + ':' + day;
     var s = legalCache.get(k);
     if (s === undefined) {
       s = regs.check(lon, lat, global.OG.guide.dateFor(day), spId).status;

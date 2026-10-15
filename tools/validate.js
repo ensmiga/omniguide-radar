@@ -304,7 +304,9 @@
          floor. The range is the USGS map with the Gila National Forest
          added - see ingest/usgs-range.mjs - and the Atchafalaya point is at
          Krotz Springs, in the basin's northern population; it first sat
-         between the two. */
+         between the two. The Black Hills are on the absent side: bears
+         are turning up there more often, but as young animals passing
+         through, not a resident population - see ingest/usgs-range.mjs. */
       yes: [
         ['Adirondacks NY', -74.30, 44.10], ['Catskills NY', -74.40, 42.10],
         ['N Maine', -69.30, 46.30], ['N NH', -71.30, 44.90], ['Vermont', -72.80, 43.80],
@@ -350,7 +352,7 @@
         ['Delmarva', -75.60, 38.60], ['Long Island', -72.80, 40.85],
         ['Central Indiana', -86.20, 39.80], ['NW Ohio', -84.00, 41.30],
         ['S Minnesota farmland', -95.00, 44.00],
-        ['Mississippi River Delta coast', -89.40, 29.20]
+        ['Mississippi River Delta coast', -89.40, 29.20], ['Black Hills SD', -103.60, 44.00]
       ]
     },
     turkey: {

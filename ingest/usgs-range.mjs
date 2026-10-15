@@ -238,6 +238,15 @@ const SPECIES = {
      added, as the Forest Service draws it; the habitat surface decides
      what inside it is bear ground and what is desert.
 
+     And one block taken out. The map has the Black Hills and the Bear
+     Lodge Mountains as known range, and they scored up to 78 - but there
+     is no resident population there. South Dakota Game, Fish and Parks
+     describes the bears turning up round Spearfish, Lead and Rapid City
+     as mostly young animals passing through, and is trying to learn
+     whether any have settled; WyoFile reports the Bear Lodge Mountains
+     and Black Hills as the one forested part of Wyoming bears have not
+     reoccupied.
+
      The Louisiana and Florida subspecies have maps of their own, and both
      lie wholly inside this one. One shape, known native range. */
   bear: {
@@ -248,6 +257,10 @@ const SPECIES = {
     added: [
       { name: 'Gila National Forest, New Mexico', usfs: 'Gila National Forest',
         by: 'New Mexico Department of Game and Fish, bear zone 10 (19.31.11 NMAC); boundary from the USDA Forest Service' }
+    ],
+    removed: [
+      { name: 'Black Hills and Bear Lodge Mountains, South Dakota and Wyoming', box: [-105.0, 43.2, -102.9, 44.95],
+        by: 'No resident population: South Dakota Game, Fish and Parks; WyoFile' }
     ]
   },
 
@@ -484,10 +497,19 @@ for (const [id, sp] of Object.entries(SPECIES)) {
   const inside = rasterise(unzip(zip, /\.shp$/i), sp);
   const mapped = toCells(inside).touched;
   addAreas(inside, sp.added);
+  const withAdded = toCells(inside).touched;
+  /* Ground the map has and the animal does not - see the species' note. */
+  for (const c of sp.removed || []) {
+    for (let j = Math.max(0, Math.floor((c.box[1] - LAT0) / d)); j < Math.min(H, Math.ceil((c.box[3] - LAT0) / d)); j++) {
+      for (let i = Math.max(0, Math.floor((c.box[0] - LON0) / d)); i < Math.min(W, Math.ceil((c.box[2] - LON0) / d)); i++) inside[j * W + i] = 0;
+    }
+  }
   const r = toCells(inside);
   out.sp[id] = Buffer.from(r.cells).toString('base64');
   out.added[id] = sp.added.map((c) => ({ name: c.name, released: c.released || null, by: c.by }));
-  console.log(id + ': ' + mapped + ' cells from the USGS map, ' + (r.touched - mapped) + ' more from ' + sp.added.length + ' additions');
+  if (sp.removed) { out.removed = out.removed || {}; out.removed[id] = sp.removed.map((c) => ({ name: c.name, by: c.by })); }
+  console.log(id + ': ' + mapped + ' cells from the USGS map, ' + (withAdded - mapped) + ' more from ' + sp.added.length +
+    ' additions' + (sp.removed ? ', ' + (withAdded - r.touched) + ' taken out' : ''));
 }
 
 writeFileSync(join(ROOT, 'js', 'range-grid.js'), 'window.US_RANGE=' + JSON.stringify(out) + ';\n');

@@ -489,6 +489,14 @@
         l: 'CC BY 4.0 and CC0 1.0', lu: CC_BY }
     ] },
     { group: 'Regulations', items: [
+      { n: 'National Park Service', u: 'https://www.nps.gov/subjects/gisandmapping/index.htm',
+        d: 'National park boundaries, from the Land Resources Division. Hunting is not allowed in national parks, ' +
+          'so the season reference reads closed inside them - Grand Teton\'s elk reduction program aside.',
+        l: 'Public domain' },
+      { n: 'USDA Forest Service', u: 'https://data.fs.usda.gov/geodata/edw/datasets.php',
+        d: 'Administrative forest boundaries: the Lake Tahoe Basin Management Unit, which bounds Nevada\'s Tahoe ' +
+          'bear closure and California\'s basin shooting rules, and the Gila National Forest added to the black ' +
+          'bear range.', l: 'Public domain' },
       { n: 'State and federal agencies', d: 'Season dates in this build are UNVERIFIED PLACEHOLDERS shaped like a typical federal framework. They are not real seasons. Confirm every date, zone, bag limit and shooting hour with the issuing agency before you go.', l: 'Not a data feed' }
     ] }
   ];
@@ -1340,6 +1348,10 @@
       var end = Math.min(pts.length, i + LG_SLICE);
       for (; i < end; i++) {
         var p = pts[i];
+        /* A national park is no place to send a hunter, however good the
+           animals there are - nor Nevada's Tahoe ground for a bear. Fishing
+           keeps them. */
+        if (regs.closedGround && regs.closedGround(p[0], p[1], sp)) continue;
         var a = models.scoreAt(p[0], p[1], t0, d0, sp);
         if (!a.inRange) continue;
         var b = models.scoreAt(p[0], p[1], t1, d1, sp);
@@ -2373,7 +2385,8 @@
       about.appendChild(el('p', null, 'Measured, from live sources: the forecast, water, snow, terrain and ' +
         'land cover at the pin. Built from published data: habitat, range and hunting pressure. Modelled ' +
         'on top of those: species behaviour, migration, confidence and the advice. Not real: the season ' +
-        'dates, which are placeholders.'));
+        'dates, which are placeholders - though the ground closed to hunting is real: national parks, and ' +
+        'Nevada\'s bear closure round Lake Tahoe.'));
 
       /* Counted from the data that is loaded, so these cannot go stale. */
       var wxg = global.WX_GRID || null;
@@ -2415,7 +2428,10 @@
           'of places where the answer is known - nearly 1,400 in all.',
         'Trout water: summer water temperature from USGS gauges, and established populations from the ' +
           'USGS Nonindigenous Aquatic Species database.',
-        'Hunting pressure: how much developed land is within about an hour’s drive, from NLCD.'
+        'Hunting pressure: how much developed land is within about an hour’s drive, from NLCD.',
+        'Closed ground: ' + (global.US_CLOSURES ? global.US_CLOSURES.parks.length : 0) + ' national parks, from the National Park ' +
+          'Service\'s boundaries, where hunting is not allowed (Grand Teton\'s elk reduction program aside); and ' +
+          'Nevada\'s Lake Tahoe bear closure, from the Forest Service\'s basin boundary and the state\'s 2026 regulation.'
       ].forEach(function (t) { built.appendChild(el('li', null, t)); });
       about.appendChild(built);
 
