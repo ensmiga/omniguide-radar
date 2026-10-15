@@ -43,18 +43,21 @@
   }
 
   /* Midnight today, local to the point being queried, expressed in UTC ms.
-     The app's time axis t counts days from there. */
-  function localMidnightUTC(lon, now) {
-    var tzo = global.OG.env.tzOffset(lon, now);
+     The app's time axis t counts days from there. It takes latitude
+     because the zone now comes from the state, not the longitude
+     (tzOffset in env.js): Kalispell sampled the forecast an hour late
+     when it was taken for Pacific time. */
+  function localMidnightUTC(lon, lat, now) {
+    var tzo = global.OG.env.tzOffset(lon, lat, now);
     var y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
     return Date.UTC(y, m, d, 0, 0, 0) - tzo * 3600000;
   }
 
   var _now = new Date();
 
-  /* Fractional grid step for app time t at this longitude. */
-  function stepFor(lon, t) {
-    var utc = localMidnightUTC(lon, _now) + t * 86400000;
+  /* Fractional grid step for app time t at this point. */
+  function stepFor(lon, lat, t) {
+    var utc = localMidnightUTC(lon, lat, _now) + t * 86400000;
     return (utc - T0) / (STEPH * 3600000);
   }
 
@@ -122,8 +125,8 @@
     source: G ? G.source : null,
     fetched: G ? G.t0 : null,
     stepFor: stepFor,
-    /* App time t for an absolute moment, at this longitude. */
-    tAt: function (lon, ms) { return (ms - localMidnightUTC(lon, _now)) / 86400000; },
+    /* App time t for an absolute moment, at this point. */
+    tAt: function (lon, lat, ms) { return (ms - localMidnightUTC(lon, lat, _now)) / 86400000; },
     sample: sample,
     LAPSE_F_PER_FT: LAPSE_F_PER_FT,
     buffers: [buf, buf2, buf3],

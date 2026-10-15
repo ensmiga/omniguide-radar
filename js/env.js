@@ -597,7 +597,7 @@
   function conditionsReal(lon, lat, t, doy) {
     var W = global.OG.wx;
     var hb = habitat(lon, lat);
-    var step = W.stepFor(lon, t);
+    var step = W.stepFor(lon, lat, t);
 
     var a = W.sample(lon, lat, step, RB[0]);
     var b = W.sample(lon, lat, step - 8, RB[1]);        // 24 hours earlier
@@ -660,13 +660,13 @@
     if (GA && GA.available()) {
       var g = GA.at(lon, lat);
       if (g && t >= 1) {
-        var tObs = W.tAt && g.fetched ? W.tAt(lon, Date.parse(g.fetched)) : NaN;
+        var tObs = W.tAt && g.fetched ? W.tAt(lon, lat, Date.parse(g.fetched)) : NaN;
         /* A file from last week is not a current reading. */
         if (!(tObs > -1.5 && tObs < 1.5)) g = null;
         else {
           gaugeCarried = true;
           if (g.waterTempF != null) {
-            var so = W.stepFor(lon, tObs);
+            var so = W.stepFor(lon, lat, tObs);
             var o1 = lapsed(W.sample(lon, lat, so, RB[3]), hb.elev);
             var o2 = lapsed(W.sample(lon, lat, so - 8, RB[4]), hb.elev);
             waterTemp = clamp(waterTemp + g.waterTempF -
@@ -718,7 +718,7 @@
   function probeReal(lon, lat, t, doy) {
     var W = global.OG.wx;
     var hb = habitat(lon, lat);
-    var step = W.stepFor(lon, t);
+    var step = W.stepFor(lon, lat, t);
     var a = W.sample(lon, lat, step, RB[0]);
     var tNow = lapsed(a, hb.elev);
     var b = W.sample(lon, lat, step - 8, RB[1]);
@@ -820,21 +820,282 @@
     return useReal(t) ? probeReal(lon, lat, t, doy) : probeSynthetic(lon, lat, t, doy);
   }
 
-  /* ---------- Solar: NOAA sunrise/sunset, plus US legal shooting light ---------- */
+  /* ---------- Time zone ---------- */
 
-  function tzOffset(lon, date) {
-    var std = lon >= -82.5 ? -5 : lon >= -97 ? -6 : lon >= -114.2 ? -7 : -8;
-    var y = date.getFullYear();
-    var mar = new Date(Date.UTC(y, 2, 1));
-    var dstStart = Date.UTC(y, 2, 1 + ((7 - mar.getUTCDay()) % 7) + 7, 2);
-    var nov = new Date(Date.UTC(y, 10, 1));
-    var dstEnd = Date.UTC(y, 10, 1 + ((7 - nov.getUTCDay()) % 7), 2);
-    var ms = date.getTime();
-    return (ms >= dstStart && ms < dstEnd) ? std + 1 : std;
+  /* Which clock a place keeps.
+
+     The zone came from longitude alone - Eastern east of 82.5 W, Central
+     to 97 W, Mountain to 114.2 W, Pacific beyond - with daylight time
+     everywhere. Times agreed with the label printed beside them, but the
+     label was not the local clock, and legal shooting hours are read off
+     the local clock. Measured on 2026-10-14: a bear plan at 48.41 N,
+     114.52 W, in Flathead County, Montana, which is all Mountain time,
+     said "6:00 AM PDT"; the Great Smokies at 83.5 W came out Central; and
+     Arizona, which keeps standard time all year, got MDT in summer.
+
+     Now the state decides, from the same state raster the regulations
+     use, and each state the zone line runs through carries a ring for
+     the part on the far side of it. Checked on a 0.02 degree grid
+     over the lower 48 against the timezone-boundary-builder 2026e
+     polygons (built from OpenStreetMap, used for the check only and not
+     shipped): the longitude rule had the wrong offset or the wrong
+     daylight rule at 25.9% of points, this has it at 0.63%. Of that,
+     0.47% is the Navajo Nation, which keeps daylight time inside Arizona
+     and is not modelled here; 0.15% is within one raster cell (0.07
+     degrees) of a state line, where the raster can name the neighbour;
+     0.01% is elsewhere, along the traced lines and round Phenix City,
+     Alabama, which keeps Eastern time unofficially and is Central here.
+     Of the 17,014 towns in us-cities.js, 3,193 had the wrong clock and 32
+     still do: 11 on the Navajo Nation, and 21 within one raster cell of
+     a state line, five of them the Alabama towns by Columbus and West
+     Point, Georgia, that keep Eastern time unofficially. */
+  var TZ_STD = {
+    CT: -5, DE: -5, DC: -5, FL: -5, GA: -5, IN: -5, KY: -5, ME: -5, MD: -5, MA: -5, MI: -5, NH: -5,
+    NJ: -5, NY: -5, NC: -5, OH: -5, PA: -5, RI: -5, SC: -5, VT: -5, VA: -5, WV: -5,
+    AL: -6, AR: -6, IL: -6, IA: -6, KS: -6, LA: -6, MN: -6, MS: -6, MO: -6, NE: -6, ND: -6, OK: -6,
+    SD: -6, TN: -6, TX: -6, WI: -6,
+    AZ: -7, CO: -7, ID: -7, MT: -7, NM: -7, UT: -7, WY: -7,
+    CA: -8, NV: -8, OR: -8, WA: -8
+  };
+
+  /* The far side of the line in each state it crosses, as [offset,
+     [lon, lat, lon, lat, ...]]. Traced from 49 CFR 71.5, 71.7 and 71.9:
+     county lines from the Census outlines in us-topo.js, rivers from the
+     USGS National Hydrography Dataset, township and section lines from
+     the BLM PLSS, and ND 31, the Pierre rail bridge, the Intracoastal
+     Waterway and two city limits from Census TIGER, all public domain;
+     then simplified to within 0.01 degrees, about a kilometre. A ring
+     that follows a line closes round its far side through the next state
+     or open water; the state is looked up first, so only points in or
+     just off this one are tested against it. */
+  var TZ_SPLIT = {
+    /* Pacific: north of the Salmon River, from the Idaho-Lemhi county line to the Snake. */
+    ID: [
+      [-8, [
+        -114.558,45.565, -114.633,45.519, -114.662,45.471, -114.795,45.509, -114.795,45.436,
+        -114.72,45.396, -114.771,45.391, -114.874,45.418, -115.016,45.508, -115.065,45.511,
+        -115.209,45.569, -115.321,45.519, -115.353,45.477, -115.426,45.458, -115.508,45.376,
+        -115.611,45.397, -115.667,45.434, -115.752,45.444, -115.808,45.468, -115.938,45.458,
+        -116.1,45.403, -116.12,45.402, -116.139,45.427, -116.214,45.4, -116.285,45.423, -116.307,45.412,
+        -116.319,45.489, -116.296,45.509, -116.312,45.535, -116.305,45.572, -116.273,45.6,
+        -116.304,45.628, -116.285,45.634, -116.292,45.663, -116.281,45.667, -116.319,45.67,
+        -116.308,45.681, -116.317,45.714, -116.303,45.729, -116.327,45.758, -116.296,45.859,
+        -116.326,45.887, -116.429,45.914, -116.444,45.963, -116.46,45.97, -116.551,45.974,
+        -116.622,46.013, -116.613,46.026, -116.626,46.037, -116.649,46.029, -116.65,45.995,
+        -116.7,45.998, -116.743,45.968, -116.757,45.943, -116.73,45.895, -116.751,45.869,
+        -116.795,45.857, -117.5,45.857, -117.5,49.5, -113.8,49.5, -113.8,45.8, -114.3,45.75]]
+    ],
+    /* Mountain: Malheur County north of the T.35S/T.36S township line. */
+    OR: [
+      [-7, [
+        -117.221,44.302, -117.487,44.3, -117.487,44.388, -117.569,44.416, -117.591,44.444,
+        -117.971,44.444, -118.011,44.43, -118.032,44.39, -118.072,44.372, -118.093,44.329, -118.151,44.3,
+        -118.154,44.271, -118.233,44.256, -118.215,42.451, -116,42.451, -116,44.302]]
+    ],
+    /* Mountain: the City of West Wendover, named in 71.9(b). */
+    NV: [
+      [-7, [
+        -114.113,40.749, -114.113,40.725, -114.044,40.726, -114.043,40.756, -114.113,40.756,
+        -114.113,40.75]]
+    ],
+    /* Mountain: El Paso and Hudspeth Counties. */
+    TX: [
+      [-7, [
+        -104.917,32.001, -104.906,30.836, -104.917,30.836, -104.917,30.663, -104.982,30.629,
+        -104.982,29.5, -107,29.5, -107,32.2, -104.917,32.2]]
+    ],
+    /* Mountain: Sherman, Wallace, Greeley and Hamilton Counties. */
+    KS: [
+      [-7, [
+        -102.049,39.568, -101.389,39.568, -101.392,39.135, -101.479,39.134, -101.486,38.701,
+        -101.568,38.7, -101.568,38.263, -101.543,38.263, -101.543,37.828, -101.525,37.828,
+        -101.529,37.737, -102.042,37.738, -102.6,37.738, -102.6,39.568]]
+    ],
+    /* Mountain: west of the CFR line through Cherry County and of Thomas, McPherson, Lincoln, Hayes and Hitchcock. */
+    NE: [
+      [-7, [
+        -100.905,43.046, -100.905,42.813, -100.866,42.813, -100.866,42.784, -100.852,42.784,
+        -100.853,42.756, -100.893,42.756, -100.893,42.612, -100.775,42.612, -100.777,42.437,
+        -100.829,42.438, -100.829,42.349, -100.81,42.35, -100.809,42.205, -100.751,42.205,
+        -100.753,42.088, -100.847,42.088, -100.843,41.741, -101.407,41.743, -101.407,41.395,
+        -101.27,41.395, -101.27,41.048, -101.249,41.048, -101.249,40.698, -101.346,40.698,
+        -101.342,40.351, -101.324,40.351, -101.324,40.003, -101.324,39.9, -104.5,39.9, -104.5,43.3,
+        -100.905,43.3]]
+    ],
+    /* Mountain: west of the Missouri down to the Pierre rail bridge, then west of Jones, Mellette and Todd;
+       and all of Fort Pierre, which that line cuts through: 71.7(g) puts such towns in Mountain time. */
+    SD: [
+      [-7, [
+        -100.499,45.943, -100.387,45.869, -100.377,45.816, -100.308,45.708, -100.337,45.663,
+        -100.405,45.65, -100.431,45.595, -100.488,45.536, -100.445,45.509, -100.391,45.512,
+        -100.341,45.473, -100.273,45.381, -100.316,45.318, -100.262,45.247, -100.28,45.159,
+        -100.326,45.1, -100.316,45.059, -100.28,45.02, -100.391,45.028, -100.423,44.99, -100.402,44.857,
+        -100.542,44.761, -100.61,44.77, -100.675,44.823, -100.714,44.821, -100.718,44.771,
+        -100.632,44.737, -100.614,44.707, -100.646,44.598, -100.621,44.567, -100.527,44.547,
+        -100.531,44.516, -100.574,44.491, -100.581,44.461, -100.535,44.444, -100.409,44.458,
+        -100.387,44.44, -100.371,44.374, -100.546,44.168, -101.048,44.168, -101.066,43.841,
+        -101.087,43.85, -101.163,43.83, -101.227,43.789, -101.227,42.998, -101.227,42.9, -104.5,42.9,
+        -104.5,46.1, -100.499,46.1]],
+      [-7, [
+        -100.4,44.373, -100.401,44.368, -100.39,44.368, -100.39,44.357, -100.388,44.357, -100.382,44.345,
+        -100.359,44.347, -100.37,44.357, -100.38,44.39, -100.395,44.389, -100.395,44.386, -100.4,44.386,
+        -100.4,44.382]]
+    ],
+    /* Mountain: township lines and the Little Missouri in McKenzie, then west of Mercer and Morton, and ND 31. */
+    ND: [
+      [-7, [
+        -104.045,48, -103.97,47.972, -103.959,47.954, -103.968,47.848, -103.797,47.848, -103.798,47.675,
+        -103.736,47.675, -103.736,47.589, -103.609,47.588, -103.608,47.514, -103.559,47.507,
+        -103.53,47.538, -103.459,47.522, -103.43,47.532, -103.447,47.555, -103.435,47.595,
+        -103.382,47.601, -103.297,47.578, -103.268,47.599, -103.172,47.572, -103.129,47.589,
+        -103.067,47.578, -103.032,47.634, -103.02,47.632, -103.038,47.659, -103.024,47.679,
+        -102.957,47.657, -102.953,47.632, -102.942,47.642, -102.883,47.624, -102.869,47.603,
+        -102.765,47.598, -102.747,47.58, -102.687,47.571, -102.671,47.531, -102.597,47.544,
+        -102.473,47.512, -102.438,47.521, -102.442,47.567, -102.421,47.569, -102.411,47.592,
+        -102.204,47.575, -102.207,47.328, -102.146,47.328, -102.146,46.981, -102.096,46.981,
+        -102.096,46.717, -101.719,46.718, -101.719,46.631, -101.299,46.631, -101.299,46.371,
+        -101.048,46.371, -101.048,46.284, -101.026,46.284, -101.087,46.276, -101.102,46.23,
+        -101.199,46.184, -101.191,46.149, -101.303,46.133, -101.299,46.105, -101.334,46.086,
+        -101.334,45.944, -101.334,45.8, -104.5,45.8, -104.5,48]]
+    ],
+    /* Central: Gogebic, Iron, Dickinson and Menominee Counties. */
+    MI: [
+      [-6, [
+        -87.265,45.551, -87.326,45.552, -87.326,45.899, -87.369,45.899, -87.369,45.985, -87.617,45.986,
+        -87.617,46.247, -88.116,46.247, -88.116,46.42, -88.991,46.42, -88.991,46.332, -89.365,46.333,
+        -89.365,46.506, -89.742,46.506, -89.742,46.593, -89.864,46.593, -89.864,46.765, -89.889,46.765,
+        -89.889,47, -90.6,47, -90.6,44.9, -87.265,44.9]]
+    ],
+    /* Central: the six northwest and six southwest counties. */
+    IN: [
+      [-6, [
+        -87.527,40.737, -87.1,40.737, -87.1,40.838, -86.985,40.838, -86.989,40.912, -86.931,40.913,
+        -86.931,41.172, -86.468,41.171, -86.468,41.433, -86.526,41.433, -86.526,41.52, -86.504,41.519,
+        -86.486,41.571, -86.486,41.65, -86.526,41.651, -86.526,41.76, -86.526,42, -88.2,42, -88.2,40.737]],
+      [-6, [
+        -86.461,38.122, -86.461,38.207, -86.572,38.207, -86.569,38.267, -86.791,38.249, -86.791,38.205,
+        -87.075,38.204, -87.075,38.232, -87.297,38.232, -87.315,38.246, -87.315,38.382, -87.409,38.376,
+        -87.409,38.436, -87.444,38.436, -87.462,38.466, -87.462,38.534, -87.495,38.496, -87.574,38.491,
+        -87.599,38.451, -87.746,38.414, -88.3,38.414, -88.3,37.6, -86.461,37.6]]
+    ],
+    /* Central: west of Meade, Hardin, Larue, Taylor, Casey, Pulaski and Wayne. */
+    KY: [
+      [-6, [
+        -84.975,36.616, -85,36.624, -85,36.677, -85.022,36.718, -85.004,36.757, -85.065,36.859,
+        -84.961,36.916, -84.946,36.96, -84.907,36.946, -84.835,36.998, -84.907,37.047, -84.9,37.116,
+        -84.953,37.102, -85.043,37.186, -85.058,37.257, -85.165,37.311, -85.194,37.272, -85.312,37.246,
+        -85.309,37.227, -85.352,37.192, -85.478,37.364, -85.585,37.432, -85.585,37.47, -85.635,37.472,
+        -85.657,37.422, -86.048,37.45, -86.055,37.496, -86.113,37.567, -86.177,37.555, -86.231,37.575,
+        -86.246,37.602, -86.274,37.593, -86.152,37.799, -86.49,38.046, -86.49,39.3, -89.8,39.3,
+        -89.8,36.3, -84.975,36.3]]
+    ],
+    /* Eastern: Scott, Morgan, Roane, Rhea, Hamilton and everything east. */
+    TN: [
+      [-5, [
+        -84.785,36.604, -84.659,36.395, -84.702,36.371, -84.724,36.376, -84.738,36.338, -84.785,36.326,
+        -84.799,36.297, -84.875,36.285, -84.885,36.239, -84.914,36.208, -84.907,36.156, -84.871,36.137,
+        -84.831,36.084, -84.806,36.091, -84.72,35.995, -84.681,35.909, -84.781,35.825, -84.918,35.762,
+        -85.108,35.571, -85.101,35.534, -85.147,35.491, -85.115,35.476, -85.169,35.456, -85.244,35.319,
+        -85.388,35.147, -85.391,35.121, -85.363,35.087, -85.388,35.04, -85.474,34.983, -85.474,34.8,
+        -81.4,34.8, -81.4,36.8, -84.785,36.8]]
+    ],
+    /* Central: west of the Apalachicola, Jackson River and Intracoastal Waterway. */
+    FL: [
+      [-6, [
+        -84.864,30.711, -84.907,30.619, -84.932,30.607, -84.989,30.525, -85,30.456, -84.982,30.442,
+        -85.032,30.42, -85.015,30.409, -85.083,30.229, -85.115,30.2, -85.154,30.092, -85.137,30.086,
+        -85.137,30.043, -85.115,30.023, -85.029,29.987, -85.018,29.951, -85.054,29.911, -85.022,29.808,
+        -85.04,29.78, -85.102,29.774, -85.182,29.813, -85.211,29.877, -85.278,29.902, -85.323,29.956,
+        -85.371,29.968, -85.389,30.015, -85.389,29.924, -85.45,29.88, -85.45,29.5, -88,29.5, -88,31.2,
+        -84.864,31.2]]
+    ]
+  };
+
+  var tzRings = {};
+  (function () {
+    for (var ab in TZ_SPLIT) {
+      tzRings[ab] = TZ_SPLIT[ab].map(function (z) {
+        var r = z[1], w = 999, s = 999, e = -999, n = -999;
+        for (var i = 0; i < r.length; i += 2) {
+          if (r[i] < w) w = r[i];
+          if (r[i] > e) e = r[i];
+          if (r[i + 1] < s) s = r[i + 1];
+          if (r[i + 1] > n) n = r[i + 1];
+        }
+        return { off: z[0], r: r, w: w, s: s, e: e, n: n };
+      });
+    }
+  })();
+
+  function inRing(r, x, y) {
+    var inside = false;
+    for (var i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+      var yi = r[i + 1], yj = r[j + 1];
+      if ((yi > y) !== (yj > y) && x < (r[j] - r[i]) * (y - yi) / (yj - yi) + r[i]) inside = !inside;
+    }
+    return inside;
   }
 
-  /* Minutes after local midnight for a given solar altitude. */
-  function solarEvent(lat, lon, date, angleDeg, morning) {
+  /* The state raster's cells are 0.07 degrees, and a cell whose centre is
+     water belongs to no state, so towns on the shore fell through to the
+     longitude rule: Apalachicola and Port St. Joe came out Central, and
+     so did Marquette on Lake Superior. The cells one and two steps round
+     are asked before giving up. Of the 17,014 towns, 304 sit on such
+     cells; the longitude rule had 39 of them on the wrong clock, and with
+     this none are. */
+  var NEAR = [0.07, 0, -0.07, 0, 0, 0.07, 0, -0.07, 0.07, 0.07, -0.07, 0.07, 0.07, -0.07, -0.07, -0.07,
+    0.14, 0, -0.14, 0, 0, 0.14, 0, -0.14, 0.14, 0.14, -0.14, 0.14, 0.14, -0.14, -0.14, -0.14];
+
+  /* Standard offset from GMT, and whether daylight time is kept. Further
+     off the state raster than that (offshore, mid-lake) the longitude rule
+     stands. Fills `out`, because the forecast sampler asks once per cell. */
+  function zoneAt(lon, lat, out) {
+    var geo = global.OG.geo;
+    var si = geo && lat != null ? geo.stateIndexAt(lon, lat) : -1;
+    for (var q = 0; si < 0 && geo && lat != null && q < NEAR.length; q += 2) si = geo.stateIndexAt(lon + NEAR[q], lat + NEAR[q + 1]);
+    var ab = si < 0 ? null : geo.states[si].abbr;
+    var std = ab ? TZ_STD[ab] : null;
+    if (std == null) std = lon >= -82.5 ? -5 : lon >= -97 ? -6 : lon >= -114.2 ? -7 : -8;
+    var rs = ab && tzRings[ab];
+    if (rs) for (var k = 0; k < rs.length; k++) {
+      var z = rs[k];
+      if (lon >= z.w && lon <= z.e && lat >= z.s && lat <= z.n && inRing(z.r, lon, lat)) { std = z.off; break; }
+    }
+    out.std = std;
+    out.dst = ab !== 'AZ';
+    return out;
+  }
+
+  /* Daylight time runs from 2 a.m. local standard time on the second
+     Sunday in March to 2 a.m. local daylight time on the first Sunday in
+     November (49 CFR 71.2). This switched at 2 a.m. GMT, which is the
+     evening before in every US zone, so for four to eight hours round
+     each changeover the clock was an hour out. Noon, which is what the
+     plans ask about, came out the same either way: checked on every day
+     of 2025-2027 in all four zones. */
+  var dstYear = NaN, dstOn = 0, dstOff = 0;
+  function offsetIn(z, date) {
+    if (!z.dst) return z.std;
+    var y = date.getUTCFullYear();
+    if (y !== dstYear) {
+      var mar = new Date(Date.UTC(y, 2, 1)).getUTCDay(), nov = new Date(Date.UTC(y, 10, 1)).getUTCDay();
+      dstOn = Date.UTC(y, 2, 8 + (7 - mar) % 7, 2);
+      dstOff = Date.UTC(y, 10, 1 + (7 - nov) % 7, 2);
+      dstYear = y;
+    }
+    var ms = date.getTime();
+    return (ms >= dstOn - z.std * 3600000 && ms < dstOff - (z.std + 1) * 3600000) ? z.std + 1 : z.std;
+  }
+
+  var ZONE = { std: 0, dst: true };
+  function tzOffset(lon, lat, date) {
+    return offsetIn(zoneAt(lon, lat, ZONE), date);
+  }
+
+  /* ---------- Solar: NOAA sunrise/sunset, plus US legal shooting light ---------- */
+
+  /* Minutes after local midnight for a given solar altitude, `off` hours from GMT. */
+  function solarEvent(lat, lon, date, angleDeg, morning, off) {
     var doy = dayOfYear(date);
     var g = 2 * Math.PI / 365 * (doy - 1 + 0.5);
     var eqTime = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g)
@@ -847,18 +1108,18 @@
     if (cosH > 1 || cosH < -1) return null;              // polar day or night
     var ha = Math.acos(cosH) / D2R;
     var utcMin = 720 - 4 * (lon + (morning ? ha : -ha)) - eqTime;
-    return utcMin + tzOffset(lon, date) * 60;
+    return utcMin + off * 60;
   }
 
   function sun(lat, lon, date) {
-    var sr = solarEvent(lat, lon, date, 90.833, true);
-    var ss = solarEvent(lat, lon, date, 90.833, false);
-    var civil = solarEvent(lat, lon, date, 96, true);
-    var civilEnd = solarEvent(lat, lon, date, 96, false);
-    var off = tzOffset(lon, date);
-    var std = lon >= -82.5 ? -5 : lon >= -97 ? -6 : lon >= -114.2 ? -7 : -8;
-    var label = ({ '-5': 'ET', '-6': 'CT', '-7': 'MT', '-8': 'PT' })[String(std)] || 'local';
-    if (off !== std) label = label.charAt(0) + 'DT';
+    var z = zoneAt(lon, lat, {}), off = offsetIn(z, date);
+    var sr = solarEvent(lat, lon, date, 90.833, true, off);
+    var ss = solarEvent(lat, lon, date, 90.833, false, off);
+    var civil = solarEvent(lat, lon, date, 96, true, off);
+    var civilEnd = solarEvent(lat, lon, date, 96, false, off);
+    /* ET, CT, MT, PT in winter, EDT and so on in summer, MST all year in Arizona. */
+    var label = ({ '-5': 'E', '-6': 'C', '-7': 'M', '-8': 'P' })[String(z.std)];
+    label = !label ? 'local' : !z.dst ? label + 'ST' : off !== z.std ? label + 'DT' : label + 'T';
     return {
       sunrise: sr, sunset: ss, dawn: civil, dusk: civilEnd, tz: label,
       /* Federal waterfowl framework: one half hour before sunrise to sunset.

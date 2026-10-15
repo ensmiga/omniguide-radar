@@ -489,6 +489,10 @@
         l: 'CC BY 4.0 and CC0 1.0', lu: CC_BY }
     ] },
     { group: 'Regulations', items: [
+      { n: '49 CFR Part 71, standard time zone boundaries', u: 'https://www.ecfr.gov/current/title-49/subtitle-A/part-71',
+        d: 'Which clock a place keeps, for sunrise, sunset and legal hours. Where a zone line crosses a state it is ' +
+           'traced on the Census county outlines, USGS National Hydrography Dataset rivers, BLM township and ' +
+           'section lines, and Census TIGER roads, railroads and waterways.', l: 'Public domain' },
       { n: 'State and federal agencies', d: 'Season dates in this build are UNVERIFIED PLACEHOLDERS shaped like a typical federal framework. They are not real seasons. Confirm every date, zone, bag limit and shooting hour with the issuing agency before you go.', l: 'Not a data feed' }
     ] }
   ];
@@ -2526,6 +2530,16 @@
       seg.appendChild(el('div', 'tl-name', bandLabel(d, date)));
       tlBands.appendChild(seg);
     }
+    syncTimeLabel();
+  }
+
+  /* The clock under the timeline is read at the same point as the bands,
+     so it is rewritten with them. It used to change only with the time or
+     the controls: after a search opened a plan at 48.41 N, 114.52 W it
+     still said "6:00 AM CDT" from before, beside a plan saying MDT. */
+  function syncTimeLabel() {
+    if (!timeLabel) return;
+    timeLabel.textContent = shortDay(App.dayIndex(), guide.dateFor(App.state.t)) + ' · ' + clockAt(App.state.t);
   }
 
   var bandTimer = null;
@@ -2729,8 +2743,7 @@
         tlBands.children[bi].classList.toggle('on', bi === cur);
       }
     }
-    var d = guide.dateFor(App.state.t);
-    timeLabel.textContent = shortDay(cur, d) + ' · ' + clockAt(App.state.t);
+    syncTimeLabel();
     playBtn.textContent = App.state.playing ? 'Pause' : 'Play';
     playBtn.setAttribute('aria-pressed', String(App.state.playing));
   }
