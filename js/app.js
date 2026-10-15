@@ -2889,6 +2889,9 @@
 
   function wireMap(canvas, radar) {
     var dragging = false, moved = 0, lastX = 0, lastY = 0, pinch = null;
+    /* Two fingers down at any point in this touch: never a tap. Lifting
+       both after a pinch that barely moved opened the plan. */
+    var multiTouch = false;
 
     function pt(e) {
       var r = canvas.getBoundingClientRect();
@@ -2897,11 +2900,12 @@
 
     canvas.addEventListener('pointerdown', function (e) {
       canvas.setPointerCapture(e.pointerId);
+      if (!dragging) multiTouch = false;
       dragging = true; moved = 0;
       var p = pt(e); lastX = p[0]; lastY = p[1];
     });
     canvas.addEventListener('pointermove', function (e) {
-      if (!dragging) return;
+      if (!dragging || App.inspecting) return;
       var p = pt(e);
       var dx = p[0] - lastX, dy = p[1] - lastY;
       moved += Math.abs(dx) + Math.abs(dy);
@@ -2913,6 +2917,7 @@
     function endDrag(e) {
       if (!dragging) return;
       dragging = false;
+      if (App.inspecting || multiTouch) return;   // a held finger lifting, or a pinch - not a tap
       if (moved < 6) {
         var p = pt(e);
         var raw = radar.lonLatAt(p[0], p[1]);
@@ -2947,6 +2952,12 @@
         App.dirty = true;
         scheduleBands();
         openPanel('OmniGuide Plan', function () { return buildPlan(lon, lat); });
+        if (e.pointerType === 'touch' && !load('og.tip.hold', false)) {
+          save('og.tip.hold', true);
+          setTimeout(function () {
+            toast('Tip: touch and hold the map, then slide, to read any spot without opening the plan.');
+          }, 600);
+        }
       }
     }
     canvas.addEventListener('pointerup', endDrag);
@@ -2966,7 +2977,10 @@
 
     /* Pinch */
     var pts = {};
-    canvas.addEventListener('pointerdown', function (e) { pts[e.pointerId] = pt(e); });
+    canvas.addEventListener('pointerdown', function (e) {
+      pts[e.pointerId] = pt(e);
+      if (Object.keys(pts).length > 1) multiTouch = true;
+    });
     canvas.addEventListener('pointermove', function (e) {
       if (!(e.pointerId in pts)) return;
       pts[e.pointerId] = pt(e);
@@ -3025,8 +3039,13 @@
         'as a poor score.' },
     { target: function () { return $('#map'); },
       title: 'Tap a place for its plan',
-      body: 'Tap anywhere on the map for the OmniGuide Plan at that exact point: the score and why, the best ' +
-        'hours, how to set up, the next seven days and the season reference. Scroll or pinch to zoom.' },
+      body: function () {
+        return 'Tap anywhere on the map for the OmniGuide Plan at that exact point: the score and why, the best ' +
+          'hours, how to set up, the next seven days and the season reference. ' +
+          (window.matchMedia && matchMedia('(pointer: coarse)').matches
+            ? 'Touch and hold, then slide, to read any spot without opening it. Pinch to zoom.'
+            : 'Hover to read any spot without opening it. Scroll or pinch to zoom.');
+      } },
     { target: function () { return tourVisible($('#layers')) || $('#layertab'); },
       title: 'Layers',
       body: 'Spot compares a place with the whole country - where to go. Day compares today with the rest of ' +
@@ -3168,7 +3187,7 @@
       var s = steps[i], last = i === steps.length - 1;
       count.textContent = (i + 1) + ' of ' + steps.length;
       head.textContent = typeof s.title === 'function' ? s.title() : s.title;
-      body.textContent = s.body;
+      body.textContent = typeof s.body === 'function' ? s.body() : s.body;
       back.hidden = i === 0;
       next.textContent = last ? 'Done' : i === 0 ? 'Show me' : 'Next';
       /* At the end there is nothing to put off. */
@@ -3473,8 +3492,77 @@
       node.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(top) + 'px)';
     }
 
-    /* Hover readout. */
+    /* Readout: the value under the cursor, or under a finger held on the
+       map. True when there is something to show. */
     var hov = $('#hover');
+    function readoutAt(x, y) {
+      var ll = radar.lonLatAt(x, y);
+      if (!isFinite(ll[0]) || geo.stateIndexAt(ll[0], ll[1]) < 0) { hov.hidden = true; return false; }
+      var v = radar.fieldAt(ll[0], ll[1], false);
+      var wxl = radarNS.WX_LAYERS[App.state.layer];
+      hov.querySelector('.hv-coord').textContent =
+        Math.abs(ll[1]).toFixed(4) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + '  ' +
+        Math.abs(ll[0]).toFixed(4) + '° ' + (ll[0] >= 0 ? 'E' : 'W');
+      var vn = hov.querySelector('.hv-val');
+      if (v !== v) {
+        vn.textContent = '--';
+        vn.style.color = '';
+        hov.querySelector('.hv-lab').textContent = 'Not modelled here';
+      } else if (v === -1) {
+        vn.textContent = '—';
+        vn.style.color = '';
+        hov.querySelector('.hv-lab').textContent = 'Locked';
+      } else {
+        vn.textContent = wxl ? (wxl.digits ? v.toFixed(wxl.digits) : Math.round(v)) : Math.round(v);
+        vn.style.color = wxl ? '' : radarNS.rampCSS(v / 100, 1);
+        hov.querySelector('.hv-lab').textContent = wxl ? wxl.name + ' ' + wxl.unit
+          : App.state.layer === 'legal' ? 'Season'
+          : band(Math.round(v));
+      }
+
+      /* On the Opportunity layer, show both numbers whichever one the
+         colours are set to, with one line each saying what they compare
+         against. They disagree constantly and that is the point. */
+      var pair = hov.querySelector('.hv-pair');
+      if (App.state.layer === 'opportunity' && v === v && v !== -1) {
+        /* Both read exactly at the cursor, the same way the plan panel
+           reads them, so the two surfaces can never quote different
+           numbers for the same point. The colour underneath is a
+           smoothed field and may sit a point or two off. */
+        var sc = models.scoreAt(ll[0], ll[1], App.state.t, env.doyFor(App.state.t), App.state.species);
+        var ds = models.dayScore(ll[0], ll[1], App.state.species, App.state.t);
+        var spotV = sc.inRange ? sc.opportunity : null;
+        var dayV = ds ? ds.score : null;
+        var activeV = App.state.oppMode === 'day' ? dayV : spotV;
+        if (activeV != null) {
+          vn.textContent = String(activeV);
+          vn.style.color = radarNS.rampCSS(activeV / 100, 1);
+          hov.querySelector('.hv-lab').textContent = band(activeV);
+        }
+        pair.innerHTML = '';
+        [
+          { k: 'SPOT', v: spotV, d: 'place vs country',
+            on: App.state.oppMode === 'spot' },
+          { k: 'DAY', v: dayV, d: 'today vs its season',
+            on: App.state.oppMode === 'day' }
+        ].forEach(function (row) {
+          var r = el('div', 'hv-row' + (row.on ? '' : ' dim'));
+          r.appendChild(el('span', 'hp-k', row.k));
+          var vv = el('span', 'hp-v', row.v == null ? '--' : String(row.v));
+          if (row.v != null) vv.style.color = radarNS.rampCSS(row.v / 100, 1);
+          r.appendChild(vv);
+          r.appendChild(el('span', 'hp-b', row.v == null ? '' : band(row.v)));
+          r.appendChild(el('span', 'hp-d', row.d));
+          pair.appendChild(r);
+        });
+        pair.hidden = false;
+      } else {
+        pair.hidden = true;
+      }
+      hov.hidden = false;
+      return true;
+    }
+
     var hoverRaf = null, hoverPt = null;
     canvas.addEventListener('pointermove', function (e) {
       if (e.pointerType === 'touch') return;
@@ -3486,75 +3574,74 @@
       if (hoverRaf) return;
       hoverRaf = requestAnimationFrame(function () {
         hoverRaf = null;
-        if (!hoverPt) return;
-        var ll = radar.lonLatAt(hoverPt[0], hoverPt[1]);
-        if (!isFinite(ll[0]) || geo.stateIndexAt(ll[0], ll[1]) < 0) { hov.hidden = true; return; }
-        var v = radar.fieldAt(ll[0], ll[1], false);
-        var wxl = radarNS.WX_LAYERS[App.state.layer];
-        hov.hidden = false;
-        placeHover(hov, hoverPt[0], hoverPt[1]);
-        hov.querySelector('.hv-coord').textContent =
-          Math.abs(ll[1]).toFixed(4) + '° ' + (ll[1] >= 0 ? 'N' : 'S') + '  ' +
-          Math.abs(ll[0]).toFixed(4) + '° ' + (ll[0] >= 0 ? 'E' : 'W');
-        var vn = hov.querySelector('.hv-val');
-        if (v !== v) {
-          vn.textContent = '--';
-          vn.style.color = '';
-          hov.querySelector('.hv-lab').textContent = 'Not modelled here';
-        } else if (v === -1) {
-          vn.textContent = '—';
-          vn.style.color = '';
-          hov.querySelector('.hv-lab').textContent = 'Locked';
-        } else {
-          vn.textContent = wxl ? (wxl.digits ? v.toFixed(wxl.digits) : Math.round(v)) : Math.round(v);
-          vn.style.color = wxl ? '' : radarNS.rampCSS(v / 100, 1);
-          hov.querySelector('.hv-lab').textContent = wxl ? wxl.name + ' ' + wxl.unit
-            : App.state.layer === 'legal' ? 'Season'
-            : band(Math.round(v));
-        }
-
-        /* On the Opportunity layer, show both numbers whichever one the
-           colours are set to, with one line each saying what they compare
-           against. They disagree constantly and that is the point. */
-        var pair = hov.querySelector('.hv-pair');
-        if (App.state.layer === 'opportunity' && v === v && v !== -1) {
-          /* Both read exactly at the cursor, the same way the plan panel
-             reads them, so the two surfaces can never quote different
-             numbers for the same point. The colour underneath is a
-             smoothed field and may sit a point or two off. */
-          var sc = models.scoreAt(ll[0], ll[1], App.state.t, env.doyFor(App.state.t), App.state.species);
-          var ds = models.dayScore(ll[0], ll[1], App.state.species, App.state.t);
-          var spotV = sc.inRange ? sc.opportunity : null;
-          var dayV = ds ? ds.score : null;
-          var activeV = App.state.oppMode === 'day' ? dayV : spotV;
-          if (activeV != null) {
-            vn.textContent = String(activeV);
-            vn.style.color = radarNS.rampCSS(activeV / 100, 1);
-            hov.querySelector('.hv-lab').textContent = band(activeV);
-          }
-          pair.innerHTML = '';
-          [
-            { k: 'SPOT', v: spotV, d: 'place vs country',
-              on: App.state.oppMode === 'spot' },
-            { k: 'DAY', v: dayV, d: 'today vs its season',
-              on: App.state.oppMode === 'day' }
-          ].forEach(function (row) {
-            var r = el('div', 'hv-row' + (row.on ? '' : ' dim'));
-            r.appendChild(el('span', 'hp-k', row.k));
-            var vv = el('span', 'hp-v', row.v == null ? '--' : String(row.v));
-            if (row.v != null) vv.style.color = radarNS.rampCSS(row.v / 100, 1);
-            r.appendChild(vv);
-            r.appendChild(el('span', 'hp-b', row.v == null ? '' : band(row.v)));
-            r.appendChild(el('span', 'hp-d', row.d));
-            pair.appendChild(r);
-          });
-          pair.hidden = false;
-        } else {
-          pair.hidden = true;
-        }
+        if (hoverPt && readoutAt(hoverPt[0], hoverPt[1])) placeHover(hov, hoverPt[0], hoverPt[1]);
       });
     });
-    canvas.addEventListener('pointerleave', function () { hov.hidden = true; hoverPt = null; });
+    canvas.addEventListener('pointerleave', function (e) {
+      if (e.pointerType === 'touch') return;
+      hov.hidden = true; hoverPt = null;
+    });
+
+    /* Touch has no hover, so the readout never appeared on a phone - a tap
+       went straight to the plan. Now touch and hold reads the spot under
+       the finger, and sliding keeps reading, with the box held above the
+       finger where it can be seen and a ring round the point itself. A tap
+       still opens the plan and a drag still pans: it is keeping still for
+       a moment that starts it. Lifting the finger leaves the box up for a
+       couple of seconds to be read. */
+    var probe = $('#probe');
+    var HOLD_MS = 380, holdTimer = null, holdAt = null, fingers = 0, fadeTimer = null;
+    function placeAbove(node, x, y) {
+      var w = node.offsetWidth || 170, h = node.offsetHeight || 54, m = 8;
+      var left = Math.max(m, Math.min(radar.w - w - m, x - w / 2));
+      var top = y - h - 52;                       // clear of the fingertip
+      if (top < m) top = Math.min(radar.h - h - m, y + 52);
+      node.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(top) + 'px)';
+    }
+    function inspect(x, y) {
+      probe.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px)';
+      probe.hidden = false;
+      if (readoutAt(x, y)) placeAbove(hov, x, y);
+    }
+    function touchXY(e) {
+      var r2 = canvas.getBoundingClientRect();
+      return [e.clientX - r2.left, e.clientY - r2.top];
+    }
+    canvas.addEventListener('pointerdown', function (e) {
+      if (e.pointerType !== 'touch') return;
+      fingers++;
+      clearTimeout(holdTimer); clearTimeout(fadeTimer);
+      hov.hidden = true; probe.hidden = true;
+      if (fingers > 1) { holdAt = null; App.inspecting = false; return; }   // a pinch
+      holdAt = touchXY(e);
+      holdTimer = setTimeout(function () {
+        if (!holdAt) return;
+        App.inspecting = true;
+        if (navigator.vibrate) navigator.vibrate(8);
+        inspect(holdAt[0], holdAt[1]);
+      }, HOLD_MS);
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (e.pointerType !== 'touch') return;
+      var p = touchXY(e);
+      if (App.inspecting) { inspect(p[0], p[1]); return; }
+      if (holdAt && Math.abs(p[0] - holdAt[0]) + Math.abs(p[1] - holdAt[1]) > 8) {
+        clearTimeout(holdTimer); holdAt = null;                  // it is a pan
+      }
+    });
+    function endTouch(e) {
+      if (e.pointerType !== 'touch') return;
+      fingers = Math.max(0, fingers - 1);
+      clearTimeout(holdTimer); holdAt = null;
+      if (!App.inspecting || fingers) return;
+      /* Cleared after the map's own pointerup has seen it, so lifting the
+         finger does not also open the plan. */
+      setTimeout(function () { App.inspecting = false; }, 0);
+      fadeTimer = setTimeout(function () { hov.hidden = true; probe.hidden = true; }, 2200);
+    }
+    canvas.addEventListener('pointerup', endTouch);
+    canvas.addEventListener('pointercancel', endTouch);
+    canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
     /* Basemap. Satellite and Duck water are Pro: imagery is what lets
        someone pick a slough or a field edge out by eye, and Duck water is
@@ -3819,8 +3906,61 @@
     /* The tour comes after the acknowledgment, never on top of it, and
        after the first paint so it has something to point at. */
     requireAcknowledgment(function (newVisitor) {
-      setTimeout(function () { maybeStartTour(newVisitor); }, 700);
+      startAtLocation(function () {
+        setTimeout(function () { maybeStartTour(newVisitor); }, 700);
+      });
     });
+
+    /* Open where you are. On a phone or tablet the first view was the
+       whole lower 48, a strip across the middle of a tall screen, and the
+       ground you hunt a few pixels of it. Phones and tablets ask, once the
+       acknowledgment is out of the way and before the tour; anywhere the
+       location has already been allowed - a desktop that has used Locate
+       - it is used without asking. Refused, unavailable or outside the
+       lower 48, the map stays on the whole country. A coarse fix is
+       enough for this and comes back faster. The tour waits at most
+       twelve seconds for it.
+
+       And a first-time visitor's free state is the one they are in: it
+       was Montana for everyone, so the map opened on locked grey ground
+       for anyone anywhere else. Only when no choice has ever been saved,
+       and it does not count against the once-in-90-days change. */
+    function startAtLocation(next) {
+      var finish = function () { var n = next; next = null; if (n) n(); };
+      if (!navigator.geolocation) { finish(); return; }
+      var touchFirst = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+      function go() {
+        var giveUp = setTimeout(finish, 12000);
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          clearTimeout(giveUp);
+          var lon = pos.coords.longitude, lat = pos.coords.latitude, si = geo.stateIndexAt(lon, lat);
+          if (si < 0) {
+            toast('Your location is outside the lower 48, so the map starts on the whole country.');
+            finish();
+            return;
+          }
+          if (!App.state.gps) App.state.gps = { lon: lon, lat: lat, accuracy: pos.coords.accuracy };
+          if (load('og.ent', null) === null && !App.state.ent.pro) {
+            App.state.ent.state = geo.states[si].abbr;
+            save('og.ent', App.state.ent);
+            radarNS.clearScores();
+          }
+          radar.fitted = true;                    // the first fit must not undo this
+          radar.zoomToBounds(lon - 0.9, lat - 0.6, lon + 0.9, lat + 0.6, 0.05);
+          App.dirty = true;
+          scheduleBands();
+          syncControls();
+          finish();
+        }, function () { clearTimeout(giveUp); finish(); },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
+      }
+      var asked = navigator.permissions && navigator.permissions.query
+        ? navigator.permissions.query({ name: 'geolocation' }) : Promise.resolve({ state: 'prompt' });
+      asked.then(function (p) {
+        if (p.state === 'granted' || (p.state === 'prompt' && touchFirst)) go(); else finish();
+      }, function () { if (touchFirst) go(); else finish(); });
+    }
+    App.startAtLocation = startAtLocation;
 
     var last = performance.now(), playHold = 0;
     var PLAY_HOLD = 0.12;           // seconds each step is held once it has arrived
