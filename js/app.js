@@ -2907,80 +2907,140 @@
   /* ---------- Interaction ---------- */
 
   function wireMap(canvas, radar) {
-    var dragging = false, moved = 0, lastX = 0, lastY = 0, pinch = null;
+    /* One model for the mouse, one finger and two: the pointers that are
+       down and where each was last seen.
+
+       Two fingers were handled by a pan handler and a pinch handler side by
+       side, and they fought. The second finger reset the pan's last
+       position to itself, so the first finger's next move panned the map
+       by the whole distance between the two fingers - the jump at the
+       start of every pinch. The pinch zoomed about the point between the
+       fingers but did not move with it, so the map slid out from under two
+       fingers moving together. And lifting one finger left the other dead
+       until it was put down again.
+
+       Now one finger pans; two zoom and pan together, keeping the ground
+       that was under the point between them under that point as it moves;
+       and the finger left after a pinch carries on panning from where it
+       is. */
+    var down = {}, count = 0;          // pointerId -> [x, y] last seen
+    var moved = 0;
     /* Two fingers down at any point in this touch: never a tap. Lifting
        both after a pinch that barely moved opened the plan. */
     var multiTouch = false;
+    var pinch = null;                  // { dist, mid } at the last two-finger move
 
     function pt(e) {
       var r = canvas.getBoundingClientRect();
       return [e.clientX - r.left, e.clientY - r.top];
     }
+    /* Where the two fingers are now, as the starting point for the next
+       move - taken the moment there are two, so no movement is lost. */
+    function pinchNow() {
+      var ids = Object.keys(down);
+      if (ids.length < 2) return null;
+      var f1 = down[ids[0]], f2 = down[ids[1]];
+      return { dist: Math.max(1, Math.hypot(f1[0] - f2[0], f1[1] - f2[1])),
+               mid: [(f1[0] + f2[0]) / 2, (f1[1] + f2[1]) / 2] };
+    }
 
     canvas.addEventListener('pointerdown', function (e) {
-      canvas.setPointerCapture(e.pointerId);
-      if (!dragging) multiTouch = false;
-      dragging = true; moved = 0;
-      var p = pt(e); lastX = p[0]; lastY = p[1];
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* not a live pointer */ }
+      if (!count) { moved = 0; multiTouch = false; }
+      down[e.pointerId] = pt(e);
+      count = Object.keys(down).length;
+      if (count > 1) { multiTouch = true; pinch = pinchNow(); }
     });
+
     canvas.addEventListener('pointermove', function (e) {
-      if (!dragging || App.inspecting) return;
-      var p = pt(e);
-      var dx = p[0] - lastX, dy = p[1] - lastY;
-      moved += Math.abs(dx) + Math.abs(dy);
-      radar.view.cx -= dx / radar.view.zoom;
-      radar.view.cy -= dy / radar.view.zoom;
-      lastX = p[0]; lastY = p[1];
-      App.dirty = true;
+      if (!(e.pointerId in down)) return;
+      var p = pt(e), q = down[e.pointerId];
+      down[e.pointerId] = p;
+      if (App.inspecting) return;          // a held finger reading a spot
+      if (count === 1) {
+        var dx = p[0] - q[0], dy = p[1] - q[1];
+        moved += Math.abs(dx) + Math.abs(dy);
+        radar.view.cx -= dx / radar.view.zoom;
+        radar.view.cy -= dy / radar.view.zoom;
+        App.dirty = true;
+        return;
+      }
+      var now = pinchNow();
+      if (pinch) {
+        var before = radar.toWorld(pinch.mid[0], pinch.mid[1], [0, 0]);
+        radar.view.zoom = clampZoom(radar.view.zoom * now.dist / pinch.dist);
+        var after = radar.toWorld(now.mid[0], now.mid[1], [0, 0]);
+        radar.view.cx += before[0] - after[0];
+        radar.view.cy += before[1] - after[1];
+        App.dirty = true;
+      }
+      pinch = now;
     });
-    function endDrag(e) {
-      if (!dragging) return;
-      dragging = false;
-      if (App.inspecting || multiTouch) return;   // a held finger lifting, or a pinch - not a tap
-      if (moved < 6) {
-        var p = pt(e);
-        var raw = radar.lonLatAt(p[0], p[1]);
-        if (!isFinite(raw[0])) return;
 
-        /* The exact point, not a snapped cell centre. Clicks used to snap to
-           the hexagon under the cursor so the panel matched the mosaic; with
-           a continuous field there is no mosaic to match, and snapping threw
-           away up to sixteen kilometres of precision - which is the opposite
-           of analysing the ground someone actually pointed at. */
-        var lon = raw[0], lat = raw[1];
-        if (geo.stateIndexAt(lon, lat) < 0) return;
+    /* A finger or the mouse comes up. A finger still down pans on from
+       where it is; two still down pinch on from where they are. */
+    function lift(e) {
+      if (!(e.pointerId in down)) return false;
+      delete down[e.pointerId];
+      count = Object.keys(down).length;
+      pinch = pinchNow();
+      return true;
+    }
 
-        if (App.addSpotMode) {
-          App.addSpotMode = false;
-          document.body.classList.remove('adding');
-          addSpotAt(raw[0], raw[1]);
-          return;
-        }
-        if (App.plannerPick) {
-          App.plannerPick = false;
-          document.body.classList.remove('adding');
-          App.state.selection = { lon: lon, lat: lat };
-          plannerWhere = null;              // follow the pin from here
-          plannerWeek = null;
-          App.dirty = true;
-          scheduleBands();
-          renderPlannerPanel();
-          return;
-        }
+    function tap(e) {
+      var p = pt(e);
+      var raw = radar.lonLatAt(p[0], p[1]);
+      if (!isFinite(raw[0])) return;
+
+      /* The exact point, not a snapped cell centre. Clicks used to snap to
+         the hexagon under the cursor so the panel matched the mosaic; with
+         a continuous field there is no mosaic to match, and snapping threw
+         away up to sixteen kilometres of precision - which is the opposite
+         of analysing the ground someone actually pointed at. */
+      var lon = raw[0], lat = raw[1];
+      if (geo.stateIndexAt(lon, lat) < 0) return;
+
+      if (App.addSpotMode) {
+        App.addSpotMode = false;
+        document.body.classList.remove('adding');
+        addSpotAt(raw[0], raw[1]);
+        return;
+      }
+      if (App.plannerPick) {
+        App.plannerPick = false;
+        document.body.classList.remove('adding');
         App.state.selection = { lon: lon, lat: lat };
+        plannerWhere = null;              // follow the pin from here
+        plannerWeek = null;
         App.dirty = true;
         scheduleBands();
-        openPanel('OmniGuide Plan', function () { return buildPlan(lon, lat); });
-        if (e.pointerType === 'touch' && !load('og.tip.hold', false)) {
-          save('og.tip.hold', true);
-          setTimeout(function () {
-            toast('Tip: touch and hold the map, then slide, to read any spot without opening the plan.');
-          }, 600);
-        }
+        renderPlannerPanel();
+        return;
+      }
+      App.state.selection = { lon: lon, lat: lat };
+      App.dirty = true;
+      scheduleBands();
+      openPanel('OmniGuide Plan', function () { return buildPlan(lon, lat); });
+      if (e.pointerType === 'touch' && !load('og.tip.hold', false)) {
+        save('og.tip.hold', true);
+        setTimeout(function () {
+          toast('Tip: touch and hold the map, then slide, to read any spot without opening the plan.');
+        }, 600);
       }
     }
-    canvas.addEventListener('pointerup', endDrag);
-    canvas.addEventListener('pointercancel', function () { dragging = false; });
+
+    canvas.addEventListener('pointerup', function (e) {
+      if (!lift(e) || count) return;
+      /* A held finger lifting, or the end of a pinch, is not a tap. */
+      if (App.inspecting || multiTouch || moved >= 6) return;
+      tap(e);
+    });
+    canvas.addEventListener('pointercancel', lift);
+
+    /* Safari's own pinch, which would zoom the whole page under the map. */
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) {
+      canvas.addEventListener(t, function (e) { e.preventDefault(); });
+    });
 
     canvas.addEventListener('wheel', function (e) {
       e.preventDefault();
@@ -2993,35 +3053,6 @@
       radar.view.cy += before[1] - after[1];
       App.dirty = true;
     }, { passive: false });
-
-    /* Pinch */
-    var pts = {};
-    canvas.addEventListener('pointerdown', function (e) {
-      pts[e.pointerId] = pt(e);
-      if (Object.keys(pts).length > 1) multiTouch = true;
-    });
-    canvas.addEventListener('pointermove', function (e) {
-      if (!(e.pointerId in pts)) return;
-      pts[e.pointerId] = pt(e);
-      var ids = Object.keys(pts);
-      if (ids.length !== 2) return;
-      var a = pts[ids[0]], b = pts[ids[1]];
-      var dist = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      if (pinch) {
-        var before = radar.toWorld(mid[0], mid[1], [0, 0]);
-        radar.view.zoom = clampZoom(radar.view.zoom * (dist / pinch.dist));
-        var after = radar.toWorld(mid[0], mid[1], [0, 0]);
-        radar.view.cx += before[0] - after[0];
-        radar.view.cy += before[1] - after[1];
-        App.dirty = true;
-      }
-      pinch = { dist: dist };
-      dragging = false;
-    });
-    function clearPt(e) { delete pts[e.pointerId]; if (Object.keys(pts).length < 2) pinch = null; }
-    canvas.addEventListener('pointerup', clearPt);
-    canvas.addEventListener('pointercancel', clearPt);
   }
 
   /* ---------- First-run tour ----------
