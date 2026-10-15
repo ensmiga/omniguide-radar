@@ -3073,58 +3073,62 @@
     return r.width > 2 && r.height > 2 ? n : null;
   }
 
+  /* The copy sells, and every line of it is still something the app
+     does - check it against the code before making it louder. The last
+     step stays plain: the regulations are not something to hype. */
   var TOUR_STEPS = [
     { title: 'Welcome to OmniGuide',
-      body: 'OmniGuide shows where and when the animals you hunt or fish for are likely to be most active, ' +
-        'from live weather, habitat, and each species\' own range and calendar. Here is a quick look round - ' +
-        'about a minute.' },
+      body: 'This is a forecasting engine for the outdoors. It fuses live weather, habitat, terrain and every ' +
+        'species\' own range and calendar into one opportunity score for every spot in the lower 48 - and ' +
+        're-forecasts as the weather moves. Here is the 60-second tour.' },
     { target: function () { return $('#species'); },
-      title: 'Pick what you are after',
-      body: 'Each species has its own range, habitat and seasons, and the whole map changes with your choice: ' +
-        'ducks, geese, big game, turkey, upland birds or trout.' },
+      title: 'Choose your target',
+      body: 'Ducks, geese, elk, whitetail, mule deer, moose, pronghorn, black bear, turkey, fifteen upland ' +
+        'birds and trout - each with its own model, built on its own range, habitat and season. Switch ' +
+        'species and the whole map re-forecasts.' },
     { target: function () { return $('#legend'); },
-      title: 'Read the colours',
-      body: 'The warmer the colour, the better the ground for that species right now, compared with the rest ' +
-        'of the country. Blank ground is outside its range or has no habitat for it - that is not the same ' +
-        'as a poor score.' },
+      title: 'Opportunity scoring',
+      body: 'Every spot scores 0 to 100. Habitat, animal movement and live conditions are weighed together ' +
+        'and calibrated species by species, so a 90 means close to the best that animal gets anywhere in ' +
+        'the country. Hotter colours, hotter hunting. Blank ground is outside the species\' range.' },
     { target: function () { return $('#map'); },
-      title: 'Tap a place for its plan',
+      title: 'Your intelligence report',
       body: function () {
-        return 'Tap anywhere on the map for the OmniGuide Plan at that exact point: the score and why, the best ' +
-          'hours, how to set up, the next seven days and the season reference. ' +
+        return 'Tap any spot for its OmniGuide Plan: the score and exactly what is driving it, the best hours ' +
+          'to be there, how to set up, the next seven days and the season reference. ' +
           (window.matchMedia && matchMedia('(pointer: coarse)').matches
-            ? 'Touch and hold, then slide, to read any spot without opening it. Pinch to zoom.'
-            : 'Hover to read any spot without opening it. Scroll or pinch to zoom.');
+            ? 'Touch and hold, then slide, to read scores on the fly. Pinch to zoom.'
+            : 'Hover to read scores on the fly. Scroll or pinch to zoom.');
       } },
     { target: function () { return tourVisible($('#layers')) || $('#layertab'); },
-      title: 'Layers',
-      body: 'Spot compares a place with the whole country - where to go. Day compares today with the rest of ' +
-        'that place\'s season - whether to go today. Below them are movement, migration, legal status, ' +
-        'confidence and the weather layers.' },
+      title: 'Switch your lens',
+      body: 'Spot ranks a place against the whole country - where to go. Day ranks today against that ' +
+        'place\'s own season - when to go. Then layer on animal movement, migration, legal status, forecast ' +
+        'confidence, wind, temperature, snow and more.' },
     { target: function () { return $('#timeline'); },
-      title: 'Move through the week',
-      body: 'Drag the slider through the next seven days, three hours at a time. Night and legal light are ' +
-        'shaded, each day button jumps to first light, and Play runs the week.' },
+      title: 'Forecast the week',
+      body: 'Scrub through the next seven days, three hours at a time, and watch opportunity shift with the ' +
+        'weather. Night and legal shooting light are marked. Hit Play to watch the whole week roll in.' },
     { target: function () { return tourVisible($('#btn-plan')) || $('#tab-plan'); },
       title: 'Plan a hunt',
-      body: 'Choose a place and see its best weeks of the year, worked out from thirty years of climate ' +
-        'records.' },
+      body: 'Pick any place and OmniGuide forecasts its best weeks of the whole year, built on thirty years ' +
+        'of NOAA climate records - so you can lock in the trip before the season opens.' },
     { target: function () {
         if (!tourVisible($('#leaguedock'))) return $('#tab-top');
         return $('#leaguedock').classList.contains('open') ? $('#league') : $('#leaguetab');
       },
       title: function () { return tourVisible($('#leaguedock')) ? 'League tables' : 'Top spots'; },
-      body: 'The best places in the country today and tomorrow, the states doing best, and how your saved ' +
-        'spots rank.' },
+      body: 'The best places in the country right now, today and tomorrow - plus the spots moving up, the ' +
+        'states leading, and how your own spots stack up.' },
     { target: function () { return tourVisible($('.tools')) || $('#tabbar'); },
-      title: 'Spots, alerts and your log',
-      body: 'Save the places you hunt, see alerts when one of them is about to get better, and keep a log ' +
-        'of each outing. Account shows your plan - the free plan covers one state and one species in full - ' +
-        'and where every piece of data comes from.' },
+      title: 'Your spots, on watch',
+      body: 'Save the places you hunt and OmniGuide keeps forecasting them. Alerts flag when one is about to ' +
+        'get better, and your log keeps every outing. Account holds your plan and every data source behind ' +
+        'the scores.' },
     { title: 'Before you go',
-      body: 'Season information in OmniGuide is a quick reference only and may be wrong or out of date. ' +
-        'Always confirm seasons, limits and shooting hours with your state wildlife agency before you hunt ' +
-        'or fish.' }
+      body: 'OmniGuide forecasts the animals - it does not make the rules. Season information here is a quick ' +
+        'reference only and may be wrong or out of date. Always confirm seasons, limits and shooting hours ' +
+        'with your state wildlife agency before you hunt or fish.' }
   ];
 
   /* Only for someone new. A visitor is new when they accept the
@@ -3239,7 +3243,7 @@
       head.textContent = typeof s.title === 'function' ? s.title() : s.title;
       body.textContent = typeof s.body === 'function' ? s.body() : s.body;
       back.hidden = i === 0;
-      next.textContent = last ? 'Done' : i === 0 ? 'Show me' : 'Next';
+      next.textContent = last ? 'Start scouting' : i === 0 ? 'Let\'s go' : 'Next';
       /* At the end there is nothing to put off. */
       later.hidden = last;
       place();
