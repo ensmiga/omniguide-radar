@@ -352,7 +352,11 @@
      open season and taking a bear is illegal at any time (Code of Alabama
      9-11-481); Mississippi keeps it on the state protected list, and a
      season would need both a new law and its removal from that list
-     (MDWFP, reported 1 September 2026). */
+     (MDWFP, reported 1 September 2026); Ohio lists it as endangered and
+     it is illegal to shoot or injure one. Connecticut has no season: the
+     2025 bills to create one did not become law and the 2026 attempts
+     failed (Connecticut Public, 20 July 2026); a bear may be killed only
+     in defence of a person or pet, or under an agricultural damage permit. */
   var BEAR_NOTE = 'Placeholder window, not an actual season. Units, dates, methods and limits are set by the ' +
     'state: baiting and hounds are legal in some states and banned in others, and many protect cubs and ' +
     'sows with cubs. Confirm with the state agency before you hunt.';
@@ -373,10 +377,17 @@
       status: 'LIMITED', bag: 'Usually one bear. Many units by permit or quota.', note: BEAR_NOTE,
       hours: 'daylight', source: 'State wildlife agency' }));
   });
-  RULES.push(rule({ states: ['NV'], species: ['bear'], type: 'Fall black bear season', start: '09-01', end: '12-31',
+  /* Nevada's dates are the 2026 regulation's (CR 26-07): 15 September to
+     1 December or until the harvest limits are met, by draw, in units
+     192, 194, 195, 196, 201, 202, 203, 204, 206 and 291. Its Tahoe
+     closure is below, with the national parks. */
+  RULES.push(rule({ states: ['NV'], species: ['bear'], type: 'Fall black bear season', start: '09-15', end: '12-01',
     status: 'PERMIT', bag: 'By draw tag.', note: BEAR_NOTE, hours: 'daylight', source: 'State wildlife agency' }));
-  RULES.push(rule({ states: ['TX', 'AL', 'MS'], species: ['bear'], type: 'No black bear season', start: '01-01', end: '12-31',
+  RULES.push(rule({ states: ['TX', 'AL', 'MS', 'OH'], species: ['bear'], type: 'No black bear season', start: '01-01', end: '12-31',
     status: 'CLOSED', bag: null, closure: 'Black bears are protected in this state and may not be hunted.',
+    note: null, hours: 'daylight', source: 'State wildlife agency' }));
+  RULES.push(rule({ states: ['CT'], species: ['bear'], type: 'No black bear season', start: '01-01', end: '12-31',
+    status: 'CLOSED', bag: null, closure: 'Connecticut has no bear hunting season.',
     note: null, hours: 'daylight', source: 'State wildlife agency' }));
   RULES.push(rule({ states: ['FL'], species: ['bear'], type: 'December black bear hunt', start: '12-01', end: '12-31',
     status: 'PERMIT', bag: 'By lottery permit, in a few bear management units.', note: BEAR_NOTE,
@@ -441,6 +452,104 @@
     return found;
   }
 
+  /* ---------- Ground closed to hunting ----------
+
+     From js/closures.js, built by ingest/closures.mjs: the national parks
+     of the lower 48, where hunting is not allowed (36 CFR 2.2) except
+     Grand Teton's elk reduction program, and the ground Nevada closes to
+     bear hunting round Lake Tahoe. These are real boundaries, not
+     placeholders, and they apply to every hunted species - not to
+     fishing, which most parks allow under their own rules. */
+  var CLOSED_GROUND = global.US_CLOSURES || null;
+
+  function inShape(sh, lon, lat) {
+    var b = sh.bbox;
+    if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) return false;
+    var inside = false;
+    for (var r = 0; r < sh.rings.length; r++) {
+      var ring = sh.rings[r];
+      for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        var yi = ring[i][1], yj = ring[j][1];
+        if ((yi > lat) !== (yj > lat) &&
+            lon < (ring[j][0] - ring[i][0]) * (lat - yi) / (yj - yi) + ring[i][0]) inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  /* Which closure a point is in, as a short id the map can cache by:
+     a park code, 'tahoe' (the basin) or 'carson' (Nevada's strip east
+     of it), or '' for none. */
+  function closureAt(lon, lat) {
+    if (!CLOSED_GROUND) return '';
+    var P = CLOSED_GROUND.parks;
+    for (var i = 0; i < P.length; i++) if (inShape(P[i], lon, lat)) return P[i].code;
+    if (inShape(CLOSED_GROUND.tahoe.basin, lon, lat)) return 'tahoe';
+    if (inShape(CLOSED_GROUND.tahoe.carson, lon, lat)) return 'carson';
+    return '';
+  }
+  function parkNamed(code) {
+    var P = CLOSED_GROUND ? CLOSED_GROUND.parks : [];
+    for (var i = 0; i < P.length; i++) if (P[i].code === code) return P[i];
+    return null;
+  }
+
+  /* Grand Teton's elk reduction program is held in Area 75, mostly east
+     of US 89, early November to early December in the years it runs.
+     The highway is drawn from Jackson through Moose Junction to Moran. */
+  function eastOfUS89(lon, lat) {
+    if (lat < 43.50 || lat > 43.85) return false;
+    var x = lat < 43.6585 ? -110.75 + (lat - 43.50) / (43.6585 - 43.50) * (-110.7165 + 110.75)
+                         : -110.7165 + (lat - 43.6585) / (43.8435 - 43.6585) * (-110.5148 + 110.7165);
+    return lon > x;
+  }
+
+  /* The gate's answer, overridden where the ground itself is closed.
+     Returns null where nothing applies. */
+  function closureFor(lon, lat, date, spId, abbr, base) {
+    var sp = global.OG.models && global.OG.models.byId ? global.OG.models.byId(spId) : null;
+    if (sp && sp.pursuit === 'fish') return null;
+    var id = closureAt(lon, lat);
+    if (!id) return null;
+    if (id !== 'tahoe' && id !== 'carson') {
+      var park = parkNamed(id);
+      if (id === 'GRTE' && spId === 'elk' && eastOfUS89(lon, lat)) {
+        var m = date.getMonth() + 1, d = date.getDate();
+        var inProgram = (m === 11) || (m === 12 && d <= 10);
+        return { status: inProgram ? 'PERMIT' : 'CLOSED', type: 'Grand Teton elk reduction program',
+          reason: 'Inside Grand Teton National Park. Elk may be hunted here only in the park\'s elk reduction ' +
+            'program - Area 75, mostly east of US 89, by park permit with a Wyoming elk licence, early November ' +
+            'to early December in the years it is held. The rest of the park is closed to hunting.' };
+      }
+      return { status: 'CLOSED', type: 'National park - no hunting',
+        reason: 'Inside ' + (park ? park.name : 'a national park') + '. Hunting is not allowed in national parks.' };
+    }
+    if (abbr === 'NV' && spId === 'bear') {
+      return { status: 'CLOSED', type: 'No bear hunting round Lake Tahoe',
+        reason: 'Nevada does not allow bear hunting in the Lake Tahoe Basin, or on the east face of the Carson ' +
+          'Range between the basin and US 395 (special regulations for units 192 and 194). The line drawn ' +
+          'here is approximate - NDOW\'s map is the authority.' };
+    }
+    if (abbr === 'CA' && id === 'tahoe' && (base === 'OPEN' || base === 'LIMITED' || base === 'PERMIT')) {
+      return { status: base === 'OPEN' ? 'LIMITED' : base, type: null, keepRule: true,
+        reason: 'Inside the Lake Tahoe Basin. Hunting is allowed on national forest land in season, but not ' +
+          'within 150 yards of a home, building, campsite or developed recreation site, nor where shooting is ' +
+          'banned by county ordinance - El Dorado County\'s Lake Valley firearm control area among them. ' +
+          'Check the Forest Service\'s Lake Tahoe Basin hunting page.' };
+    }
+    return null;
+  }
+
+  /* Ground where this species cannot be hunted at all, whatever the date:
+     a national park (Grand Teton's elk program aside), or Nevada's Tahoe
+     ground for bears. For lists that should not send anyone there. */
+  function closedGround(lon, lat, spId) {
+    if (!closureAt(lon, lat)) return false;
+    var si = geo.stateIndexAt(lon, lat);
+    var c = closureFor(lon, lat, new Date(2000, 10, 15), spId, si >= 0 ? geo.states[si].abbr : '', 'OPEN');
+    return !!c && c.status === 'CLOSED';
+  }
+
   /* ---------- The gate ---------- */
 
   var ORDER = { OPEN: 4, LIMITED: 3, PERMIT: 2, CLOSED: 1, UNKNOWN: 0 };
@@ -490,16 +599,21 @@
       reason = 'Inside ' + special.n + '. Refuge and special-area rules are not modeled - check the area regulations directly.';
     }
 
+    var shut = closureFor(lon, lat, date, spId, st.abbr, status);
+    var ruleShows = !shut || shut.keepRule;
+    if (shut) { status = shut.status; reason = shut.reason; }
+
     return {
       status: status, reason: reason, state: st, zone: zone, special: special,
+      closure: shut ? (shut.type || 'Lake Tahoe Basin') : null,
       rules: matched, verified: false,
       agency: agencyFor(st.abbr, st.name),
       source: best ? best.rule.source : null,
-      bag: best && best.active ? best.rule.bag : null,
-      possession: best && best.active ? best.rule.possession : null,
-      note: best && best.active ? best.rule.note : null,
+      bag: ruleShows && best && best.active ? best.rule.bag : null,
+      possession: ruleShows && best && best.active ? best.rule.possession : null,
+      note: ruleShows && best && best.active ? best.rule.note : null,
       hoursRule: best ? best.rule.hours : 'unknown',
-      typeName: best ? best.rule.type : null
+      typeName: shut && shut.type ? shut.type : best ? best.rule.type : null
     };
   }
 
@@ -521,7 +635,8 @@
   }
 
   global.OG.regs = {
-    check: check, legalHours: legalHours, zoneFor: zoneFor, hasSeasonRecord: hasSeasonRecord,
+    check: check, legalHours: legalHours, zoneFor: zoneFor, hasSeasonRecord: hasSeasonRecord, closureAt: closureAt,
+    closedGround: closedGround,
     specialAreaAt: specialAreaAt, RULES: RULES, SPECIAL: SPECIAL,
     DISCLAIMER: 'Season information in OmniGuide is an unverified convenience reference, not legal ' +
       'advice and not authorization to hunt or fish. Records may be wrong, out of date, or missing ' +

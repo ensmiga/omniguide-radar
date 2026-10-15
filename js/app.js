@@ -74,7 +74,7 @@
       outRange: cs.getPropertyValue('--map-outrange').trim(),
       graticule: cs.getPropertyValue('--graticule').trim(),
       micro: cs.getPropertyValue('--micro').trim(),
-      label: cs.getPropertyValue('--text').trim()
+      label: cs.getPropertyValue('--map-label').trim()
     };
     if (ground === 'ww') {
       /* Ink for paper. Deliberately not the light theme's values -
@@ -493,6 +493,14 @@
         d: 'Which clock a place keeps, for sunrise, sunset and legal hours. Where a zone line crosses a state it is ' +
            'traced on the Census county outlines, USGS National Hydrography Dataset rivers, BLM township and ' +
            'section lines, and Census TIGER roads, railroads and waterways.', l: 'Public domain' },
+      { n: 'National Park Service', u: 'https://www.nps.gov/subjects/gisandmapping/index.htm',
+        d: 'National park boundaries, from the Land Resources Division. Hunting is not allowed in national parks, ' +
+          'so the season reference reads closed inside them - Grand Teton\'s elk reduction program aside.',
+        l: 'Public domain' },
+      { n: 'USDA Forest Service', u: 'https://data.fs.usda.gov/geodata/edw/datasets.php',
+        d: 'Administrative forest boundaries: the Lake Tahoe Basin Management Unit, which bounds Nevada\'s Tahoe ' +
+          'bear closure and California\'s basin shooting rules, and the Gila National Forest added to the black ' +
+          'bear range.', l: 'Public domain' },
       { n: 'State and federal agencies', d: 'Season dates in this build are UNVERIFIED PLACEHOLDERS shaped like a typical federal framework. They are not real seasons. Confirm every date, zone, bag limit and shooting hour with the issuing agency before you go.', l: 'Not a data feed' }
     ] }
   ];
@@ -1344,6 +1352,10 @@
       var end = Math.min(pts.length, i + LG_SLICE);
       for (; i < end; i++) {
         var p = pts[i];
+        /* A national park is no place to send a hunter, however good the
+           animals there are - nor Nevada's Tahoe ground for a bear. Fishing
+           keeps them. */
+        if (regs.closedGround && regs.closedGround(p[0], p[1], sp)) continue;
         var a = models.scoreAt(p[0], p[1], t0, d0, sp);
         if (!a.inRange) continue;
         var b = models.scoreAt(p[0], p[1], t1, d1, sp);
@@ -2377,7 +2389,8 @@
       about.appendChild(el('p', null, 'Measured, from live sources: the forecast, water, snow, terrain and ' +
         'land cover at the pin. Built from published data: habitat, range and hunting pressure. Modelled ' +
         'on top of those: species behaviour, migration, confidence and the advice. Not real: the season ' +
-        'dates, which are placeholders.'));
+        'dates, which are placeholders - though the ground closed to hunting is real: national parks, and ' +
+        'Nevada\'s bear closure round Lake Tahoe.'));
 
       /* Counted from the data that is loaded, so these cannot go stale. */
       var wxg = global.WX_GRID || null;
@@ -2419,7 +2432,10 @@
           'of places where the answer is known - nearly 1,400 in all.',
         'Trout water: summer water temperature from USGS gauges, and established populations from the ' +
           'USGS Nonindigenous Aquatic Species database.',
-        'Hunting pressure: how much developed land is within about an hour’s drive, from NLCD.'
+        'Hunting pressure: how much developed land is within about an hour’s drive, from NLCD.',
+        'Closed ground: ' + (global.US_CLOSURES ? global.US_CLOSURES.parks.length : 0) + ' national parks, from the National Park ' +
+          'Service\'s boundaries, where hunting is not allowed (Grand Teton\'s elk reduction program aside); and ' +
+          'Nevada\'s Lake Tahoe bear closure, from the Forest Service\'s basin boundary and the state\'s 2026 regulation.'
       ].forEach(function (t) { built.appendChild(el('li', null, t)); });
       about.appendChild(built);
 
@@ -2458,6 +2474,11 @@
      the same instant. Showing a value between two forecast steps would be
      false precision anyway. */
   var STEP_T = 3 / 24;
+  /* The step Play goes to after t, back to the start after the last. */
+  App.nextPlayT = function (t) {
+    var nt = t + STEP_T;
+    return nt > SPAN - STEP_T ? 0 : snapT(nt);
+  };
   function snapT(t) {
     var s = Math.round(t / STEP_T) * STEP_T;
     return Math.max(0, Math.min(SPAN - STEP_T, s));
@@ -2947,7 +2968,7 @@
      this browser. Account can run it again. A step whose control is not on
      screen - hidden at this width - is skipped rather than pointing at
      nothing. */
-  var TOUR_DONE = 'og.tour';           // localStorage: '1' once finished or turned off
+  var TOUR_KEY = 'og.tour';            // localStorage: 'due' for a new visitor, '1' once finished or turned off
   var TOUR_LATER = 'og.tour.later';    // sessionStorage: put off for this visit
 
   function tourVisible(n) {
@@ -3006,12 +3027,25 @@
         'or fish.' }
   ];
 
-  function tourWanted() {
+  /* Only for someone new. A visitor is new when they accept the
+     acknowledgment for the first time; that marks the tour as due, and
+     it stays due - through "Remind me later" - until it is finished or
+     turned off. Anyone who had already accepted the acknowledgment
+     before the tour existed never has it marked, so never sees it
+     unless they ask for it from Account. */
+  function tourWanted(newVisitor) {
     try {
-      if (localStorage.getItem(TOUR_DONE) === '1') return false;
+      var st = localStorage.getItem(TOUR_KEY);
+      if (st === '1') return false;
+      if (newVisitor) { localStorage.setItem(TOUR_KEY, 'due'); st = 'due'; }
+      if (st !== 'due') return false;
       if (sessionStorage.getItem(TOUR_LATER) === '1') return false;
-    } catch (e) { /* storage blocked: show it, and the buttons still close it */ }
-    return true;
+      return true;
+    } catch (e) {
+      /* Storage blocked: nothing can be remembered, so show it only on
+         the visit that accepts the acknowledgment. */
+      return !!newVisitor;
+    }
   }
 
   var tourOpen = false;
@@ -3114,7 +3148,7 @@
 
     function close(forever) {
       try {
-        if (forever) localStorage.setItem(TOUR_DONE, '1');
+        if (forever) localStorage.setItem(TOUR_KEY, '1');
         else sessionStorage.setItem(TOUR_LATER, '1');
       } catch (e) {}
       window.removeEventListener('resize', place);
@@ -3148,7 +3182,7 @@
     show();
   }
 
-  function maybeStartTour() { if (tourWanted()) startTour(); }
+  function maybeStartTour(newVisitor) { if (tourWanted(newVisitor)) startTour(); }
   App.startTour = startTour;
 
   /* ---------- Boot ---------- */
@@ -3159,7 +3193,7 @@
   function requireAcknowledgment(done) {
     var seen = false;
     try { seen = localStorage.getItem('og.ack') === '2'; } catch (e) {}
-    if (seen) { done(); return; }
+    if (seen) { done(false); return; }
 
     var veil = el('div', 'ackveil');
     var card = el('div', 'ackcard');
@@ -3179,7 +3213,7 @@
     btn.addEventListener('click', function () {
       try { localStorage.setItem('og.ack', '2'); } catch (e) {}
       veil.remove();
-      done();
+      done(true);
     });
     card.appendChild(btn);
     veil.appendChild(card);
@@ -3664,23 +3698,32 @@
     $('#boot').remove();
     /* The tour comes after the acknowledgment, never on top of it, and
        after the first paint so it has something to point at. */
-    requireAcknowledgment(function () { setTimeout(maybeStartTour, 700); });
+    requireAcknowledgment(function (newVisitor) {
+      setTimeout(function () { maybeStartTour(newVisitor); }, 700);
+    });
 
-    var last = performance.now(), playAccum = 0;
+    var last = performance.now(), playHold = 0;
+    var PLAY_HOLD = 0.12;           // seconds each step is held once it has arrived
     function frame(now) {
       var dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (App.state.playing) {
-        /* Playback advances one forecast step at a time rather than sliding
-           continuously, so every frame is a real model step. */
-        playAccum += dt * 0.85;
-        if (playAccum >= STEP_T) {
-          var steps = Math.floor(playAccum / STEP_T);
-          playAccum -= steps * STEP_T;
-          var nt = App.state.t + steps * STEP_T;
-          App.state.t = nt > SPAN - STEP_T ? 0 : snapT(nt);
-          App.dirty = true;
-          syncControls();
+        /* One forecast step at a time, and the next only once the map has
+           finished arriving at this one - scored and crossfaded in, see
+           Time in radar.js. It used to step every 0.15 seconds whatever
+           the map had managed, so the colour layer never caught up and
+           flashed in from the top on every step. The pace is now how fast
+           a step can be scored, plus a short hold to read it. */
+        if (radar.settled(App.state.t)) {
+          playHold += dt;
+          if (playHold >= PLAY_HOLD) {
+            playHold = 0;
+            App.state.t = App.nextPlayT(App.state.t);
+            App.dirty = true;
+            syncControls();
+          }
+        } else {
+          playHold = 0;
         }
       }
       /* Layers with moving particles have to redraw every frame or the

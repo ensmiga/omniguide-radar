@@ -39,6 +39,10 @@
     --graticule: rgba(30, 40, 36, 0.22);
     --micro: rgba(30, 40, 36, 0.55);
     --map-water: rgba(58, 118, 156, 0.55);
+    --map-label: #16201C;
+    /* The --map-* tokens, --graticule and --micro are the map's own ink
+       and are not redefined for dark mode: the dark theme darkens the panels and
+       bars round the map, and leaves the map exactly as it is in light. */
     --good: #2C7A52;
     --warn: #A3700F;
     --bad: #A3362B;
@@ -60,19 +64,6 @@
       --muted: #8CA096;
       --accent: #C6F24E;
       --accent-ink: #11160A;
-      --map-bg: #070C0B;
-      --map-land: #151F1B;
-      --map-border: rgba(164, 196, 180, 0.34);
-      --map-county: rgba(150, 180, 166, 0.16);
-      --map-halo: rgba(6, 11, 10, 0.80);
-      --map-state-label: rgba(230, 237, 231, 0.42);
-      --map-county-label: rgba(230, 237, 231, 0.62);
-      --map-city-label: #EFF4EE;
-    --map-outrange: rgba(120, 136, 128, 0.10);
-    --graticule: rgba(226, 236, 230, 0.20);
-    --micro: rgba(226, 236, 230, 0.55);
-    --map-water: rgba(96, 168, 206, 0.46);
-      --map-water: rgba(96, 168, 206, 0.46);
       --good: #46A877;
       --warn: #D9A33C;
       --bad: #D1584A;
@@ -82,8 +73,6 @@
     }
   }
   :root[data-theme="dark"] {
-    --graticule: rgba(226, 236, 230, 0.20);
-    --micro: rgba(226, 236, 230, 0.55);
     --bg: #0B1210;
     --surface: #121C18;
     --raised: #18241F;
@@ -93,14 +82,6 @@
     --muted: #8CA096;
     --accent: #C6F24E;
     --accent-ink: #11160A;
-    --map-bg: #070C0B;
-    --map-land: #151F1B;
-    --map-border: rgba(164, 196, 180, 0.34);
-    --map-county: rgba(150, 180, 166, 0.16);
-    --map-halo: rgba(6, 11, 10, 0.80);
-    --map-state-label: rgba(230, 237, 231, 0.42);
-    --map-county-label: rgba(230, 237, 231, 0.62);
-    --map-city-label: #EFF4EE;
     --good: #46A877;
     --warn: #D9A33C;
     --bad: #D1584A;
@@ -1430,41 +1411,43 @@
   <div id="panel-body"></div>
 </aside>
 
-<script src="js/us-topo.js?v=tmxe7q"></script>
-<script src="js/us-cities.js?v=tmxe7q"></script>
-<script src="js/gbif-credits.js?v=tmxe7q"></script>
-<script src="js/hydro.js?v=tmxe7q"></script>
-<script src="js/wx-grid.js?v=tmxe7q"></script>
-<script src="js/geo.js?v=tmxe7q"></script>
-<script src="js/wx.js?v=tmxe7q"></script>
+<script src="js/us-topo.js?v=tmxege"></script>
+<script src="js/us-cities.js?v=tmxege"></script>
+<script src="js/gbif-credits.js?v=tmxege"></script>
+<script src="js/tile-cover.js?v=tmxege"></script>
+<script src="js/hydro.js?v=tmxege"></script>
+<script src="js/wx-grid.js?v=tmxege"></script>
+<script src="js/geo.js?v=tmxege"></script>
+<script src="js/wx.js?v=tmxege"></script>
 <!-- The baked habitat raster and its reader load before env.js, which
      consults them inside habitat() and falls back to its own synthetic
      surface if either is missing. -->
-<script src="js/normals.js?v=tmxe7q"></script>
-<script src="js/climo.js?v=tmxe7q"></script>
-<script src="js/habitat-grid.js?v=tmxe7q"></script>
-<script src="js/range-grid.js?v=tmxe7q"></script>
-<script src="js/elev-grid.js?v=tmxe7q"></script>
-<script src="js/water-grid.js?v=tmxe7q"></script>
-<script src="js/habgrid.js?v=tmxe7q"></script>
-<script src="js/trout-waters.js?v=tmxe7q"></script>
-<script src="js/env.js?v=tmxe7q"></script>
-<script src="js/models.js?v=tmxe7q"></script>
-<script src="js/regs.js?v=tmxe7q"></script>
-<script src="js/snow.js?v=tmxe7q"></script>
-<script src="js/snowfield.js?v=tmxe7q"></script>
-<script src="js/gauges.js?v=tmxe7q"></script>
-<script src="js/gaugefield.js?v=tmxe7q"></script>
-<script src="js/openwater.js?v=tmxe7q"></script>
-<script src="js/duckwater.js?v=tmxe7q"></script>
-<script src="js/flyshops.js?v=tmxe7q"></script>
-<script src="js/patterns.js?v=tmxe7q"></script>
-<script src="js/terrain.js?v=tmxe7q"></script>
-<script src="js/landcover.js?v=tmxe7q"></script>
-<script src="js/guide.js?v=tmxe7q"></script>
-<script src="js/planner.js?v=tmxe7q"></script>
-<script src="js/radar.js?v=tmxe7q"></script>
-<script src="js/app.js?v=tmxe7q"></script>
+<script src="js/normals.js?v=tmxege"></script>
+<script src="js/climo.js?v=tmxege"></script>
+<script src="js/habitat-grid.js?v=tmxege"></script>
+<script src="js/range-grid.js?v=tmxege"></script>
+<script src="js/elev-grid.js?v=tmxege"></script>
+<script src="js/water-grid.js?v=tmxege"></script>
+<script src="js/habgrid.js?v=tmxege"></script>
+<script src="js/trout-waters.js?v=tmxege"></script>
+<script src="js/env.js?v=tmxege"></script>
+<script src="js/models.js?v=tmxege"></script>
+<script src="js/closures.js?v=tmxege"></script>
+<script src="js/regs.js?v=tmxege"></script>
+<script src="js/snow.js?v=tmxege"></script>
+<script src="js/snowfield.js?v=tmxege"></script>
+<script src="js/gauges.js?v=tmxege"></script>
+<script src="js/gaugefield.js?v=tmxege"></script>
+<script src="js/openwater.js?v=tmxege"></script>
+<script src="js/duckwater.js?v=tmxege"></script>
+<script src="js/flyshops.js?v=tmxege"></script>
+<script src="js/patterns.js?v=tmxege"></script>
+<script src="js/terrain.js?v=tmxege"></script>
+<script src="js/landcover.js?v=tmxege"></script>
+<script src="js/guide.js?v=tmxege"></script>
+<script src="js/planner.js?v=tmxege"></script>
+<script src="js/radar.js?v=tmxege"></script>
+<script src="js/app.js?v=tmxege"></script>
 <script>
   (function () {
     var x = document.getElementById('notice-x');
