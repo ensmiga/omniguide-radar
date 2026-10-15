@@ -1249,6 +1249,35 @@
   }
   #boot b i { color: var(--accent); font-style: normal; }
 
+  /* First-run tour. The dim is an SVG with a hole cut round the control
+     being shown - a 9999px box-shadow ring was not painted in the app's
+     browser - and the layer takes the clicks so the map stays put. */
+  .tour { position: fixed; inset: 0; z-index: 210; }
+  .tour-dim { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .tour-dim path { fill: rgba(8,13,11,0.62); fill-rule: evenodd; }
+  .tour-hole {
+    position: fixed; border-radius: 10px; pointer-events: none;
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .tour-hole[hidden] { display: none; }
+  .tour-card {
+    position: fixed; width: min(340px, calc(100vw - 24px)); box-sizing: border-box;
+    background: var(--surface); color: var(--text); border: 1px solid var(--line);
+    border-radius: 14px; padding: 15px 16px 10px; box-shadow: var(--shadow);
+    display: grid; gap: 9px;
+  }
+  .tour-step { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .tour-h { font-family: var(--disp); font-size: 18px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .tour-card p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+  .tour-nav { display: flex; gap: 8px; justify-content: flex-end; }
+  .tour-off { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line-soft); padding-top: 6px; }
+  .tour-link {
+    background: none; border: 0; padding: 4px 0; cursor: pointer; font-size: 12px; color: var(--muted);
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .tour-link:hover { color: var(--accent); }
+  .tour-off .tour-link:only-child, .tour-off .tour-link[hidden] + .tour-link { margin-left: auto; }
+
   @media (max-width: 860px) {
     .brand span { display: none; }
     #notice { display: none; }
@@ -1401,41 +1430,41 @@
   <div id="panel-body"></div>
 </aside>
 
-<script src="js/us-topo.js?v=tmxao9"></script>
-<script src="js/us-cities.js?v=tmxao9"></script>
-<script src="js/gbif-credits.js?v=tmxao9"></script>
-<script src="js/hydro.js?v=tmxao9"></script>
-<script src="js/wx-grid.js?v=tmxao9"></script>
-<script src="js/geo.js?v=tmxao9"></script>
-<script src="js/wx.js?v=tmxao9"></script>
+<script src="js/us-topo.js?v=tmxcf3"></script>
+<script src="js/us-cities.js?v=tmxcf3"></script>
+<script src="js/gbif-credits.js?v=tmxcf3"></script>
+<script src="js/hydro.js?v=tmxcf3"></script>
+<script src="js/wx-grid.js?v=tmxcf3"></script>
+<script src="js/geo.js?v=tmxcf3"></script>
+<script src="js/wx.js?v=tmxcf3"></script>
 <!-- The baked habitat raster and its reader load before env.js, which
      consults them inside habitat() and falls back to its own synthetic
      surface if either is missing. -->
-<script src="js/normals.js?v=tmxao9"></script>
-<script src="js/climo.js?v=tmxao9"></script>
-<script src="js/habitat-grid.js?v=tmxao9"></script>
-<script src="js/range-grid.js?v=tmxao9"></script>
-<script src="js/elev-grid.js?v=tmxao9"></script>
-<script src="js/water-grid.js?v=tmxao9"></script>
-<script src="js/habgrid.js?v=tmxao9"></script>
-<script src="js/trout-waters.js?v=tmxao9"></script>
-<script src="js/env.js?v=tmxao9"></script>
-<script src="js/models.js?v=tmxao9"></script>
-<script src="js/regs.js?v=tmxao9"></script>
-<script src="js/snow.js?v=tmxao9"></script>
-<script src="js/snowfield.js?v=tmxao9"></script>
-<script src="js/gauges.js?v=tmxao9"></script>
-<script src="js/gaugefield.js?v=tmxao9"></script>
-<script src="js/openwater.js?v=tmxao9"></script>
-<script src="js/duckwater.js?v=tmxao9"></script>
-<script src="js/flyshops.js?v=tmxao9"></script>
-<script src="js/patterns.js?v=tmxao9"></script>
-<script src="js/terrain.js?v=tmxao9"></script>
-<script src="js/landcover.js?v=tmxao9"></script>
-<script src="js/guide.js?v=tmxao9"></script>
-<script src="js/planner.js?v=tmxao9"></script>
-<script src="js/radar.js?v=tmxao9"></script>
-<script src="js/app.js?v=tmxao9"></script>
+<script src="js/normals.js?v=tmxcf3"></script>
+<script src="js/climo.js?v=tmxcf3"></script>
+<script src="js/habitat-grid.js?v=tmxcf3"></script>
+<script src="js/range-grid.js?v=tmxcf3"></script>
+<script src="js/elev-grid.js?v=tmxcf3"></script>
+<script src="js/water-grid.js?v=tmxcf3"></script>
+<script src="js/habgrid.js?v=tmxcf3"></script>
+<script src="js/trout-waters.js?v=tmxcf3"></script>
+<script src="js/env.js?v=tmxcf3"></script>
+<script src="js/models.js?v=tmxcf3"></script>
+<script src="js/regs.js?v=tmxcf3"></script>
+<script src="js/snow.js?v=tmxcf3"></script>
+<script src="js/snowfield.js?v=tmxcf3"></script>
+<script src="js/gauges.js?v=tmxcf3"></script>
+<script src="js/gaugefield.js?v=tmxcf3"></script>
+<script src="js/openwater.js?v=tmxcf3"></script>
+<script src="js/duckwater.js?v=tmxcf3"></script>
+<script src="js/flyshops.js?v=tmxcf3"></script>
+<script src="js/patterns.js?v=tmxcf3"></script>
+<script src="js/terrain.js?v=tmxcf3"></script>
+<script src="js/landcover.js?v=tmxcf3"></script>
+<script src="js/guide.js?v=tmxcf3"></script>
+<script src="js/planner.js?v=tmxcf3"></script>
+<script src="js/radar.js?v=tmxcf3"></script>
+<script src="js/app.js?v=tmxcf3"></script>
 <script>
   (function () {
     var x = document.getElementById('notice-x');

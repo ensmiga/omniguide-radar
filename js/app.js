@@ -2364,6 +2364,10 @@
       srcs.addEventListener('click', renderSourcesPanel);
       root.appendChild(srcs);
 
+      var tourBtn = el('button', 'btn', 'Show the tour again');
+      tourBtn.addEventListener('click', startTour);
+      root.appendChild(tourBtn);
+
       var about = section('What is real in this build');
 
       about.appendChild(el('p', null, 'Measured, from live sources: the forecast, water, snow, terrain and ' +
@@ -2921,6 +2925,219 @@
     canvas.addEventListener('pointercancel', clearPt);
   }
 
+  /* ---------- First-run tour ----------
+
+     A short walk round the screen for someone who has never seen it. It
+     waits until the acknowledgment has been accepted, then points at one
+     control at a time. "Remind me later" puts it off until the next visit;
+     "Don't show this again", or reaching the end, turns it off for good in
+     this browser. Account can run it again. A step whose control is not on
+     screen - hidden at this width - is skipped rather than pointing at
+     nothing. */
+  var TOUR_DONE = 'og.tour';           // localStorage: '1' once finished or turned off
+  var TOUR_LATER = 'og.tour.later';    // sessionStorage: put off for this visit
+
+  function tourVisible(n) {
+    if (!n) return null;
+    var r = n.getBoundingClientRect();
+    return r.width > 2 && r.height > 2 ? n : null;
+  }
+
+  var TOUR_STEPS = [
+    { title: 'Welcome to OmniGuide',
+      body: 'OmniGuide shows where and when the animals you hunt or fish for are likely to be most active, ' +
+        'from live weather, habitat, and each species\' own range and calendar. Here is a quick look round - ' +
+        'about a minute.' },
+    { target: function () { return $('#species'); },
+      title: 'Pick what you are after',
+      body: 'Each species has its own range, habitat and seasons, and the whole map changes with your choice: ' +
+        'ducks, geese, big game, turkey, upland birds or trout.' },
+    { target: function () { return $('#legend'); },
+      title: 'Read the colours',
+      body: 'The warmer the colour, the better the ground for that species right now, compared with the rest ' +
+        'of the country. Blank ground is outside its range or has no habitat for it - that is not the same ' +
+        'as a poor score.' },
+    { target: function () { return $('#map'); },
+      title: 'Tap a place for its plan',
+      body: 'Tap anywhere on the map for the OmniGuide Plan at that exact point: the score and why, the best ' +
+        'hours, how to set up, the next seven days and the season reference. Scroll or pinch to zoom.' },
+    { target: function () {
+        return $('#layerdock').classList.contains('open') ? $('#layers') : $('#layertab');
+      },
+      title: 'Layers',
+      body: 'Spot compares a place with the whole country - where to go. Day compares today with the rest of ' +
+        'that place\'s season - whether to go today. Below them are movement, migration, legal status, ' +
+        'confidence and the weather layers.' },
+    { target: function () { return $('#timeline'); },
+      title: 'Move through the week',
+      body: 'Drag the slider through the next seven days, three hours at a time. Night and legal light are ' +
+        'shaded, each day button jumps to first light, and Play runs the week.' },
+    { target: function () { return $('#btn-plan'); },
+      title: 'Plan a hunt',
+      body: 'Choose a place and see its best weeks of the year, worked out from thirty years of climate ' +
+        'records.' },
+    { target: function () {
+        return $('#leaguedock').classList.contains('open') ? $('#league') : $('#leaguetab');
+      },
+      title: 'League tables',
+      body: 'The best places in the country today and tomorrow, the states doing best, and how your saved ' +
+        'spots rank.' },
+    { target: function () { return $('.tools'); },
+      title: 'Spots, alerts and your log',
+      body: 'Save the places you hunt, see alerts when one of them is about to get better, and keep a log ' +
+        'of each outing. Account shows your plan - the free plan covers one state and one species in full - ' +
+        'and where every piece of data comes from.' },
+    { title: 'Before you go',
+      body: 'Season information in OmniGuide is a quick reference only and may be wrong or out of date. ' +
+        'Always confirm seasons, limits and shooting hours with your state wildlife agency before you hunt ' +
+        'or fish.' }
+  ];
+
+  function tourWanted() {
+    try {
+      if (localStorage.getItem(TOUR_DONE) === '1') return false;
+      if (sessionStorage.getItem(TOUR_LATER) === '1') return false;
+    } catch (e) { /* storage blocked: show it, and the buttons still close it */ }
+    return true;
+  }
+
+  var tourOpen = false;
+
+  function startTour() {
+    if (tourOpen) return;
+    tourOpen = true;
+    closePanel();
+
+    var root = el('div', 'tour');
+    var NS = 'http://www.w3.org/2000/svg';
+    var dim = document.createElementNS(NS, 'svg');
+    dim.setAttribute('class', 'tour-dim');
+    dim.setAttribute('aria-hidden', 'true');
+    var dimPath = document.createElementNS(NS, 'path');
+    dim.appendChild(dimPath);
+    var hole = el('div', 'tour-hole');
+    var card = el('div', 'tour-card');
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-labelledby', 'tour-h');
+    var count = el('div', 'tour-step');
+    var head = el('div', 'tour-h');
+    head.id = 'tour-h';
+    var body = el('p');
+    var nav = el('div', 'tour-nav');
+    var back = el('button', 'btn small', 'Back');
+    var next = el('button', 'btn small primary', 'Next');
+    nav.appendChild(back); nav.appendChild(next);
+    var off = el('div', 'tour-off');
+    var later = el('button', 'tour-link', 'Remind me later');
+    var never = el('button', 'tour-link', 'Don\'t show this again');
+    off.appendChild(later); off.appendChild(never);
+    [count, head, body, nav, off].forEach(function (n) { card.appendChild(n); });
+    root.appendChild(dim);
+    root.appendChild(hole);
+    root.appendChild(card);
+    document.body.appendChild(root);
+
+    var steps = TOUR_STEPS.filter(function (s) { return !s.target || tourVisible(s.target()); });
+    var i = 0;
+
+    function place() {
+      var s = steps[i];
+      var vw = window.innerWidth, vh = window.innerHeight, m = 12;
+      var t = s.target ? tourVisible(s.target()) : null;
+      var cw = card.offsetWidth, ch = card.offsetHeight;
+      var x, y;
+      var outer = 'M0 0H' + vw + 'V' + vh + 'H0Z';
+      if (!t) {
+        dimPath.setAttribute('d', outer);
+        hole.hidden = true;
+        x = (vw - cw) / 2; y = (vh - ch) / 2;
+      } else {
+        var r = t.getBoundingClientRect(), pad = 6, k = 10;
+        var L = Math.max(4, r.left - pad), T = Math.max(4, r.top - pad);
+        var R = Math.min(vw - 4, r.right + pad), B = Math.min(vh - 4, r.bottom + pad);
+        k = Math.min(k, (R - L) / 2, (B - T) / 2);
+        dimPath.setAttribute('d', outer + 'M' + (L + k) + ' ' + T + 'H' + (R - k) +
+          'A' + k + ' ' + k + ' 0 0 1 ' + R + ' ' + (T + k) + 'V' + (B - k) +
+          'A' + k + ' ' + k + ' 0 0 1 ' + (R - k) + ' ' + B + 'H' + (L + k) +
+          'A' + k + ' ' + k + ' 0 0 1 ' + L + ' ' + (B - k) + 'V' + (T + k) +
+          'A' + k + ' ' + k + ' 0 0 1 ' + (L + k) + ' ' + T + 'Z');
+        hole.hidden = false;
+        hole.style.cssText = 'left:' + L + 'px;top:' + T + 'px;width:' + (R - L) + 'px;height:' + (B - T) + 'px';
+        if (B - T > vh * 0.5 && R - L > vw * 0.5) {
+          /* The map itself: the card sits in the middle of it. A tall,
+             narrow panel - the layer rail - gets the card beside it. */
+          x = (L + R - cw) / 2; y = (T + B - ch) / 2;
+        } else if (vh - B >= ch + m * 2) {
+          x = (L + R - cw) / 2; y = B + m;
+        } else if (T >= ch + m * 2) {
+          x = (L + R - cw) / 2; y = T - ch - m;
+        } else if (vw - R >= cw + m * 2) {
+          x = R + m; y = (T + B - ch) / 2;
+        } else if (L >= cw + m * 2) {
+          x = L - cw - m; y = (T + B - ch) / 2;
+        } else {
+          x = (vw - cw) / 2; y = vh - ch - m;
+        }
+      }
+      x = Math.max(m, Math.min(vw - cw - m, x));
+      y = Math.max(m, Math.min(vh - ch - m, y));
+      card.style.left = Math.round(x) + 'px';
+      card.style.top = Math.round(y) + 'px';
+    }
+
+    function show() {
+      var s = steps[i], last = i === steps.length - 1;
+      count.textContent = (i + 1) + ' of ' + steps.length;
+      head.textContent = s.title;
+      body.textContent = s.body;
+      back.hidden = i === 0;
+      next.textContent = last ? 'Done' : i === 0 ? 'Show me' : 'Next';
+      /* At the end there is nothing to put off. */
+      later.hidden = last;
+      place();
+      next.focus();
+    }
+
+    function close(forever) {
+      try {
+        if (forever) localStorage.setItem(TOUR_DONE, '1');
+        else sessionStorage.setItem(TOUR_LATER, '1');
+      } catch (e) {}
+      window.removeEventListener('resize', place);
+      document.removeEventListener('keydown', onKey, true);
+      root.remove();
+      tourOpen = false;
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); close(false); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); next.click(); }
+      else if (e.key === 'ArrowLeft' && i > 0) { e.preventDefault(); back.click(); }
+      else if (e.key === 'Tab') {
+        /* Keep the keyboard inside the card while it is up. */
+        var f = [].slice.call(card.querySelectorAll('button')).filter(function (b) { return !b.hidden; });
+        var k = f.indexOf(document.activeElement);
+        e.preventDefault();
+        f[(k + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
+      }
+    }
+
+    next.addEventListener('click', function () {
+      if (i === steps.length - 1) { close(true); return; }
+      i++; show();
+    });
+    back.addEventListener('click', function () { if (i > 0) { i--; show(); } });
+    later.addEventListener('click', function () { close(false); });
+    never.addEventListener('click', function () { close(true); });
+    window.addEventListener('resize', place);
+    document.addEventListener('keydown', onKey, true);
+    show();
+  }
+
+  function maybeStartTour() { if (tourWanted()) startTour(); }
+  App.startTour = startTour;
+
   /* ---------- Boot ---------- */
 
   /* One-time acknowledgment. Season data is the one thing in here that can
@@ -3432,7 +3649,9 @@
     }
 
     $('#boot').remove();
-    requireAcknowledgment(function () {});
+    /* The tour comes after the acknowledgment, never on top of it, and
+       after the first paint so it has something to point at. */
+    requireAcknowledgment(function () { setTimeout(maybeStartTour, 700); });
 
     var last = performance.now(), playAccum = 0;
     function frame(now) {
