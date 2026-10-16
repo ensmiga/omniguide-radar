@@ -150,7 +150,10 @@ self.addEventListener('fetch', function (e) {
     }
     return;
   }
-  if (TILE_HOST.test(url.hostname) && !/\/tilemap\//.test(url.pathname) && !/GetFeatureInfo/i.test(url.search)) {
+  /* Not the one-off images drawn for a single view (NAIP exportImage):
+     hundreds of kilobytes each and almost never asked for twice. */
+  if (TILE_HOST.test(url.hostname) && !/\/tilemap\//.test(url.pathname) && !/GetFeatureInfo/i.test(url.search) &&
+      !/exportImage/.test(url.pathname)) {
     e.respondWith(cacheFirst(req, TILES, TILE_MAX));
   }
 });

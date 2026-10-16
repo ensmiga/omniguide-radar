@@ -478,7 +478,10 @@
         d: 'Names and locations of 17,028 towns, for search and map labels, by way of the cities.json package. ' +
            'Cut down to United States places, with coordinates rounded.', l: 'CC BY 4.0', lu: CC_BY },
       { n: 'USGS The National Map', u: 'https://www.usgs.gov/programs/national-geospatial-program/national-map',
-        d: 'Shaded relief, topographic and aerial basemaps.', l: 'Public domain' }
+        d: 'Shaded relief, topographic and aerial basemaps.', l: 'Public domain' },
+      { n: 'USDA NAIP, via USGS The National Map', u: 'https://naip-usdaonline.hub.arcgis.com/',
+        d: 'National Agriculture Imagery Program aerial photography, 0.6 m or better, flown every two or three ' +
+          'years. Drawn over the Satellite map when zoomed in past the imagery tiles.', l: 'Public domain' }
     ] },
     { group: 'Species range and records', items: [
       { n: 'USGS Gap Analysis Project', u: 'https://doi.org/10.5066/F7Q81B3R',

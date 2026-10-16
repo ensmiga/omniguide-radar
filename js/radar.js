@@ -269,9 +269,10 @@
 
        The National Map is a federal service, public domain, covers
        the lower 48 - which is all this app models - and speaks the
-       same tile scheme, so it is a URL swap. The one real cost is
-       zoom: imagery reaches 16 rather than Esri 18, so the very
-       closest look at a field edge is coarser than it was.
+       same tile scheme, so it is a URL swap. The cost was zoom: the
+       imagery cache reaches 16 rather than Esri's 18. Past 16 the
+       Satellite map now lays USDA NAIP imagery (0.6 m, public domain)
+       over it - see naip.js.
 
        All three caches stop at level 16, but none is complete above
        it: relief is missing levels 9 to 11 over much of the West, and
@@ -536,6 +537,26 @@
       drawTileClipped(ctx, list[i].img, p[0], p[1], tw * this.view.zoom + 1, this.w, this.h);
     }
     this.basemapCredit = list.length ? def.credit : null;
+
+    /* Past the deepest level the imagery cache has, sharp aerial imagery
+       over it - one image for the view, see naip.js. */
+    var nz = global.OG.naip;
+    if (bkey === 'satellite' && nz && Math.log2(this.view.zoom * W / 256) > def.maxZoom + 0.3) {
+      var vw = this.viewLonLat(0.12), still = this.viewStill(), self = this;
+      var dpr = Math.min(this.dpr, 1.5) * vw.grow;
+      var ims = nz.images(vw.lon0, vw.lat0, vw.lon1, vw.lat1, this.w * dpr, this.h * dpr, still,
+        function () { self.app.dirty = true; });
+      if (!still) this.redrawWhenStill();
+      var q0 = [0, 0], q1 = [0, 0];
+      for (var ii = 0; ii < ims.length; ii++) {
+        var bx = ims[ii].box;
+        nz.toWorld(bx[0], bx[3], W, q0); this.toScreen(q0[0], q0[1], q0);
+        nz.toWorld(bx[2], bx[1], W, q1); this.toScreen(q1[0], q1[1], q1);
+        if (q1[0] < 0 || q1[1] < 0 || q0[0] > this.w || q0[1] > this.h) continue;
+        ctx.drawImage(ims[ii].img, q0[0], q0[1], q1[0] - q0[0], q1[1] - q0[1]);
+        this.basemapCredit = def.credit + ' · ' + nz.credit;
+      }
+    }
     return list.length > 0;
   };
 
@@ -545,6 +566,36 @@
     if (z < 26) return 1;
     if (z < 44) return 2;
     return 3;
+  };
+
+  /* Has the view stopped moving? Images that are asked for per view wait
+     for this, so a pan does not fire a request every frame. */
+  Radar.prototype.viewStill = function () {
+    var vk = this.view.zoom + ':' + this.view.cx + ':' + this.view.cy;
+    if (vk !== this._viewKey) { this._viewKey = vk; this._movedAt = performance.now(); }
+    return performance.now() - (this._movedAt || 0) > 300;
+  };
+  /* And a frame once it has: nothing else asks for one when the map is
+     left alone. */
+  Radar.prototype.redrawWhenStill = function () {
+    var self = this;
+    clearTimeout(this._stillTimer);
+    this._stillTimer = setTimeout(function () { self.app.dirty = true; }, 330);
+  };
+
+  /* The view's own box, exactly - visibleLonLat pads it by more than a
+     degree each way, for whatever needs to see past the edge. An image
+     fetched for the view must not be: duck water asked for that padded
+     box, so close in its 900 px covered some 250 km and each pixel was
+     nearer 280 m than NLCD's 30 m - the blocks. */
+  /* margin: a share of the view added on every side, so a short pan
+     stays covered while the next image is fetched. */
+  Radar.prototype.viewLonLat = function (margin) {
+    var a = this.lonLatAt(0, 0), b = this.lonLatAt(this.w, this.h);
+    var lon0 = Math.min(a[0], b[0]), lat0 = Math.min(a[1], b[1]);
+    var lon1 = Math.max(a[0], b[0]), lat1 = Math.max(a[1], b[1]);
+    var m = margin || 0, mx = (lon1 - lon0) * m, my = (lat1 - lat0) * m;
+    return { lon0: lon0 - mx, lat0: lat0 - my, lon1: lon1 + mx, lat1: lat1 + my, grow: 1 + 2 * m };
   };
 
   Radar.prototype.visibleLonLat = function () {
@@ -817,6 +868,23 @@
        pay for this. */
     /* Snapped to the nearest half octave - see fieldLevel. */
     var level = Math.round(2 * Math.log2(z / 9));
+    /* And no finer than the ground it is built on. Habitat is worked out
+       once per 1/40 degree cell (env.habitat), from national grids that
+       are coarser still, so past about 200 m a pixel every sample in a
+       cell came back the same and the colour layer drew flat plateaus
+       with hard edges - bands 128 px wide at 15 m a pixel. Sampled once
+       a cell and blended by the browser, the same information reads as
+       the smooth surface it is, and the sharp detail is the base map's
+       to give. The legal layer keeps full detail: its edges are real
+       boundaries. */
+    if (layer !== 'legal') {
+      var cll = this.lonLatAt(this.w / 2, this.h / 2);
+      if (isFinite(cll[0])) {
+        var e0 = geo.project(cll[0], cll[1], [0, 0]), e1 = geo.project(cll[0] + 0.025, cll[1] + 0.025, [0, 0]);
+        var cellWorld = Math.max(Math.abs(e1[0] - e0[0]), Math.abs(e1[1] - e0[1]));
+        level = Math.min(level, Math.floor(-2 * Math.log2(cellWorld)));
+      }
+    }
     /* oppMode is in the stamp because Spot and Day are different numbers
        for the same cell - without it, switching the toggle would redraw
        from the cache and show the old surface. The zoom is not: each
@@ -1106,18 +1174,26 @@
     var fine = null;
     if (dw) {
       var self = this;
-      fine = dw.overlay([win.lon0, win.lat0, win.lon1, win.lat1], function () {
+      var still = this.viewStill();
+      var vb = this.viewLonLat(0.12);
+      fine = dw.overlay([vb.lon0, vb.lat0, vb.lon1, vb.lat1], function () {
         self.app.dirty = true;
-      });
+      }, Math.round(this.w * Math.min(this.dpr, 1.5) * vb.grow), still);
+      if (!still) this.redrawWhenStill();
     }
     if (fine) {
-      var a0 = geo.project(win.lon0, win.lat1, [0, 0]);
-      var a1 = geo.project(win.lon1, win.lat0, [0, 0]);
+      var fb = fine.bbox;
+      var a0 = geo.project(fb[0], fb[3], [0, 0]);
+      var a1 = geo.project(fb[2], fb[1], [0, 0]);
       this.toScreen(a0[0], a0[1], p);
       var fx = p[0], fy = p[1];
       this.toScreen(a1[0], a1[1], p);
-      ctx.imageSmoothingEnabled = true;
+      /* Each source pixel is a 30 m cell or bigger. Once it covers more
+         than a pixel and a half of screen, draw it as the square it is:
+         smoothed, the marsh edges went to a blur. */
+      ctx.imageSmoothingEnabled = (p[0] - fx) / fine.width < 1.5;
       ctx.drawImage(fine, fx, fy, p[0] - fx, p[1] - fy);
+      ctx.imageSmoothingEnabled = true;
     }
 
     /* Areal water from land cover, drawn into a small buffer and then

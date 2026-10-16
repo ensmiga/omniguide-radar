@@ -59,10 +59,17 @@
      "where should I go this weekend" zoom, and at 6 it fell back to the
      coarse grid there and drew blocks. MRLC serves this size fine. */
   var MAX_SPAN_DEG = 16;
-  var MAX_PX = 900;
+  /* The image was 900 px whatever the screen, so on a wide one it was
+     stretched and soft. Now it is the view's own width in device pixels,
+     up to this - but never finer than NLCD's 30 m, which is all there is
+     to see; past that the caller draws each 30 m cell crisp rather than
+     smearing it (measured: MRLC returns 2048 px in about 1.5 s). */
+  var MAX_PX = 2048;
+  var NATIVE_M = 30;
 
-  var cache = new Map();       // key -> {canvas, bbox} | 'pending' | 'failed'
+  var cache = new Map();       // key -> canvas (with .bbox) | 'pending' | 'failed'
   var inflight = 0;
+  var last = null;             // the newest canvas that loaded, whatever its box
 
   function classOf(r, g, b) {
     /* Nearest palette entry. The service antialiases nothing, but PNG
@@ -171,22 +178,39 @@
     return out;
   }
 
-  /* Returns a ready canvas for this view, or null while it loads. */
-  function overlay(bbox, onReady) {
+  /* Most of this view covered by that box? */
+  function covers(c, bbox) {
+    if (!c) return false;
+    var b = c.bbox;
+    var ix = Math.max(0, Math.min(b[2], bbox[2]) - Math.max(b[0], bbox[0]));
+    var iy = Math.max(0, Math.min(b[3], bbox[3]) - Math.max(b[1], bbox[1]));
+    return ix * iy > 0.3 * (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
+  }
+
+  /* A ready canvas for this view, carrying its own box in .bbox. While
+     the view's own image loads it is the last one that did, if that
+     covers most of the view, drawn in its own box by the caller - it
+     used to be nothing, and the map fell back to the coarse national
+     grid and back on every pan. pxW is the view's width in device
+     pixels. A new image is asked for only once the view has stopped
+     moving (still). */
+  function overlay(bbox, onReady, pxW, still) {
     var spanLon = bbox[2] - bbox[0], spanLat = bbox[3] - bbox[1];
     if (spanLon > MAX_SPAN_DEG || spanLat > MAX_SPAN_DEG) return null;
+    var stale = covers(last, bbox) ? last : null;
 
     var ar = spanLon / Math.max(1e-6, spanLat);
-    var w = Math.round(Math.min(MAX_PX, Math.max(160, MAX_PX)));
+    var acrossM = spanLon * 111320 * Math.cos((bbox[1] + bbox[3]) / 2 * Math.PI / 180);
+    var w = Math.round(Math.min(MAX_PX, pxW || 900, acrossM / NATIVE_M));
+    w = Math.max(160, w);
     var h = Math.round(w / Math.max(0.2, ar));
     if (h > MAX_PX) { h = MAX_PX; w = Math.round(h * ar); }
 
     var key = keyFor(bbox, w, h);
     var hit = cache.get(key);
-    if (hit === 'failed') return null;
-    if (hit === 'pending') return null;
+    if (hit === 'failed' || hit === 'pending') return stale;
     if (hit) return hit;
-    if (inflight > 1) return null;
+    if (still === false || inflight > 1) return stale;
 
     cache.set(key, 'pending');
     inflight++;
@@ -196,6 +220,7 @@
       inflight--;
       var c = null;
       try { c = render(img, w, h, openBoost(bbox)); } catch (e) { c = null; }
+      if (c) { c.bbox = bbox; last = c; }
       cache.set(key, c || 'failed');
       if (cache.size > 24) {
         var first = cache.keys().next().value;
@@ -210,7 +235,7 @@
     img.src = WMS + '?service=WMS&version=1.1.1&request=GetMap' +
       '&layers=NLCD_2021_Land_Cover_L48&bbox=' + bbox.join(',') +
       '&width=' + w + '&height=' + h + '&srs=EPSG:4326&format=image/png';
-    return null;
+    return stale;
   }
 
   global.OG = global.OG || {};
