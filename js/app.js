@@ -3078,9 +3078,9 @@
      step stays plain: the regulations are not something to hype. */
   var TOUR_STEPS = [
     { title: 'Welcome to OmniGuide',
-      body: 'This is a forecasting engine for the outdoors. It fuses live weather, habitat, terrain and every ' +
-        'species\' own range and calendar into one opportunity score for every spot in the lower 48 - and ' +
-        're-forecasts as the weather moves. Here is the 60-second tour.' },
+      body: 'This is a forecasting engine for fish and game. Using sophisticated models, it combines live ' +
+        'weather, habitat, terrain and every species\' own range and calendar into one opportunity score for ' +
+        'every spot in the lower 48 - and re-forecasts as the weather moves. Here is the 60-second tour.' },
     { target: function () { return $('#species'); },
       title: 'Choose your target',
       body: 'Ducks, geese, elk, whitetail, mule deer, moose, pronghorn, black bear, turkey, fifteen upland ' +
@@ -3302,8 +3302,9 @@
     var veil = el('div', 'ackveil');
     var card = el('div', 'ackcard');
     card.appendChild(el('div', 'ack-h', 'Before you use OmniGuide'));
-    card.appendChild(el('p', null, 'OmniGuide predicts animal activity. It does not tell you what is ' +
-      'legal, and it is not a substitute for the regulations.'));
+    card.appendChild(el('p', null, 'OmniGuide predicts animal activity using sophisticated analytics models ' +
+      'and proprietary intelligence scoring. It does not tell you what is legal, and it is not a substitute ' +
+      'for the regulations.'));
     var ul = el('ul', 'drivers warn');
     [
       'Season information here is an unverified reference and may be wrong, stale or missing.',
